@@ -1,0 +1,6 @@
+{
+  "name": "FlashMotion Studio",
+  "description": "Estúdio de animação estilo Adobe Flash e Remotion para criar animações em canvas, bonecos palito, overlays em vídeo, gráficos dinâmicos e assistente Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,672 @@
+import {
+  FrameData,
+  ChartOverlay,
+  TextOverlay,
+  VideoBackground,
+  ImageOverlay,
+  StudioLayer,
+} from '../types';
+import { calculateEasing } from './motionUtils';
+
+/**
+ * Utility to render a specific frame onto a standard 2D canvas context.
+ * Used both for the live preview and for offline frame-by-frame video export.
+ */
+export function renderCompositeFrame(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  currentFrame: number,
+  frameData: FrameData | undefined,
+  charts: ChartOverlay[],
+  texts: TextOverlay[],
+  images: ImageOverlay[],
+  videoBg: VideoBackground,
+  videoElement?: HTMLVideoElement | null,
+  layers?: StudioLayer[]
+) {
+  ctx.save();
+  ctx.clearRect(0, 0, width, height);
+
+  // Check layer visibility helpers
+  const isLayerVisible = (targetId?: string, defaultVis = true) => {
+    if (!layers || !targetId) return defaultVis;
+    const l = layers.find((layer) => layer.targetId === targetId || layer.id === targetId);
+    return l ? l.visible : defaultVis;
+  };
+
+  const isVideoLayerVisible = () => {
+    if (!layers) return true;
+    const l = layers.find((layer) => layer.type === 'video');
+    return l ? l.visible : true;
+  };
+
+  const isDrawingLayerVisible = () => {
+    if (!layers) return true;
+    const l = layers.find((layer) => layer.type === 'drawing');
+    return l ? l.visible : true;
+  };
+
+  // 1. Draw Background
+  if (isVideoLayerVisible()) {
+    if (videoBg.type === 'color' || !videoElement || videoElement.readyState < 2) {
+      ctx.fillStyle = videoBg.color || '#09090b';
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    // Draw video frame if present
+    if (videoElement && videoElement.readyState >= 2 && videoBg.type !== 'color') {
+      ctx.globalAlpha = videoBg.opacity;
+      const hRatio = width / videoElement.videoWidth;
+      const vRatio = height / videoElement.videoHeight;
+      const ratio = Math.max(hRatio, vRatio);
+      const centerShiftX = (width - videoElement.videoWidth * ratio) / 2;
+      const centerShiftY = (height - videoElement.videoHeight * ratio) / 2;
+      ctx.drawImage(
+        videoElement,
+        0,
+        0,
+        videoElement.videoWidth,
+        videoElement.videoHeight,
+        centerShiftX,
+        centerShiftY,
+        videoElement.videoWidth * ratio,
+        videoElement.videoHeight * ratio
+      );
+      ctx.globalAlpha = 1.0;
+    }
+  } else {
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  // Subtle grid for studio atmosphere
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+  ctx.lineWidth = 1;
+  const gridSize = 40;
+  for (let x = 0; x < width; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  for (let y = 0; y < height; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  // 2. Draw AI Images / Props
+  images.forEach((img) => {
+    if (!isLayerVisible(img.id)) return;
+    if (
+      currentFrame >= img.startFrame &&
+      currentFrame <= img.startFrame + img.durationFrames
+    ) {
+      const elapsed = currentFrame - img.startFrame;
+      let alpha = 1;
+      let scale = 1;
+      if (img.animationType === 'pop') {
+        const progress = Math.min(1, elapsed / 8);
+        scale = 0.5 + 0.5 * Math.sin((progress * Math.PI) / 2);
+      } else if (img.animationType === 'fade') {
+        alpha = Math.min(1, elapsed / 10);
+      }
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      const imgEl = new Image();
+      imgEl.src = img.url;
+      if (imgEl.complete) {
+        const cx = img.x > 100 ? img.x : (img.x / 100) * width;
+        const cy = img.y > 100 ? img.y : (img.y / 100) * height;
+        const w = img.width * scale;
+        const h = img.height * scale;
+        ctx.drawImage(imgEl, cx - w / 2, cy - h / 2, w, h);
+      }
+      ctx.restore();
+    }
+  });
+
+  // 3. Draw Stick Figures from current frame
+  if (frameData && frameData.stickFigures && isDrawingLayerVisible()) {
+    frameData.stickFigures.forEach((stick) => {
+      if (!isLayerVisible(stick.id)) return;
+      ctx.save();
+      ctx.translate(stick.x, stick.y);
+      ctx.scale(stick.scale, stick.scale);
+
+      // Draw Bones
+      ctx.strokeStyle = stick.color;
+      ctx.lineWidth = stick.thickness;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      stick.bones.forEach((bone) => {
+        const fromJ = stick.joints[bone.from];
+        const toJ = stick.joints[bone.to];
+        if (fromJ && toJ) {
+          ctx.beginPath();
+          ctx.moveTo(fromJ.x, fromJ.y);
+          ctx.lineTo(toJ.x, toJ.y);
+          ctx.stroke();
+        }
+      });
+
+      // Draw Head
+      const head = stick.joints['head'];
+      if (head) {
+        ctx.fillStyle = stick.color;
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, head.radius || 20, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye indicator for face direction
+        ctx.fillStyle = '#09090b';
+        ctx.beginPath();
+        ctx.arc(head.x + 6, head.y - 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw Joints
+      Object.values(stick.joints).forEach((joint) => {
+        if (joint.id !== 'head') {
+          ctx.fillStyle = joint.color || stick.color;
+          ctx.beginPath();
+          ctx.arc(joint.x, joint.y, stick.thickness / 2 + 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      ctx.restore();
+    });
+  }
+
+  // 4. Draw Freehand Drawings
+  if (frameData && frameData.drawings && isDrawingLayerVisible()) {
+    frameData.drawings.forEach((stroke) => {
+      if (!stroke.points || stroke.points.length === 0) return;
+      if (stroke.groupId && !isLayerVisible(stroke.groupId)) return;
+
+      ctx.save();
+      ctx.strokeStyle = stroke.color;
+      ctx.lineWidth = stroke.thickness;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (stroke.tool === 'pen' && stroke.points.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length; i++) {
+          ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        }
+        ctx.stroke();
+      } else if (stroke.tool === 'line' && stroke.points.length >= 2) {
+        const p1 = stroke.points[0];
+        const p2 = stroke.points[stroke.points.length - 1];
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      } else if (stroke.tool === 'arrow' && stroke.points.length >= 2) {
+        const p1 = stroke.points[0];
+        const p2 = stroke.points[stroke.points.length - 1];
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+
+        // Arrowhead
+        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        const headLen = 14;
+        ctx.fillStyle = stroke.color;
+        ctx.beginPath();
+        ctx.moveTo(p2.x, p2.y);
+        ctx.lineTo(
+          p2.x - headLen * Math.cos(angle - Math.PI / 6),
+          p2.y - headLen * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.lineTo(
+          p2.x - headLen * Math.cos(angle + Math.PI / 6),
+          p2.y - headLen * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.closePath();
+        ctx.fill();
+      } else if (stroke.tool === 'rect' && stroke.points.length >= 2) {
+        const p1 = stroke.points[0];
+        const p2 = stroke.points[stroke.points.length - 1];
+        ctx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+      } else if (stroke.tool === 'circle' && stroke.points.length >= 2) {
+        const p1 = stroke.points[0];
+        const p2 = stroke.points[stroke.points.length - 1];
+        const rx = Math.abs(p2.x - p1.x) / 2;
+        const ry = Math.abs(p2.y - p1.y) / 2;
+        const cx = Math.min(p1.x, p2.x) + rx;
+        const cy = Math.min(p1.y, p2.y) + ry;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+
+  // 5. Draw Animated Charts
+  charts.forEach((chart) => {
+    if (!chart.visible || !isLayerVisible(chart.id)) return;
+    if (
+      currentFrame >= chart.startFrame &&
+      currentFrame <= chart.startFrame + chart.durationFrames
+    ) {
+      const elapsed = currentFrame - chart.startFrame;
+      const animType = chart.animationType || 'grow';
+      // Use the actual duration configured by the user (e.g. 60 or 120 frames)
+      const animDuration = chart.animDurationFrames || chart.durationFrames || 30;
+      const progress = Math.min(1, Math.max(0, elapsed / Math.max(1, animDuration)));
+
+      // Calculate ease progress based on animation type
+      let easeProgress = 1;
+      let cardScale = 1;
+      let cardAlpha = 1;
+      let cardOffsetY = 0;
+
+      if (animType === 'grow') {
+        easeProgress = calculateEasing(progress, chart.easing || 'easeOut');
+      } else if (animType === 'bounce') {
+        // bounce overshoot
+        const c4 = (2 * Math.PI) / 3;
+        easeProgress =
+          progress === 0
+            ? 0
+            : progress === 1
+            ? 1
+            : Math.pow(2, -10 * progress) * Math.sin((progress * 10 - 0.75) * c4) + 1;
+        cardScale = 0.85 + 0.15 * easeProgress;
+      } else if (animType === 'slideUp') {
+        easeProgress = calculateEasing(progress, chart.easing || 'easeOut');
+        cardOffsetY = (1 - easeProgress) * 40;
+        cardAlpha = easeProgress;
+      } else if (animType === 'fade') {
+        cardAlpha = easeProgress;
+        easeProgress = 1 - Math.pow(1 - progress, 2);
+      } else if (animType === 'elastic') {
+        easeProgress = Math.min(1, progress * 1.1);
+      }
+
+      // Motion Tween: interpolate between Posição 1 (x, y) and Posição 2 (endX, endY)
+      let cx = chart.x;
+      let cy = chart.y;
+      if (
+        chart.hasMotionTween &&
+        chart.endX !== undefined &&
+        chart.endY !== undefined
+      ) {
+        const motionProgress = Math.min(
+          1,
+          Math.max(0, elapsed / Math.max(1, chart.durationFrames))
+        );
+        const motionEase = calculateEasing(motionProgress, chart.easing || 'easeOut');
+        cx = chart.x + (chart.endX - chart.x) * motionEase;
+        cy = chart.y + (chart.endY - chart.y) * motionEase;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy + cardOffsetY);
+      ctx.globalAlpha = cardAlpha;
+      ctx.scale(cardScale, cardScale);
+
+      // Card container background with modern glass aesthetics
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, 0, 0, chart.width, chart.height, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      // Chart Title
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 14px Plus Jakarta Sans, sans-serif';
+      ctx.fillText(chart.title, 16, 26);
+
+      // Render by Chart Type
+      if (chart.type === 'bar') {
+        const barAreaTop = 45;
+        const barAreaHeight = chart.height - 75;
+        const maxVal = Math.max(...chart.data.map((d) => d.value), 100);
+        const colWidth = (chart.width - 32) / (chart.data.length || 1);
+
+        chart.data.forEach((d, i) => {
+          const clampedEase = Math.max(0, Math.min(1.2, easeProgress));
+          const barH = (d.value / maxVal) * barAreaHeight * clampedEase;
+          const bx = 16 + i * colWidth + colWidth * 0.15;
+          const bw = colWidth * 0.7;
+          const by = barAreaTop + barAreaHeight - Math.max(0, barH);
+
+          // Bar Gradient
+          const grad = ctx.createLinearGradient(0, by, 0, by + barH);
+          grad.addColorStop(0, d.color || '#38bdf8');
+          grad.addColorStop(1, 'rgba(14, 165, 233, 0.4)');
+
+          ctx.fillStyle = grad;
+          roundRect(ctx, bx, by, bw, Math.max(4, barH), 4);
+          ctx.fill();
+
+          // Bar Value Label
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '10px JetBrains Mono, monospace';
+          ctx.textAlign = 'center';
+          const displayedVal = Math.round(d.value * Math.min(1, easeProgress));
+          ctx.fillText(`${displayedVal}`, bx + bw / 2, by - 5);
+
+          // Bar Category Label
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '11px Plus Jakarta Sans, sans-serif';
+          ctx.fillText(d.label, bx + bw / 2, chart.height - 10);
+        });
+      } else if (chart.type === 'donut') {
+        const centerX = chart.width / 2;
+        const centerY = chart.height / 2 + 10;
+        const radius = Math.min(chart.width, chart.height) * 0.28;
+        const totalVal = chart.data.reduce((acc, d) => acc + d.value, 0) || 1;
+
+        let startAngle = -Math.PI / 2;
+        chart.data.forEach((d) => {
+          const sliceAngle =
+            (d.value / totalVal) * Math.PI * 2 * Math.min(1, easeProgress);
+          ctx.strokeStyle = d.color || '#38bdf8';
+          ctx.lineWidth = 14;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+          ctx.stroke();
+          startAngle += sliceAngle;
+        });
+
+        // Center Percentage
+        const firstVal = chart.data[0]?.value || 0;
+        const pct = Math.round((firstVal / totalVal) * 100 * Math.min(1, easeProgress));
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 20px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${pct}%`, centerX, centerY + 6);
+      } else if (chart.type === 'line') {
+        const areaLeft = 24;
+        const areaTop = 45;
+        const areaWidth = chart.width - 48;
+        const areaHeight = chart.height - 75;
+        const maxVal = Math.max(...chart.data.map((d) => d.value), 100);
+
+        if (chart.data.length > 1) {
+          const stepX = areaWidth / (chart.data.length - 1);
+          ctx.beginPath();
+          chart.data.forEach((d, idx) => {
+            const px = areaLeft + idx * stepX;
+            const targetPy = areaTop + areaHeight - (d.value / maxVal) * areaHeight;
+            const py =
+              areaTop +
+              areaHeight -
+              (areaTop + areaHeight - targetPy) * Math.min(1, easeProgress);
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          // Points
+          chart.data.forEach((d, idx) => {
+            const px = areaLeft + idx * stepX;
+            const targetPy = areaTop + areaHeight - (d.value / maxVal) * areaHeight;
+            const py =
+              areaTop +
+              areaHeight -
+              (areaTop + areaHeight - targetPy) * Math.min(1, easeProgress);
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(px, py, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(px, py, 2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+      } else if (chart.type === 'stat' && chart.statMetric) {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px Plus Jakarta Sans, sans-serif';
+        ctx.fillText(chart.statMetric.label, 20, 55);
+
+        const numericPart = parseInt(chart.statMetric.value, 10) || 100;
+        const currentNum = Math.round(numericPart * Math.min(1, easeProgress));
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 36px JetBrains Mono, monospace';
+        ctx.fillText(`${currentNum}${chart.statMetric.suffix}`, 20, 98);
+      }
+
+      ctx.restore();
+    }
+  });
+
+  // 6. Draw Kinetic Animated Text & Number Overlays
+  texts.forEach((txt) => {
+    if (!txt.visible || !isLayerVisible(txt.id)) return;
+    if (
+      currentFrame >= txt.startFrame &&
+      currentFrame <= txt.startFrame + txt.durationFrames
+    ) {
+      const elapsed = currentFrame - txt.startFrame;
+      let cx = txt.x;
+      let cy = txt.y;
+      if (
+        txt.hasMotionTween &&
+        txt.endX !== undefined &&
+        txt.endY !== undefined
+      ) {
+        const motionProgress = Math.min(
+          1,
+          Math.max(0, elapsed / Math.max(1, txt.durationFrames))
+        );
+        const motionEase = calculateEasing(motionProgress, txt.easing || 'easeOut');
+        cx = txt.x + (txt.endX - txt.x) * motionEase;
+        cy = txt.y + (txt.endY - txt.y) * motionEase;
+      }
+
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      let displayedText = txt.text;
+      let alpha = 1;
+      let scale = 1;
+      let offsetY = 0;
+
+      // Handle animated number ticker if configured
+      if (txt.isNumberCounter || txt.effect === 'numberRoll') {
+        const startVal = txt.counterStart ?? 0;
+        const endVal = txt.counterEnd ?? 1000;
+        const animDuration = txt.animDurationFrames || txt.durationFrames || 30;
+        const progress = Math.min(1, elapsed / Math.max(1, animDuration));
+        const ease = calculateEasing(progress, txt.easing || 'easeOut');
+        const currentVal = startVal + (endVal - startVal) * ease;
+        const decimals = txt.counterDecimals ?? 0;
+        const formattedVal =
+          decimals > 0
+            ? currentVal.toFixed(decimals)
+            : Math.round(currentVal).toLocaleString('pt-BR');
+        displayedText = `${txt.counterPrefix || ''}${formattedVal}${
+          txt.counterSuffix || ''
+        }`;
+      } else if (txt.effect === 'typewriter') {
+        const charDuration = 2; // frames per char
+        const charsToShow = Math.min(
+          txt.text.length,
+          Math.floor(elapsed / charDuration)
+        );
+        displayedText = txt.text.slice(0, charsToShow);
+        // Blinking cursor
+        if (charsToShow < txt.text.length && Math.floor(elapsed / 8) % 2 === 0) {
+          displayedText += '|';
+        }
+      } else if (txt.effect === 'bouncePop') {
+        const progress = Math.min(1, elapsed / 12);
+        scale =
+          progress < 0.7
+            ? 0.4 + (progress / 0.7) * 0.8
+            : 1.2 - ((progress - 0.7) / 0.3) * 0.2;
+      } else if (txt.effect === 'fadeRise') {
+        alpha = Math.min(1, elapsed / 10);
+        offsetY = (1 - alpha) * 20;
+      } else if (txt.effect === 'slideLeft') {
+        const progress = Math.min(1, elapsed / 12);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        ctx.translate((1 - ease) * -100, 0);
+      } else if (txt.effect === 'glowPulse') {
+        const pulse = 0.85 + 0.15 * Math.sin(elapsed * 0.25);
+        scale = pulse;
+      }
+
+      ctx.globalAlpha = alpha;
+      ctx.scale(scale, scale);
+
+      // Badge if present
+      if (txt.badge) {
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1;
+        roundRect(ctx, 0, offsetY - 26, 110, 20, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 10px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(txt.badge.toUpperCase(), 55, offsetY - 12);
+      }
+
+      // Main Text
+      ctx.textAlign = 'left';
+      ctx.fillStyle = txt.color || '#ffffff';
+      ctx.font = `800 ${txt.fontSize}px Plus Jakarta Sans, sans-serif`;
+
+      // Text glow shadow for legibility over video
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+      ctx.fillText(displayedText, 0, offsetY);
+
+      // Subtitle if provided
+      if (txt.subtitle && elapsed > 6) {
+        const subAlpha = Math.min(1, (elapsed - 6) / 8);
+        ctx.globalAlpha = subAlpha * alpha;
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = `500 ${Math.max(
+          12,
+          Math.round(txt.fontSize * 0.45)
+        )}px Plus Jakarta Sans, sans-serif`;
+        ctx.fillText(txt.subtitle, 0, offsetY + txt.fontSize * 0.7);
+      }
+
+      ctx.restore();
+    }
+  });
+
+  ctx.restore();
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  if (w < 2 * r) r = w / 2;
+  if (h < 2 * r) r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/**
+ * Renders the entire animation timeline into an exported WebM video
+ */
+export async function exportVideoSequence(
+  frames: Record<number, FrameData>,
+  totalFrames: number,
+  fps: number,
+  charts: ChartOverlay[],
+  texts: TextOverlay[],
+  images: ImageOverlay[],
+  videoBg: VideoBackground,
+  videoElement: HTMLVideoElement | null,
+  onProgress?: (progress: number) => void,
+  layers?: StudioLayer[],
+  canvasWidth: number = 1280,
+  canvasHeight: number = 720
+): Promise<Blob> {
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = canvasWidth;
+  exportCanvas.height = canvasHeight;
+  const ctx = exportCanvas.getContext('2d')!;
+
+  const stream = exportCanvas.captureStream(fps);
+  const mediaRecorder = new MediaRecorder(stream, {
+    mimeType: 'video/webm;codecs=vp9',
+    videoBitsPerSecond: 4000000,
+  });
+
+  const chunks: Blob[] = [];
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) chunks.push(e.data);
+  };
+
+  const recordingFinished = new Promise<Blob>((resolve) => {
+    mediaRecorder.onstop = () => {
+      resolve(new Blob(chunks, { type: 'video/webm' }));
+    };
+  });
+
+  mediaRecorder.start();
+
+  const frameDurationMs = 1000 / fps;
+  for (let f = 1; f <= totalFrames; f++) {
+    renderCompositeFrame(
+      ctx,
+      exportCanvas.width,
+      exportCanvas.height,
+      f,
+      frames[f],
+      charts,
+      texts,
+      images,
+      videoBg,
+      videoElement,
+      layers
+    );
+
+    if (onProgress) {
+      onProgress(Math.round((f / totalFrames) * 100));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, frameDurationMs));
+  }
+
+  mediaRecorder.stop();
+  return recordingFinished;
+}
+
+export function exportSnapshotPNG(canvas: HTMLCanvasElement, filename: string = 'snapshot.png') {
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+}
+
