@@ -20,7 +20,7 @@ import { createActor } from './engine/actor';
 import { tweenStickFrames } from './engine/stickRig';
 import type { EasingName } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
-import { useI18n } from './i18n';
+import { LOCALES, shortMonth, translate, useI18n } from './i18n';
 import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
@@ -182,10 +182,10 @@ export default function App() {
       durationFrames: 50,
       animationType: 'grow',
       data: [
-        { label: 'Jan', value: 35, color: '#38bdf8' },
-        { label: 'Fev', value: 68, color: '#0ea5e9' },
-        { label: 'Mar', value: 110, color: '#6366f1' },
-        { label: 'Abr', value: 185, color: '#a855f7' },
+        { label: shortMonth(0), value: 35, color: '#38bdf8' },
+        { label: shortMonth(1), value: 68, color: '#0ea5e9' },
+        { label: shortMonth(2), value: 110, color: '#6366f1' },
+        { label: shortMonth(3), value: 185, color: '#a855f7' },
       ],
       visible: true,
     },
@@ -267,6 +267,15 @@ export default function App() {
   const isDirty = (Object.keys(currentMarker) as (keyof typeof currentMarker)[]).some(
     (k) => currentMarker[k] !== savedMarker[k]
   );
+
+  // A never-named project follows the interface language ("Projeto sem título" ↔ "Untitled project")
+  useEffect(() => {
+    const isUntitled = (name: string) => LOCALES.some((l) => translate(l, 'project.untitled') === name);
+    const untitled = translate(locale, 'project.untitled');
+    setProjectName((name) => (isUntitled(name) ? untitled : name));
+    // Renaming the default name is not an edit: keep the "saved" reference in sync
+    setSavedMarker((m) => (isUntitled(m.projectName) ? { ...m, projectName: untitled } : m));
+  }, [locale]);
 
   const serializeCurrent = () => {
     const { description: _d, ...content } = history.presentRef.current;
@@ -790,10 +799,10 @@ export default function App() {
         durationFrames: 60, // 60 frames = 2.5s @ 24fps
         animationType: 'grow',
         data: [
-          { label: 'Jan', value: 45, color: '#38bdf8' },
-          { label: 'Fev', value: 90, color: '#0ea5e9' },
-          { label: 'Mar', value: 65, color: '#6366f1' },
-          { label: 'Abr', value: 110, color: '#10b981' },
+          { label: shortMonth(0), value: 45, color: '#38bdf8' },
+          { label: shortMonth(1), value: 90, color: '#0ea5e9' },
+          { label: shortMonth(2), value: 65, color: '#6366f1' },
+          { label: shortMonth(3), value: 110, color: '#10b981' },
         ],
         visible: true,
         hasMotionTween: false,

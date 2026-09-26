@@ -82,7 +82,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
               <span className="font-extrabold text-sm tracking-tight text-white font-sans">
                 FlashMotion <span className="text-sky-400">Studio</span>
               </span>
-              <span className="text-[9px] uppercase font-mono tracking-widest px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60">
+              <span className="hidden 2xl:inline text-[9px] uppercase font-mono tracking-widest px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60">
                 Flash + Remotion
               </span>
             </div>
@@ -115,14 +115,14 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         </div>
 
         {/* Presets dropdown */}
-        <div className="hidden lg:flex items-center gap-2 ml-3 pl-3 border-l border-neutral-800">
-          <span className="text-[11px] text-neutral-400 font-medium">{t('header.scenes')}</span>
+        <div className="hidden lg:flex items-center gap-2 ml-2 pl-2 border-l border-neutral-800">
+          <span className="hidden 2xl:inline text-[11px] text-neutral-400 font-medium">{t('header.scenes')}</span>
           <select
             onChange={(e) => {
               if (e.target.value) onLoadPreset(e.target.value);
             }}
             defaultValue=""
-            className="bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded px-2 py-1 outline-none transition cursor-pointer"
+            className="max-w-36 2xl:max-w-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded px-2 py-1 outline-none transition cursor-pointer"
           >
             <option value="" disabled>
               {t('header.loadExample')}
@@ -149,7 +149,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                 });
               }
             }}
-            className="bg-transparent text-neutral-200 text-xs font-semibold outline-none cursor-pointer"
+            className="max-w-40 2xl:max-w-none bg-transparent text-neutral-200 text-xs font-semibold outline-none cursor-pointer"
             title={t('header.canvasSize')}
           >
             {CANVAS_PRESETS.map((p) => (
@@ -173,7 +173,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-white transition flex items-center gap-1"
         >
           <RotateCcw size={14} />
-          <span className="text-[10px] font-mono hidden sm:inline">Ctrl+Z</span>
+          <span className="text-[10px] font-mono hidden 2xl:inline">Ctrl+Z</span>
         </button>
 
         <button
@@ -183,7 +183,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-white transition flex items-center gap-1"
         >
           <RotateCcw size={14} className="scale-x-[-1]" />
-          <span className="text-[10px] font-mono hidden sm:inline">Ctrl+Y</span>
+          <span className="text-[10px] font-mono hidden 2xl:inline">Ctrl+Y</span>
         </button>
 
         <div className="w-[1px] h-4 bg-neutral-800 mx-1" />
@@ -195,7 +195,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-sky-300 transition flex items-center gap-1"
         >
           <Group size={14} />
-          <span className="text-[10px] font-mono hidden md:inline">Ctrl+G</span>
+          <span className="text-[10px] font-mono hidden 2xl:inline">Ctrl+G</span>
         </button>
 
         <button
@@ -205,7 +205,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-amber-300 transition flex items-center gap-1"
         >
           <Ungroup size={14} />
-          <span className="text-[10px] font-mono hidden md:inline">Ctrl+B</span>
+          <span className="text-[10px] font-mono hidden 2xl:inline">Ctrl+B</span>
         </button>
       </div>
 
@@ -218,7 +218,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           title={t('header.aiImage')}
         >
           <Sparkles size={14} />
-          <span className="hidden sm:inline">{t('header.aiImageButton')}</span>
+          <span className="hidden 2xl:inline">{t('header.aiImageButton')}</span>
         </button>
 
         {/* Gemini Chatbot Trigger */}
@@ -232,7 +232,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           title={t('header.copilot')}
         >
           <Bot size={14} />
-          <span className="hidden sm:inline">{t('header.copilotButton')}</span>
+          <span className="hidden 2xl:inline">{t('header.copilotButton')}</span>
         </button>
 
         {/* Snapshot PNG */}

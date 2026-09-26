@@ -47,6 +47,12 @@ export function t(key: MessageKey, params?: MessageParams): string {
   return translate(currentLocale, key, params);
 }
 
+/** Short month name in the current language ("Fev" / "Feb"), for sample chart data. */
+export function shortMonth(monthIndex: number, locale: Locale = currentLocale): string {
+  const name = new Date(2024, monthIndex, 1).toLocaleString(locale, { month: 'short' }).replace('.', '');
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 interface I18nValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;

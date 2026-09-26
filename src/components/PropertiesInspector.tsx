@@ -44,7 +44,7 @@ import {
 import { ActorInspector } from './ActorInspector';
 import { PathInspector } from './PathInspector';
 import { StickAnimationPanel } from './StickAnimationPanel';
-import { MessageKey, useI18n } from '../i18n';
+import { MessageKey, shortMonth, useI18n } from '../i18n';
 import type { EasingName } from '../engine/keyframes';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
@@ -231,10 +231,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         title: t('inspector.sample.salesTitle'),
         type: 'bar',
         data: [
-          { label: 'Jan', value: 45, color: '#38bdf8' },
-          { label: 'Fev', value: 75, color: '#0ea5e9' },
-          { label: 'Mar', value: 110, color: '#0284c7' },
-          { label: 'Abr', value: 165, color: '#22c55e' },
+          { label: shortMonth(0), value: 45, color: '#38bdf8' },
+          { label: shortMonth(1), value: 75, color: '#0ea5e9' },
+          { label: shortMonth(2), value: 110, color: '#0284c7' },
+          { label: shortMonth(3), value: 165, color: '#22c55e' },
         ],
       });
     } else if (presetKey === 'retention') {

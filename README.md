@@ -27,6 +27,7 @@ qualquer editor.
   `.fmproj` direto do sistema.
 - **Export** MP4 (H.264) ou WebM transparente, com trecho de frames, codificado via WebCodecs com tempo exato.
 - IA opcional (Gemini) para imagens e um copiloto de roteiro.
+- Interface em **português (BR)** e **inglês (US)**, escolhida no canto superior direito e lembrada no navegador.
 
 ## Desenvolvimento
 
@@ -37,6 +38,7 @@ npm install
 npm run dev        # http://localhost:3000 (Express + Vite)
 npm test           # Vitest (motor de keyframes, rig do boneco, rota, formato de projeto)
 npm run lint       # typecheck
+npm run i18n:scan  # textos da interface fora dos dicionários (src/i18n)
 npm run build && NODE_ENV=production npm start   # build de produção (necessário para testar o PWA)
 ```
 
