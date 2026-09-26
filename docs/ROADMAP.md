@@ -28,6 +28,7 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   ao percorrer) + "Seguir caminho" para qualquer imagem (tempo, paradas, progresso por keyframe); rota no
   mapa refeita como modelo sobre essas peças
 - [x] T14 — i18n pt-BR / en-US: seletor no topo direito, escolha salva no localStorage
+- [x] T15 — CI (GitHub Actions): typecheck, testes, `i18n:scan` e build em todo PR e push na main
 
 ## Próximos passos sugeridos
 

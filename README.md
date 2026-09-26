@@ -42,6 +42,8 @@ npm run i18n:scan  # textos da interface fora dos dicionários (src/i18n)
 npm run build && NODE_ENV=production npm start   # build de produção (necessário para testar o PWA)
 ```
 
+O CI (`.github/workflows/ci.yml`) roda typecheck, testes, `i18n:scan` e build em todo PR.
+
 Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`).
 
 ## Arquitetura
