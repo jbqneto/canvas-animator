@@ -40,6 +40,7 @@ import { Timeline } from './components/Timeline';
 import { AiImageModal } from './components/AiImageModal';
 import { GeminiChatbot } from './components/GeminiChatbot';
 import { ExportDialog, ExportRequest } from './components/ExportDialog';
+import { PwaStatus } from './components/PwaStatus';
 
 export default function App() {
   // Timeline playback state
@@ -341,6 +342,29 @@ export default function App() {
       alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
     }
   };
+
+  // Installed app: files opened from the OS (double-click on .fmproj) arrive through the launch queue
+  const openLaunchedFileRef = useRef<(handle: ProjectFileHandle) => void>(() => undefined);
+  openLaunchedFileRef.current = async (handle) => {
+    if (isDirty && !confirm('Há alterações não salvas. Abrir o arquivo mesmo assim?')) return;
+    try {
+      const file = await handle.getFile();
+      applyProjectText(await file.text(), projectNameFromFile(file.name));
+      fileHandleRef.current = handle;
+      setPendingRestore(null);
+      autosaveReadyRef.current = true;
+    } catch (err) {
+      alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
+    }
+  };
+  useEffect(() => {
+    const queue = (window as unknown as {
+      launchQueue?: { setConsumer(cb: (params: { files: ProjectFileHandle[] }) => void): void };
+    }).launchQueue;
+    queue?.setConsumer((params) => {
+      if (params.files.length > 0) openLaunchedFileRef.current(params.files[0]);
+    });
+  }, []);
 
   const handleRestoreAutosave = (restore: boolean) => {
     if (restore && pendingRestore) {
@@ -1707,6 +1731,8 @@ export default function App() {
         height={canvasDimensions.height}
         hasBackgroundVideo={videoBg.type !== 'color' && !!videoBg.url}
       />
+
+      <PwaStatus hasUnsavedChanges={isDirty} />
 
       {/* AI Image Generation & Editing Modal */}
       <AiImageModal
