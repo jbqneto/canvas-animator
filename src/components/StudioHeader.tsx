@@ -14,6 +14,8 @@ import {
   Save,
 } from 'lucide-react';
 import { CanvasDimensions, CANVAS_PRESETS } from '../types';
+import { useI18n } from '../i18n';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface StudioHeaderProps {
   onExportVideo: () => void;
@@ -66,6 +68,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   onOpenProject,
   onSaveProject,
 }) => {
+  const { t } = useI18n();
   return (
     <header className="h-14 px-4 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between shrink-0 select-none z-20">
       {/* Brand & Tagline */}
@@ -85,7 +88,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             </div>
             <p
               className="text-[10px] text-neutral-400 leading-tight flex items-center gap-1 max-w-56"
-              title={isDirty ? 'Alterações não salvas' : 'Tudo salvo'}
+              title={isDirty ? t('header.unsaved') : t('header.allSaved')}
             >
               <span className="truncate">{projectName}</span>
               {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
@@ -94,14 +97,14 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           <div className="flex items-center gap-0.5 ml-1">
             <button
               onClick={onOpenProject}
-              title="Abrir projeto (Ctrl+O)"
+              title={t('header.open')}
               className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition"
             >
               <FolderOpen size={15} />
             </button>
             <button
               onClick={onSaveProject}
-              title="Salvar projeto (Ctrl+S) — Ctrl+Shift+S para salvar como"
+              title={t('header.save')}
               className={`p-1.5 rounded hover:bg-neutral-800 transition ${
                 isDirty ? 'text-amber-300 hover:text-amber-200' : 'text-neutral-400 hover:text-white'
               }`}
@@ -113,7 +116,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
 
         {/* Presets dropdown */}
         <div className="hidden lg:flex items-center gap-2 ml-3 pl-3 border-l border-neutral-800">
-          <span className="text-[11px] text-neutral-400 font-medium">Cenas:</span>
+          <span className="text-[11px] text-neutral-400 font-medium">{t('header.scenes')}</span>
           <select
             onChange={(e) => {
               if (e.target.value) onLoadPreset(e.target.value);
@@ -122,11 +125,11 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             className="bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded px-2 py-1 outline-none transition cursor-pointer"
           >
             <option value="" disabled>
-              Carregar Exemplo...
+              {t('header.loadExample')}
             </option>
-            <option value="presenter">📊 Apresentador Educativo & Gráficos</option>
-            <option value="walkcycle">🚶 Caminhada Stick Figure no Vídeo</option>
-            <option value="action">⚡ Salto e Ação Flash</option>
+            <option value="presenter">{t('header.example.presenter')}</option>
+            <option value="walkcycle">{t('header.example.walkcycle')}</option>
+            <option value="action">{t('header.example.action')}</option>
           </select>
         </div>
 
@@ -147,15 +150,15 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
               }
             }}
             className="bg-transparent text-neutral-200 text-xs font-semibold outline-none cursor-pointer"
-            title="Selecione a resolução e proporção do canvas (YouTube, Shorts, etc.)"
+            title={t('header.canvasSize')}
           >
             {CANVAS_PRESETS.map((p) => (
               <option key={p.id} value={p.id} className="bg-neutral-900 text-white">
-                {p.name} ({p.width}×{p.height})
+                {t(`canvas.preset.${p.id}` as const)} ({p.width}×{p.height})
               </option>
             ))}
             <option value="custom" className="bg-neutral-900 text-white">
-              Personalizado ({canvasDimensions.width}×{canvasDimensions.height})
+              {t('header.customSize', { width: canvasDimensions.width, height: canvasDimensions.height })}
             </option>
           </select>
         </div>
@@ -166,7 +169,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         <button
           onClick={onUndo}
           disabled={!canUndo}
-          title="Desfazer (Ctrl+Z)"
+          title={t('header.undo')}
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-white transition flex items-center gap-1"
         >
           <RotateCcw size={14} />
@@ -176,7 +179,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         <button
           onClick={onRedo}
           disabled={!canRedo}
-          title="Refazer (Ctrl+Y ou Ctrl+Shift+Z)"
+          title={t('header.redo')}
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-white transition flex items-center gap-1"
         >
           <RotateCcw size={14} className="scale-x-[-1]" />
@@ -188,7 +191,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         <button
           onClick={onGroupSelected}
           disabled={!hasSelection}
-          title="Agrupar objeto (Ctrl+G)"
+          title={t('header.group')}
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-sky-300 transition flex items-center gap-1"
         >
           <Group size={14} />
@@ -198,7 +201,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         <button
           onClick={onUngroupSelected}
           disabled={!hasSelection}
-          title="Desagrupar em traços individuais (Ctrl+B)"
+          title={t('header.ungroup')}
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-amber-300 transition flex items-center gap-1"
         >
           <Ungroup size={14} />
@@ -212,10 +215,10 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         <button
           onClick={onOpenAiImage}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-fuchsia-500/15 hover:bg-fuchsia-500/25 text-fuchsia-300 border border-fuchsia-500/30 text-xs font-semibold transition"
-          title="Criar ou editar imagens com Gemini Flash Image"
+          title={t('header.aiImage')}
         >
           <Sparkles size={14} />
-          <span className="hidden sm:inline">Gerar Imagem IA</span>
+          <span className="hidden sm:inline">{t('header.aiImageButton')}</span>
         </button>
 
         {/* Gemini Chatbot Trigger */}
@@ -226,17 +229,17 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
               ? 'bg-sky-500 text-neutral-950 border-sky-400 font-bold shadow-md shadow-sky-500/20'
               : 'bg-neutral-900 hover:bg-neutral-800 text-sky-400 border-neutral-800'
           }`}
-          title="Abrir Copiloto Gemini"
+          title={t('header.copilot')}
         >
           <Bot size={14} />
-          <span className="hidden sm:inline">Copiloto IA</span>
+          <span className="hidden sm:inline">{t('header.copilotButton')}</span>
         </button>
 
         {/* Snapshot PNG */}
         <button
           onClick={onSnapshot}
           className="p-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 transition"
-          title="Salvar Foto PNG do Frame Atual"
+          title={t('header.snapshot')}
         >
           <Camera size={15} />
         </button>
@@ -246,20 +249,22 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           onClick={onExportVideo}
           disabled={isExporting}
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-neutral-950 font-bold text-xs shadow-lg shadow-sky-500/25 transition active:scale-95"
-          title="Renderizar e baixar vídeo WebM da animação"
+          title={t('header.export')}
         >
           {isExporting ? (
             <>
               <Loader2 size={15} className="animate-spin" />
-              <span>Exportando ({exportProgress}%)</span>
+              <span>{t('header.exporting', { progress: exportProgress })}</span>
             </>
           ) : (
             <>
               <Download size={15} />
-              <span>Exportar Vídeo</span>
+              <span>{t('header.exportButton')}</span>
             </>
           )}
         </button>
+
+        <LanguageSwitcher />
       </div>
     </header>
   );
