@@ -123,8 +123,10 @@ export interface FollowTimingOptions {
   startFrame: number;
   endFrame: number;
   easing: EasingName;
-  /** Frames to wait at each intermediate point (0 = travel without stopping). */
+  /** Frames to wait at each stop (0 = travel without stopping). */
   holdFrames: number;
+  /** Progress values to stop at; defaults to every intermediate drawn point. */
+  stopAt?: number[];
 }
 
 /**
@@ -135,7 +137,7 @@ export interface FollowTimingOptions {
 export function buildFollowProgress(opts: FollowTimingOptions): Track<number> {
   const { startFrame, easing } = opts;
   const endFrame = Math.max(startFrame + 1, opts.endFrame);
-  const stops = opts.anchorProgress.filter((p) => p > 1e-6 && p < 1 - 1e-6);
+  const stops = (opts.stopAt ?? opts.anchorProgress).filter((p) => p > 1e-6 && p < 1 - 1e-6);
   if (opts.holdFrames <= 0 || stops.length === 0) {
     return [
       { frame: startFrame, value: 0, easing },

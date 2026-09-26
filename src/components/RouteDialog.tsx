@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Globe2, Loader2, Plane, X } from 'lucide-react';
 import type { ActorOverlay } from '../types';
 import { Country, loadWorld, MapFraming } from '../map/worldMap';
-import { routeTotalFrames } from '../map/routeTemplate';
+import { routeDurationFrames } from '../map/routeTemplate';
 
 export interface RouteRequest {
   stops: Country[];
@@ -64,7 +64,7 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
 
   const totalSeconds =
     stops.length >= 2
-      ? routeTotalFrames(stops.length, { fps, secondsPerLeg, pauseSeconds, landedScale: 1 }) / fps
+      ? routeDurationFrames(stops.length, { fps, secondsPerLeg, pauseSeconds }) / fps
       : 0;
 
   return (
@@ -82,7 +82,8 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
           </button>
         </div>
         <p className="text-[11px] text-neutral-500">
-          Escolha os países na ordem da viagem. O avião sai do primeiro, pousa em cada um e segue para o próximo.
+          Modelo pronto: cria o mapa, um <b>caminho</b> pelos países e uma imagem que o <b>segue</b>, parando em cada
+          um. Depois tudo pode ser editado como qualquer caminho (estilo, pontos, tempo, paradas).
         </p>
 
         <div className="space-y-1.5 relative">

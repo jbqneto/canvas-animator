@@ -44,7 +44,7 @@ import { GeminiChatbot } from './components/GeminiChatbot';
 import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
-import { applyRouteToActor, buildRouteKeyframes, buildStopLabels } from './map/routeTemplate';
+import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 
@@ -1255,15 +1255,19 @@ export default function App() {
       const [x, y] = projection(countryAnchor(c)) ?? [W / 2, H / 2];
       return { name: c.name, x: Math.round(x), y: Math.round(y) };
     });
-    const route = buildRouteKeyframes(stops, {
-      fps,
-      secondsPerLeg: req.secondsPerLeg,
-      pauseSeconds: req.pauseSeconds,
-      landedScale: 0.7,
-      arc: req.arc ? 0.18 : 0,
-    });
-    const newTotal = Math.max(totalFrames, route.endFrame);
     const stamp = Date.now();
+    const route = buildRouteTemplate(
+      stops,
+      {
+        fps,
+        secondsPerLeg: req.secondsPerLeg,
+        pauseSeconds: req.pauseSeconds,
+        landedScale: 0.7,
+        arc: req.arc ? 0.18 : 0,
+      },
+      `path-route-${stamp}`
+    );
+    const newTotal = Math.max(totalFrames, route.endFrame);
     const present = history.presentRef.current;
 
     const mapActor = createActor({
@@ -1277,38 +1281,53 @@ export default function App() {
       startFrame: 1,
       durationFrames: newTotal - 1,
     });
+    // The vehicle is just an actor following the route path (any imported image works)
     const existingVehicle = present.actors.find((a) => a.id === req.vehicleActorId);
     const vehicleWidth = Math.round(W * 0.07);
-    const vehicle = applyRouteToActor(
+    const baseVehicle =
       existingVehicle ??
-        createActor({
-          id: `actor-plane-${stamp}`,
-          name: 'Avião',
-          src: PLANE_ICON_SRC,
-          width: vehicleWidth,
-          height: Math.round(vehicleWidth * PLANE_ICON_ASPECT),
-          x: stops[0].x,
-          y: stops[0].y,
-          startFrame: 1,
-          durationFrames: route.endFrame - 1,
-        }),
-      route
-    );
+      createActor({
+        id: `actor-plane-${stamp}`,
+        name: 'Avião',
+        src: PLANE_ICON_SRC,
+        width: vehicleWidth,
+        height: Math.round(vehicleWidth * PLANE_ICON_ASPECT),
+        x: stops[0].x,
+        y: stops[0].y,
+        startFrame: 1,
+        durationFrames: route.endFrame - 1,
+      });
+    const vehicle: ActorOverlay = {
+      ...baseVehicle,
+      startFrame: 1,
+      durationFrames: Math.max(baseVehicle.durationFrames, route.endFrame - 1),
+      follow: route.follow,
+      tracks: { ...baseVehicle.tracks, scale: route.scale },
+    };
+    const path = { ...route.path, name: `Rota: ${stops.map((s) => s.name).join(' → ')}` };
 
-    const layerFor = (actor: ActorOverlay, locked = false): StudioLayer => ({
-      id: `layer-actor-${actor.id}`,
-      name: actor.name,
-      type: 'actor',
+    const layerFor = (id: string, name: string, type: 'actor' | 'path', locked = false): StudioLayer => ({
+      id: `layer-${type}-${id}`,
+      name,
+      type,
       visible: true,
       locked,
-      color: locked ? '#64748b' : '#f97316',
-      targetId: actor.id,
+      color: locked ? '#64748b' : type === 'path' ? '#38bdf8' : '#f97316',
+      targetId: id,
     });
-    // Map at the back (just above the video/background layer), locked so clicks reach the plane
+    // Map at the back (just above the video/background layer), locked so clicks reach the rest
     let layersNext = [...present.layers];
     const videoIndex = layersNext.findIndex((l) => l.type === 'video');
-    layersNext.splice(videoIndex === -1 ? layersNext.length : videoIndex, 0, layerFor(mapActor, true));
-    if (!existingVehicle) layersNext = [layerFor(vehicle), ...layersNext];
+    layersNext.splice(
+      videoIndex === -1 ? layersNext.length : videoIndex,
+      0,
+      layerFor(mapActor.id, mapActor.name, 'actor', true)
+    );
+    layersNext = [
+      ...(existingVehicle ? [] : [layerFor(vehicle.id, vehicle.name, 'actor')]),
+      layerFor(path.id, path.name, 'path'),
+      ...layersNext,
+    ];
 
     history.pushSnapshot(`Rota no mapa: ${stops.map((s) => s.name).join(' → ')}`, {
       ...present,
@@ -1317,6 +1336,7 @@ export default function App() {
         ...present.actors.map((a) => (a.id === vehicle.id ? vehicle : a)),
         ...(existingVehicle ? [] : [vehicle]),
       ],
+      paths: [...present.paths, path],
       texts: req.labels
         ? [...present.texts, ...buildStopLabels(stops, route.arrivals, route.endFrame, W, `route-${stamp}`)]
         : present.texts,

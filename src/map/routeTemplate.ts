@@ -1,10 +1,11 @@
 /**
- * "Plane flying through countries" template (pure): turns ordered stops into actor keyframes.
- * Each stop holds for a pause (the plane "lands": it shrinks a little) and takes off again,
- * like travel-route apps (TravelBoast, Travel Animator).
+ * "Travel route" template built from the generic pieces: a drawn MotionPath through the stops
+ * (optionally bending each leg into a flight arc) and an actor that follows it, stopping at each stop.
+ * The template only adds what is specific to it: the "landing" scale and the stop labels.
  */
-import type { ActorOverlay, TextOverlay } from '../types';
+import type { ActorFollow, MotionPath, TextOverlay } from '../types';
 import type { Track, Vec2 } from '../engine/keyframes';
+import { buildFollowProgress, samplePath } from '../engine/path';
 
 export interface RouteStop {
   name: string;
@@ -18,73 +19,115 @@ export interface RouteTiming {
   pauseSeconds: number;
   /** Scale while landed (1 = no landing effect). */
   landedScale: number;
-  /** Flight arc height as a fraction of the leg length (0 = straight line). */
-  arc?: number;
+  /** Flight arc height as a fraction of the leg length (0 = straight legs). */
+  arc: number;
 }
 
-export interface RouteKeyframes {
-  position: Track<Vec2>;
+export interface RouteTemplate {
+  path: MotionPath;
+  follow: ActorFollow;
   scale: Track<number>;
-  /** Frame when the vehicle arrives at each stop (the first stop is frame 1). */
+  /** Frame when the vehicle is at each stop (first stop = frame 1). */
   arrivals: number[];
-  /** Last frame of the animation (end of the final pause). */
   endFrame: number;
 }
 
-export function buildRouteKeyframes(stops: RouteStop[], timing: RouteTiming): RouteKeyframes {
-  const leg = Math.max(2, Math.round(timing.secondsPerLeg * timing.fps));
-  const pause = Math.max(0, Math.round(timing.pauseSeconds * timing.fps));
-  const position: Track<Vec2> = [];
-  const scale: Track<number> = [];
-  const arrivals: number[] = [];
-
-  let frame = 1;
-  const arc = timing.arc ?? 0;
+/** Points of the path: the stops, plus a bent midpoint per leg when `arc` > 0. */
+export function routePoints(stops: Vec2[], arc: number): { points: Vec2[]; stopIndices: number[] } {
+  const points: Vec2[] = [];
+  const stopIndices: number[] = [];
   stops.forEach((stop, i) => {
-    const point = { x: stop.x, y: stop.y };
-    if (i > 0) {
-      const mid = frame - Math.round(leg / 2);
-      // Mid-flight: full size at the middle of the leg
-      scale.push({ frame: mid, value: 1, easing: 'easeInOut' });
-      if (arc > 0) {
-        // Bend the leg like a flight arc, bulging "north" (up on screen). The departure key eases in
-        // and this one eases out, so speed is continuous through the middle (both are 3× at the join).
-        const prev = stops[i - 1];
-        const dx = stop.x - prev.x;
-        const dy = stop.y - prev.y;
-        const len = Math.hypot(dx, dy);
-        let nx = -dy / (len || 1);
-        let ny = dx / (len || 1);
-        if (ny > 0) {
-          nx = -nx;
-          ny = -ny;
-        }
-        position[position.length - 1].easing = 'easeIn';
-        position.push({
-          frame: mid,
-          value: { x: (prev.x + stop.x) / 2 + nx * len * arc, y: (prev.y + stop.y) / 2 + ny * len * arc },
-          easing: 'easeOut',
-        });
+    if (i > 0 && arc > 0) {
+      const prev = stops[i - 1];
+      const dx = stop.x - prev.x;
+      const dy = stop.y - prev.y;
+      const len = Math.hypot(dx, dy);
+      // Normal pointing "north" (up on screen)
+      let nx = -dy / (len || 1);
+      let ny = dx / (len || 1);
+      if (ny > 0) {
+        nx = -nx;
+        ny = -ny;
       }
+      points.push({ x: (prev.x + stop.x) / 2 + nx * len * arc, y: (prev.y + stop.y) / 2 + ny * len * arc });
     }
-    arrivals.push(frame);
-    position.push({ frame, value: point, easing: 'linear' });
-    scale.push({ frame, value: timing.landedScale, easing: 'linear' });
-    if (pause > 0) {
-      frame += pause;
-      // Departure: same place, then ease into the next leg
-      position.push({ frame, value: point, easing: 'easeInOut' });
-      scale.push({ frame, value: timing.landedScale, easing: 'easeInOut' });
-    } else {
-      position[position.length - 1].easing = 'easeInOut';
-    }
-    if (i < stops.length - 1) frame += leg;
+    stopIndices.push(points.length);
+    points.push({ x: stop.x, y: stop.y });
   });
-
-  return { position, scale, arrivals, endFrame: frame };
+  return { points, stopIndices };
 }
 
-/** Country name labels that pop in above each stop when the vehicle arrives. */
+export function routeDurationFrames(stopCount: number, timing: Pick<RouteTiming, 'fps' | 'secondsPerLeg' | 'pauseSeconds'>): number {
+  const leg = Math.round(timing.secondsPerLeg * timing.fps);
+  const pause = Math.round(timing.pauseSeconds * timing.fps);
+  return 1 + pause * stopCount + leg * Math.max(0, stopCount - 1);
+}
+
+export function buildRouteTemplate(stops: RouteStop[], timing: RouteTiming, pathId: string): RouteTemplate {
+  const leg = Math.max(2, Math.round(timing.secondsPerLeg * timing.fps));
+  const pause = Math.max(0, Math.round(timing.pauseSeconds * timing.fps));
+  const { points, stopIndices } = routePoints(stops, timing.arc);
+  const endFrame = routeDurationFrames(stops.length, timing);
+
+  const path: MotionPath = {
+    id: pathId,
+    name: 'Rota',
+    points,
+    smooth: true,
+    closed: false,
+    style: { visible: true, color: '#f8fafc', width: 4, stroke: 'dashed', reveal: 'follow' },
+    startFrame: 1,
+    durationFrames: endFrame - 1,
+  };
+
+  // Waits `pause` at the first stop, travels (stopping `pause` at each intermediate stop), waits at the end
+  const anchorProgress = samplePath(path).anchorProgress;
+  const departure = 1 + pause;
+  const arrival = endFrame - pause;
+  const progress = buildFollowProgress({
+    anchorProgress,
+    startFrame: departure,
+    endFrame: arrival,
+    easing: 'easeInOut',
+    holdFrames: pause,
+    stopAt: stopIndices.map((i) => anchorProgress[i]),
+  });
+
+  // Landed intervals: before departure, every hold (two keys with the same progress), after arrival
+  const landed: [number, number][] = [[1, departure]];
+  for (let i = 1; i < progress.length; i++) {
+    if (progress[i].value === progress[i - 1].value) landed.push([progress[i - 1].frame, progress[i].frame]);
+  }
+  landed.push([arrival, endFrame]);
+
+  const scale: Track<number> = [];
+  landed.forEach(([from, to], i) => {
+    if (i > 0) {
+      // Full size in the middle of the flight that ends here
+      const prevEnd = landed[i - 1][1];
+      scale.push({ frame: Math.round((prevEnd + from) / 2), value: 1, easing: 'easeInOut' });
+    }
+    scale.push({ frame: from, value: timing.landedScale, easing: 'linear' });
+    if (to > from) scale.push({ frame: to, value: timing.landedScale, easing: 'easeInOut' });
+  });
+
+  return {
+    path,
+    follow: { pathId, orient: true, progress },
+    scale: dedupeFrames(scale),
+    arrivals: landed.map(([from]) => from),
+    endFrame,
+  };
+}
+
+/** Keeps the last key when two keys land on the same frame (e.g. zero-length pauses). */
+function dedupeFrames(track: Track<number>): Track<number> {
+  const byFrame = new Map<number, Track<number>[number]>();
+  track.forEach((k) => byFrame.set(k.frame, k));
+  return [...byFrame.values()].sort((a, b) => a.frame - b.frame);
+}
+
+/** Stop names that pop in above each stop when the vehicle arrives. */
 export function buildStopLabels(
   stops: RouteStop[],
   arrivals: number[],
@@ -106,24 +149,4 @@ export function buildStopLabels(
     durationFrames: Math.max(1, endFrame - arrivals[i]),
     visible: true,
   }));
-}
-
-export function routeTotalFrames(stops: number, timing: RouteTiming): number {
-  return buildRouteKeyframes(
-    Array.from({ length: stops }, () => ({ name: '', x: 0, y: 0 })),
-    timing
-  ).endFrame;
-}
-
-/** Applies the route to a vehicle actor: path, landing scale, orientation and trail. */
-export function applyRouteToActor(actor: ActorOverlay, route: RouteKeyframes): ActorOverlay {
-  return {
-    ...actor,
-    startFrame: 1,
-    durationFrames: Math.max(1, route.endFrame - 1),
-    tracks: { ...actor.tracks, position: route.position, scale: route.scale },
-    smoothPath: true,
-    orientToPath: true,
-    trail: actor.trail ?? { enabled: true, color: '#f8fafc', width: 4, dashed: true },
-  };
 }
