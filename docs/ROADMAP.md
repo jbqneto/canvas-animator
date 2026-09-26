@@ -16,7 +16,7 @@ Base: `docs/RESEARCH.md`.
 - [x] T6 — Caminho de movimento visível, caminho suave/reto, orientar ao caminho
 - [x] T7 — Boneco palito: FK (girar osso em volta do pai) + interpolar pose entre dois quadros
 - [x] T8 — Salvar/abrir projeto (arquivo local) + autosave/recuperação
-- [ ] T9 — Diálogo de export: MP4, WebM transparente (VP9 alpha), trecho de quadros
+- [x] T9 — Diálogo de export: MP4, WebM transparente (VP9 alpha), trecho de quadros
 - [ ] T10 — PWA instalável (manifest, service worker, ícones, abrir .fmproj pelo sistema)
 - [ ] T11 — Template de mapa: mapa-múndi + rota por países gerando keyframes
 - [ ] T12 — PR
@@ -52,3 +52,5 @@ Base: `docs/RESEARCH.md`.
   API quando existe (Ctrl+S sobrescreve o mesmo arquivo), senão download/input. Autosave em IndexedDB
   (1,5 s após mudar) + faixa "Restaurar/Descartar" ao iniciar. "Não salvo" = comparação por referência
   com o estado do último salvar/abrir (`savedMarker`).
+- Export (`ExportDialog.tsx`): MP4 (fundo incluso) ou WebM VP9 com alpha (`RenderOptions.transparent`,
+  mediabunny `alpha: 'keep'`), trecho de frames inclusivo. Nome do arquivo = nome do projeto.

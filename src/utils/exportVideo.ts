@@ -31,6 +31,8 @@ export interface SceneContent {
 export interface RenderOptions {
   /** Editor-only helper grid. Never part of an exported frame. */
   showGrid?: boolean;
+  /** Skip the stage background (color and video): only the animated elements, with alpha. */
+  transparent?: boolean;
 }
 
 /**
@@ -72,7 +74,9 @@ export function renderCompositeFrame(
 
   // 1. Draw Background
   const videoLayer = layers?.find((layer) => layer.type === 'video');
-  if (!videoLayer || videoLayer.visible) {
+  if (options.transparent) {
+    // nothing: the canvas stays transparent behind the elements
+  } else if (!videoLayer || videoLayer.visible) {
     if (videoBg.type === 'color' || !videoElement || videoElement.readyState < 2) {
       ctx.fillStyle = videoBg.color || '#09090b';
       ctx.fillRect(0, 0, width, height);
@@ -663,15 +667,25 @@ export function seekVideo(video: HTMLVideoElement, time: number, timeoutMs = 300
   });
 }
 
+export type ExportFormat = 'mp4' | 'webm-alpha';
+
 export interface ExportedVideo {
   blob: Blob;
   /** File extension matching the container that was actually produced ('mp4' or 'webm'). */
   extension: 'mp4' | 'webm';
 }
 
-/** Picks the best container/codec the browser can encode: MP4/H.264 first (editors love it), then WebM. */
-async function pickOutputFormat(width: number, height: number) {
+/**
+ * Picks the container/codec. Opaque: MP4/H.264 first (every editor opens it), then WebM.
+ * Transparent: only VP9/VP8 in WebM carry alpha (same constraint Remotion documents).
+ */
+async function pickOutputFormat(width: number, height: number, transparent: boolean) {
   const { Mp4OutputFormat, WebMOutputFormat, getFirstEncodableVideoCodec } = await loadMediabunny();
+  if (transparent) {
+    const webm = new WebMOutputFormat();
+    const codec = await getFirstEncodableVideoCodec(['vp9', 'vp8'], { width, height });
+    return codec ? { format: webm, codec, extension: 'webm' as const } : null;
+  }
   const mp4 = new Mp4OutputFormat({ fastStart: 'in-memory' });
   const mp4Codec = await getFirstEncodableVideoCodec(
     mp4.getSupportedVideoCodecs().filter((c) => c === 'avc' || c === 'hevc'),
@@ -703,9 +717,16 @@ export async function exportVideoSequence(
     width: number;
     height: number;
     onProgress?: (progress: number) => void;
+    format?: ExportFormat;
+    /** Inclusive frame range; defaults to the whole timeline. */
+    startFrame?: number;
+    endFrame?: number;
   }
 ): Promise<ExportedVideo> {
   const { totalFrames, fps, onProgress } = options;
+  const transparent = options.format === 'webm-alpha';
+  const first = Math.max(1, Math.min(totalFrames, options.startFrame ?? 1));
+  const last = Math.max(first, Math.min(totalFrames, options.endFrame ?? totalFrames));
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('Este navegador não suporta WebCodecs. Use Chrome ou Edge atualizados.');
   }
@@ -718,16 +739,21 @@ export async function exportVideoSequence(
   exportCanvas.height = height;
   const ctx = exportCanvas.getContext('2d')!;
 
-  const picked = await pickOutputFormat(width, height);
+  const picked = await pickOutputFormat(width, height, transparent);
   if (!picked) {
-    throw new Error('Nenhum codec de vídeo (H.264, VP9 ou VP8) disponível neste navegador.');
+    throw new Error(
+      transparent
+        ? 'Este navegador não codifica VP9/VP8, necessários para vídeo transparente.'
+        : 'Nenhum codec de vídeo (H.264, VP9 ou VP8) disponível neste navegador.'
+    );
   }
 
   // Everything the frames depend on must be ready before encoding starts
   await document.fonts.ready;
   await preloadSceneImages(scene);
 
-  const video = scene.videoBg.type !== 'color' ? scene.videoElement ?? null : null;
+  // A transparent export never shows the background video, so there's nothing to seek
+  const video = !transparent && scene.videoBg.type !== 'color' ? scene.videoElement ?? null : null;
   const restoreVideoTime = video?.currentTime ?? 0;
   video?.pause();
 
@@ -737,22 +763,23 @@ export async function exportVideoSequence(
     codec: picked.codec,
     bitrate: QUALITY_HIGH,
     keyFrameInterval: 2,
+    alpha: transparent ? 'keep' : 'discard',
   });
   output.addVideoTrack(source, { frameRate: fps });
   await output.start();
 
   const frameDuration = 1 / fps;
   try {
-    for (let f = 1; f <= totalFrames; f++) {
+    for (let f = first; f <= last; f++) {
       if (video) {
         await seekVideo(video, videoTimeForFrame(f, fps, video.duration));
       }
 
-      renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video });
-      await source.add((f - 1) * frameDuration, frameDuration);
+      renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
+      await source.add((f - first) * frameDuration, frameDuration);
 
       if (onProgress) {
-        onProgress(Math.round((f / totalFrames) * 100));
+        onProgress(Math.round(((f - first + 1) / (last - first + 1)) * 100));
       }
     }
     await output.finalize();

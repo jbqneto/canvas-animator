@@ -116,7 +116,8 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
       </button>
       {keyPoses.length > 0 && (
         <p className="text-[10px] text-neutral-500">
-          Poses-chave: {keyPoses.map((f) => `F${f}`).join(', ')}
+          Poses-chave: {keyPoses.slice(0, 12).map((f) => `F${f}`).join(', ')}
+          {keyPoses.length > 12 && ` … (+${keyPoses.length - 12})`}
         </p>
       )}
     </div>

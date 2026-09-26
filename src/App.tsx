@@ -39,6 +39,7 @@ import { PropertiesInspector } from './components/PropertiesInspector';
 import { Timeline } from './components/Timeline';
 import { AiImageModal } from './components/AiImageModal';
 import { GeminiChatbot } from './components/GeminiChatbot';
+import { ExportDialog, ExportRequest } from './components/ExportDialog';
 
 export default function App() {
   // Timeline playback state
@@ -1336,7 +1337,9 @@ export default function App() {
   };
 
   // Export Video
-  const handleExportVideo = async () => {
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  const handleExportVideo = async (request: ExportRequest) => {
     setIsExporting(true);
     setExportProgress(0);
     setIsPlaying(false);
@@ -1348,15 +1351,20 @@ export default function App() {
         width: canvasDimensions.width,
         height: canvasDimensions.height,
         onProgress: (progress) => setExportProgress(progress),
+        format: request.format,
+        startFrame: request.startFrame,
+        endFrame: request.endFrame,
       });
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `animacao-flashmotion-${Date.now()}.${extension}`;
+      const suffix = request.format === 'webm-alpha' ? '-transparente' : '';
+      a.download = `${projectName}${suffix}.${extension}`;
       a.click();
       // Revoking synchronously can cancel the download before the browser starts it
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setExportDialogOpen(false);
     } catch (err) {
       console.error('Export error:', err);
       alert(`Falha ao exportar o vídeo: ${err instanceof Error ? err.message : String(err)}`);
@@ -1419,7 +1427,7 @@ export default function App() {
 
       {/* Top Flash Studio Header with History & Grouping controls */}
       <StudioHeader
-        onExportVideo={handleExportVideo}
+        onExportVideo={() => setExportDialogOpen(true)}
         isExporting={isExporting}
         exportProgress={exportProgress}
         onSnapshot={handleSnapshot}
@@ -1686,6 +1694,19 @@ export default function App() {
           onCommitActor={handleCommitActor}
         />
       </div>
+
+      <ExportDialog
+        isOpen={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onExport={handleExportVideo}
+        isExporting={isExporting}
+        progress={exportProgress}
+        totalFrames={totalFrames}
+        fps={fps}
+        width={canvasDimensions.width}
+        height={canvasDimensions.height}
+        hasBackgroundVideo={videoBg.type !== 'color' && !!videoBg.url}
+      />
 
       {/* AI Image Generation & Editing Modal */}
       <AiImageModal
