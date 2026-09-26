@@ -13,12 +13,26 @@ import {
   CanvasGroup,
   HistorySnapshot,
   ActorOverlay,
+  Animated,
   MotionPath,
   StageTool,
 } from '../types';
 import { distanceToPath, samplePath } from '../engine/path';
 import { strokeDash } from '../utils/exportVideo';
-import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue, followedPath } from '../engine/actor';
+import {
+  hitTestActor,
+  hitTestBox,
+  LocalBox,
+  sampleActor,
+  setActorProperty,
+  actorPropertyValue,
+  followedPath,
+  toActorLocal,
+} from '../engine/actor';
+import { chartBox, textBox } from '../engine/overlays';
+
+type AnimKind = 'actor' | 'chart' | 'text';
+const KIND_COLOR: Record<AnimKind, string> = { actor: '#f97316', chart: '#0ea5e9', text: '#10b981' };
 import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
 import { dragJointFK } from '../engine/stickRig';
 import { useI18n } from '../i18n';
@@ -257,6 +271,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     initialStick?: StickFigure;
     initialChart?: ChartOverlay;
     initialText?: TextOverlay;
+    /** Actor, chart or text being moved/resized, as it was when the drag started. */
+    objectKind?: AnimKind;
+    initialObj?: Animated;
     offsetX: number;
     offsetY: number;
   } | null>(null);
@@ -266,6 +283,40 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     stickFigures: [],
     drawings: [],
     groups: [],
+  };
+
+  // ================= ANIMATED OBJECTS (actors, charts, texts share the keyframed transform) =================
+  const findAnimated = (
+    kind: AnimKind,
+    id: string,
+    from: Pick<HistorySnapshot, 'actors' | 'charts' | 'texts'> = { actors, charts, texts }
+  ): Animated | undefined =>
+    kind === 'actor'
+      ? from.actors.find((a) => a.id === id)
+      : kind === 'chart'
+        ? from.charts.find((c) => c.id === id)
+        : from.texts.find((x) => x.id === id);
+
+  const boxOf = (kind: AnimKind, obj: Animated): LocalBox => {
+    if (kind === 'chart') return chartBox(obj as ChartOverlay);
+    if (kind === 'text') return textBox(obj as TextOverlay);
+    const a = obj as ActorOverlay;
+    return { x: -a.width / 2, y: -a.height / 2, width: a.width, height: a.height };
+  };
+
+  /** The selected actor/chart/text with its local box and selection color, if any. */
+  const selectedAnimated = () => {
+    const kind = selectedObject?.type;
+    if (kind !== 'actor' && kind !== 'chart' && kind !== 'text') return null;
+    const obj = findAnimated(kind, selectedObject!.id);
+    if (!obj || (kind !== 'actor' && !(obj as ChartOverlay | TextOverlay).visible)) return null;
+    return { kind, obj, box: boxOf(kind, obj), color: KIND_COLOR[kind] };
+  };
+
+  const transientAnimated = (kind: AnimKind, obj: Animated) => {
+    if (kind === 'actor') onTransientUpdateActor(obj as ActorOverlay);
+    else if (kind === 'chart') onTransientUpdateChart(obj as ChartOverlay);
+    else onTransientUpdateText(obj as TextOverlay);
   };
 
   // Convert mouse/touch event coordinates into canvas-space coordinates (0..canvasWidth, 0..canvasHeight)
@@ -475,44 +526,6 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         }
       });
 
-      // 3B. Chart Selection Bounding Box & 8 Flash Drag Handles
-      charts.forEach((chart) => {
-        if (!chart.visible) return;
-        const isSelected =
-          selectedObject?.type === 'chart' && selectedObject.id === chart.id;
-        if (!isSelected) return;
-
-        const cx = chart.x;
-        const cy = chart.y;
-
-        ctx.save();
-        ctx.strokeStyle = '#0ea5e9';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(cx - 3, cy - 3, chart.width + 6, chart.height + 6);
-
-        // Flash 8 Handles (Corners & Edges)
-        const handles = [
-          { x: cx - 3, y: cy - 3 },
-          { x: cx + chart.width / 2, y: cy - 3 },
-          { x: cx + chart.width + 3, y: cy - 3 },
-          { x: cx - 3, y: cy + chart.height / 2 },
-          { x: cx + chart.width + 3, y: cy + chart.height / 2 },
-          { x: cx - 3, y: cy + chart.height + 3 },
-          { x: cx + chart.width / 2, y: cy + chart.height + 3 },
-          { x: cx + chart.width + 3, y: cy + chart.height + 3 },
-        ];
-
-        handles.forEach((h) => {
-          ctx.fillStyle = '#ffffff';
-          ctx.strokeStyle = '#0ea5e9';
-          ctx.lineWidth = 1.5;
-          ctx.fillRect(h.x - 4, h.y - 4, 8, 8);
-          ctx.strokeRect(h.x - 4, h.y - 4, 8, 8);
-        });
-
-        ctx.restore();
-      });
-
       // 3E. Motion paths (editor only): hidden guides drawn faintly; selected path shows its points
       paths.forEach((path) => {
         const selected = selectedObject?.type === 'path' && selectedObject.id === path.id;
@@ -566,25 +579,28 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.restore();
       }
 
-      // 3D. Actor selection: motion path + rotated box around the image at its animated position
-      if (selectedObject?.type === 'actor') {
-        const actor = actors.find((a) => a.id === selectedObject.id);
-        const posTrack = actor?.tracks.position;
-        if (actor && posTrack && posTrack.length >= 2) {
+      // 3D. Selected actor, chart or text: motion guide + box following its animated transform
+      const sel = selectedAnimated();
+      if (sel) {
+        const { obj, box, color } = sel;
+        const posTrack = obj.tracks.position;
+        if (posTrack && posTrack.length >= 2 && !followedPath(obj, paths)) {
           ctx.save();
           // Path (motion guide)
-          const line = pathPolyline(posTrack, actor.smoothPath);
-          ctx.strokeStyle = 'rgba(249, 115, 22, 0.75)';
+          const line = pathPolyline(posTrack, obj.smoothPath);
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = 0.75;
           ctx.lineWidth = 1.5;
           ctx.setLineDash([6, 5]);
           ctx.beginPath();
           line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
           ctx.stroke();
           ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
           // One dot per frame: spacing shows the speed (closer = slower), like AE
           ctx.fillStyle = 'rgba(253, 186, 116, 0.8)';
           for (let f = posTrack[0].frame; f <= posTrack[posTrack.length - 1].frame; f++) {
-            const p = samplePosition(posTrack, f, actor.base, actor.smoothPath);
+            const p = samplePosition(posTrack, f, obj.base, obj.smoothPath);
             ctx.beginPath();
             ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
             ctx.fill();
@@ -600,7 +616,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             const isCurrent = currentFrame >= k.frame && currentFrame <= lastFrame;
             ctx.beginPath();
             ctx.rect(k.value.x - 5, k.value.y - 5, 10, 10);
-            ctx.fillStyle = isCurrent ? '#ffffff' : '#f97316';
+            ctx.fillStyle = isCurrent ? '#ffffff' : color;
             ctx.strokeStyle = '#09090b';
             ctx.lineWidth = 1.5;
             ctx.fill();
@@ -613,49 +629,30 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           });
           ctx.restore();
         }
-        if (actor) {
-          const st = sampleActor(actor, currentFrame, paths);
-          const w = actor.width * st.scale;
-          const h = actor.height * st.scale;
-          ctx.save();
-          ctx.translate(st.x, st.y);
-          ctx.rotate((st.rotation * Math.PI) / 180);
-          ctx.strokeStyle = '#f97316';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash(st.visible ? [] : [6, 4]);
-          ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);
-          ctx.setLineDash([]);
-          ctx.fillStyle = '#f97316';
-          ctx.beginPath();
-          ctx.arc(0, 0, 4, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-
-      // 3C. Text Selection Bounding Box
-      texts.forEach((txt) => {
-        if (!txt.visible) return;
-        const isSelected =
-          selectedObject?.type === 'text' && selectedObject.id === txt.id;
-        if (!isSelected) return;
-
-        const cx = txt.x;
-        const cy = txt.y;
-        const textWidth = Math.max(160, txt.text.length * (txt.fontSize * 0.55));
-        const textHeight = txt.fontSize * 1.5;
-
+        const st = sampleActor(obj, currentFrame, paths);
         ctx.save();
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.strokeRect(cx - 8, cy - textHeight + 6, textWidth + 16, textHeight + 14);
+        ctx.translate(st.x, st.y);
+        ctx.rotate((st.rotation * Math.PI) / 180);
+        ctx.scale(st.scale, st.scale);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5 / (st.scale || 1);
+        ctx.setLineDash(st.visible ? [] : [6, 4]);
+        ctx.strokeRect(box.x - 3, box.y - 3, box.width + 6, box.height + 6);
         ctx.setLineDash([]);
-
-        ctx.fillStyle = '#10b981';
-        ctx.fillRect(cx - 8, cy - textHeight + 6, 8, 8);
+        const dot = 4 / (st.scale || 1);
+        if (sel.kind === 'chart') {
+          // Resize handle (bottom-right corner)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(box.x + box.width + 3 - dot, box.y + box.height + 3 - dot, dot * 2, dot * 2);
+          ctx.strokeRect(box.x + box.width + 3 - dot, box.y + box.height + 3 - dot, dot * 2, dot * 2);
+        }
+        // Anchor point (position, center of rotation and scale)
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(0, 0, dot, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
-      });
+      }
     }
   }, [
     currentFrame,
@@ -696,7 +693,6 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       // mouse down, so props captured by the closure would be stale during the drag.
       const latest = getCurrentSnapshot();
       const currentFrameData = latest.frames[currentFrame] || emptyFrame(currentFrame);
-      const { charts, texts, actors } = latest;
 
       const pt = getCanvasCoordinates(e);
       const dist = Math.hypot(pt.x - session.startCanvasPt.x, pt.y - session.startCanvasPt.y);
@@ -753,29 +749,17 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         });
       }
 
-      // Handle Chart Position Drag
-      else if (session.targetType === 'chart') {
-        const chart = charts.find((c) => c.id === session.targetId);
-        if (chart) {
-          const newX = Math.round(pt.x - session.offsetX);
-          const newY = Math.round(pt.y - session.offsetY);
-          onTransientUpdateChart({ ...chart, x: newX, y: newY });
-        }
-      }
-
-      // Handle Chart Resize Corner Handle Drag
+      // Chart resize (corner handle): the card grows around its center, so the mouse movement is
+      // measured in the card's own (rotated, scaled) space and doubled
       else if (session.targetType === 'chart-resize' && session.initialChart) {
-        const deltaX = pt.x - session.startCanvasPt.x;
-        const deltaY = pt.y - session.startCanvasPt.y;
         const init = session.initialChart;
-
-        let newW = Math.max(180, init.width + deltaX);
-        let newH = Math.max(120, init.height + deltaY);
-
+        const st = sampleActor(init, currentFrame, paths);
+        const a = toActorLocal(st, session.startCanvasPt);
+        const b = toActorLocal(st, pt);
         onTransientUpdateChart({
           ...init,
-          width: Math.round(newW),
-          height: Math.round(newH),
+          width: Math.round(Math.max(180, init.width + 2 * (b.x - a.x))),
+          height: Math.round(Math.max(120, init.height + 2 * (b.y - a.y))),
         });
       }
 
@@ -798,33 +782,21 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         onTransientUpdatePath({ ...init, points: init.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) });
       }
 
-      // Handle motion path point drag: edits the key's position without changing the current frame
-      else if (session.targetType === 'path-key' && session.keyFrame !== undefined) {
-        const actor = actors.find((a) => a.id === session.targetId);
-        if (actor) {
-          const value = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
-          const position = setKeyframe(actor.tracks.position, session.keyFrame, value);
-          onTransientUpdateActor({ ...actor, tracks: { ...actor.tracks, position } });
-        }
+      // Motion path point drag: edits the key's position without changing the current frame
+      else if (session.targetType === 'path-key' && session.keyFrame !== undefined && session.initialObj) {
+        const obj = session.initialObj;
+        const value = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
+        const position = setKeyframe(obj.tracks.position, session.keyFrame, value);
+        transientAnimated(session.objectKind!, { ...obj, tracks: { ...obj.tracks, position } });
       }
 
-      // Handle Actor Drag: stopwatch rule (static value, or key at the current frame)
-      else if (session.targetType === 'actor') {
-        const actor = actors.find((a) => a.id === session.targetId);
-        if (actor) {
-          const pos = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
-          onTransientUpdateActor(setActorProperty(actor, 'position', currentFrame, pos));
-        }
-      }
-
-      // Handle Text Overlay Drag
-      else if (session.targetType === 'text') {
-        const txt = texts.find((t) => t.id === session.targetId);
-        if (txt) {
-          const newX = Math.round(pt.x - session.offsetX);
-          const newY = Math.round(pt.y - session.offsetY);
-          onTransientUpdateText({ ...txt, x: newX, y: newY });
-        }
+      // Actor / chart / text drag: stopwatch rule (static value, or key at the current frame)
+      else if (
+        (session.targetType === 'actor' || session.targetType === 'chart' || session.targetType === 'text') &&
+        session.initialObj
+      ) {
+        const pos = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
+        transientAnimated(session.targetType, setActorProperty(session.initialObj, 'position', currentFrame, pos));
       }
     },
     [
@@ -898,11 +870,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
               session.baseSnapshot
             );
           }
-        } else if (session.targetType === 'path-key') {
-          const actor = actors.find((a) => a.id === session.targetId);
-          if (actor) {
-            onCommitActor(actor, t('stage.history.editKeyPoint', { frame: session.keyFrame ?? 0 }), session.baseSnapshot);
-          }
+        } else if (session.targetType === 'path-key' && session.objectKind) {
+          const description = t('stage.history.editKeyPoint', { frame: session.keyFrame ?? 0 });
+          const obj = findAnimated(session.objectKind, session.targetId, latest);
+          if (obj && session.objectKind === 'actor') onCommitActor(obj as ActorOverlay, description, session.baseSnapshot);
+          if (obj && session.objectKind === 'chart') onCommitChart(obj as ChartOverlay, description, session.baseSnapshot);
+          if (obj && session.objectKind === 'text') onCommitText(obj as TextOverlay, description, session.baseSnapshot);
         } else if (session.targetType === 'actor') {
           const actor = actors.find((a) => a.id === session.targetId);
           if (actor) {
@@ -991,27 +964,28 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // 2. Selection & Transform Mode (Pointer / Move)
     const baseSnapshot = getCurrentSnapshot();
 
-    // 2A. Check if clicking Chart Resize Handles (if chart is selected)
-    if (selectedObject?.type === 'chart') {
-      const activeChart = charts.find((c) => c.id === selectedObject.id);
-      if (activeChart && activeChart.visible && isEditable(activeChart.id, 'chart')) {
-        const cornerHandleX = activeChart.x + activeChart.width + 3;
-        const cornerHandleY = activeChart.y + activeChart.height + 3;
-        if (Math.hypot(pt.x - cornerHandleX, pt.y - cornerHandleY) <= 14) {
-          dragSessionRef.current = {
-            targetType: 'chart-resize',
-            targetId: activeChart.id,
-            startCanvasPt: pt,
-            baseSnapshot,
-            hasMoved: false,
-            initialChart: { ...activeChart },
-            offsetX: 0,
-            offsetY: 0,
-          };
-          window.addEventListener('mousemove', onWindowMouseMove);
-          window.addEventListener('mouseup', onWindowMouseUp);
-          return;
-        }
+    const selected = selectedAnimated();
+
+    // 2A. Resize handle of the selected chart (bottom-right corner of its transformed box)
+    if (selected?.kind === 'chart' && isEditable(selectedObject!.id, 'chart')) {
+      const st = sampleActor(selected.obj, currentFrame, paths);
+      const local = toActorLocal(st, pt);
+      const { box } = selected;
+      const handleDistance = Math.hypot(local.x - (box.x + box.width + 3), local.y - (box.y + box.height + 3));
+      if (st.visible && handleDistance * (st.scale || 1) <= 14) {
+        dragSessionRef.current = {
+          targetType: 'chart-resize',
+          targetId: selectedObject!.id,
+          startCanvasPt: pt,
+          baseSnapshot,
+          hasMoved: false,
+          initialChart: selected.obj as ChartOverlay,
+          offsetX: 0,
+          offsetY: 0,
+        };
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
       }
     }
 
@@ -1037,22 +1011,23 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       }
     }
 
-    // 2C''. Hit Test: key points of the selected actor's motion path (edited in place, like AE)
-    if (selectedObject?.type === 'actor') {
-      const actor = actors.find((a) => a.id === selectedObject.id);
-      // A key point under the actor's current position (e.g. holding after the last key) means
+    // 2C''. Hit Test: key points of the selected object's motion path (edited in place, like AE)
+    if (selected && !followedPath(selected.obj, paths)) {
+      const obj = selected.obj;
+      const id = selectedObject!.id;
+      // A key point under the object's current position (e.g. holding after the last key) means
       // "drag the object": that must animate at the current frame, not edit an older key.
-      const current = actor ? actorPropertyValue(actor, 'position', currentFrame, paths) : null;
-      const onActorAnchor = !!current && Math.hypot(pt.x - current.x, pt.y - current.y) <= PATH_KEY_HIT_RADIUS;
-      const key = onActorAnchor
+      const current = actorPropertyValue(obj, 'position', currentFrame, paths);
+      const onAnchor = Math.hypot(pt.x - current.x, pt.y - current.y) <= PATH_KEY_HIT_RADIUS;
+      const key = onAnchor
         ? undefined
-        : actor?.tracks.position?.find(
-            (k) => Math.hypot(pt.x - k.value.x, pt.y - k.value.y) <= PATH_KEY_HIT_RADIUS
-          );
-      if (actor && key && (actor.tracks.position?.length ?? 0) >= 2 && isEditable(actor.id, 'actor')) {
+        : obj.tracks.position?.find((k) => Math.hypot(pt.x - k.value.x, pt.y - k.value.y) <= PATH_KEY_HIT_RADIUS);
+      if (key && (obj.tracks.position?.length ?? 0) >= 2 && isEditable(id, selected.kind)) {
         dragSessionRef.current = {
           targetType: 'path-key',
-          targetId: actor.id,
+          targetId: id,
+          objectKind: selected.kind,
+          initialObj: obj,
           keyFrame: key.frame,
           startCanvasPt: pt,
           baseSnapshot,
@@ -1152,6 +1127,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       dragSessionRef.current = {
         targetType: 'actor',
         targetId: actor.id,
+        objectKind: 'actor',
+        initialObj: actor,
         startCanvasPt: pt,
         baseSnapshot,
         hasMoved: false,
@@ -1183,57 +1160,31 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       return;
     }
 
-    // 2D. Hit Test: Chart Overlays (Top to bottom)
-    for (let i = charts.length - 1; i >= 0; i--) {
-      const c = charts[i];
-      if (!c.visible || !isOnScreen(c) || !isEditable(c.id, 'chart')) continue;
-      if (pt.x >= c.x && pt.x <= c.x + c.width && pt.y >= c.y && pt.y <= c.y + c.height) {
-        onSelectObject({ type: 'chart', id: c.id });
-        dragSessionRef.current = {
-          targetType: 'chart',
-          targetId: c.id,
-          startCanvasPt: pt,
-          baseSnapshot,
-          hasMoved: false,
-          initialChart: { ...c },
-          offsetX: pt.x - c.x,
-          offsetY: pt.y - c.y,
-        };
-        window.addEventListener('mousemove', onWindowMouseMove);
-        window.addEventListener('mouseup', onWindowMouseUp);
-        return;
-      }
-    }
-
-    // 2E. Hit Test: Text Overlays
-    for (let i = texts.length - 1; i >= 0; i--) {
-      const t = texts[i];
-      if (!t.visible || !isOnScreen(t) || !isEditable(t.id, 'text')) continue;
-      const textWidth = Math.max(160, t.text.length * (t.fontSize * 0.55));
-      const textHeight = t.fontSize * 1.5;
-
-      if (
-        pt.x >= t.x - 8 &&
-        pt.x <= t.x + textWidth + 8 &&
-        pt.y >= t.y - textHeight + 6 &&
-        pt.y <= t.y + 14
-      ) {
-        onSelectObject({ type: 'text', id: t.id });
-        dragSessionRef.current = {
-          targetType: 'text',
-          targetId: t.id,
-          startCanvasPt: pt,
-          baseSnapshot,
-          hasMoved: false,
-          initialText: { ...t },
-          offsetX: pt.x - t.x,
-          offsetY: pt.y - t.y,
-        };
-        window.addEventListener('mousemove', onWindowMouseMove);
-        window.addEventListener('mouseup', onWindowMouseUp);
-        return;
-      }
-    }
+    // 2D. Hit Test: charts, then texts (top to bottom), through their animated transform
+    const hitOverlay = (kind: 'chart' | 'text', obj: ChartOverlay | TextOverlay) => {
+      if (!obj.visible || !isEditable(obj.id, kind)) return false;
+      if (!hitTestBox(obj, boxOf(kind, obj), currentFrame, pt, paths)) return false;
+      onSelectObject({ type: kind, id: obj.id });
+      // Following a path: the position comes from the path (edit the path or the timing instead)
+      if (followedPath(obj, paths)) return true;
+      const pos = actorPropertyValue(obj, 'position', currentFrame, paths);
+      dragSessionRef.current = {
+        targetType: kind,
+        targetId: obj.id,
+        objectKind: kind,
+        initialObj: obj,
+        startCanvasPt: pt,
+        baseSnapshot,
+        hasMoved: false,
+        offsetX: pt.x - pos.x,
+        offsetY: pt.y - pos.y,
+      };
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
+      return true;
+    };
+    for (let i = charts.length - 1; i >= 0; i--) if (hitOverlay('chart', charts[i])) return;
+    for (let i = texts.length - 1; i >= 0; i--) if (hitOverlay('text', texts[i])) return;
 
     // Clicked on empty canvas background -> deselect
     onSelectObject(null);

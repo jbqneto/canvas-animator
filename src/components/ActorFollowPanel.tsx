@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link2, Unlink, Route as RouteIcon } from 'lucide-react';
-import type { ActorOverlay, MotionPath } from '../types';
+import type { Animated, MotionPath } from '../types';
 import { actorPropertyValue } from '../engine/actor';
 import { buildFollowProgress, samplePath } from '../engine/path';
 import {
@@ -14,12 +14,14 @@ import {
 } from '../engine/keyframes';
 import { useI18n } from '../i18n';
 
-interface ActorFollowPanelProps {
-  actor: ActorOverlay;
+type Followable = Animated & { id: string };
+
+interface ActorFollowPanelProps<T extends Followable> {
+  actor: T;
   paths: MotionPath[];
   currentFrame: number;
   fps: number;
-  onChange: (actor: ActorOverlay, description: string) => void;
+  onChange: (actor: T, description: string) => void;
   onAttach: (actorId: string, pathId: string) => void;
   onSelectPath: (pathId: string) => void;
 }
@@ -32,7 +34,7 @@ const inputClass =
  * Timing is regular keyframes on a 0–100% progress track, so it can also be edited by hand
  * (pauses, going back, different speeds) and retimed on the timeline.
  */
-export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
+export const ActorFollowPanel = <T extends Followable>({
   actor,
   paths,
   currentFrame,
@@ -40,7 +42,7 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
   onChange,
   onAttach,
   onSelectPath,
-}) => {
+}: ActorFollowPanelProps<T>) => {
   const { t } = useI18n();
   const follow = actor.follow;
   const path = follow ? paths.find((p) => p.id === follow.pathId) : undefined;

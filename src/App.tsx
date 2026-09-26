@@ -16,8 +16,10 @@ import {
   MotionPath,
   StageTool,
   AudioClip,
+  Animated,
 } from './types';
-import { createActor } from './engine/actor';
+import { attachToPath, createActor } from './engine/actor';
+import { createChart, createText } from './engine/overlays';
 import { tweenStickFrames } from './engine/stickRig';
 import type { EasingName } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
@@ -175,12 +177,10 @@ export default function App() {
 
   // Initial Overlays
   const initialCharts: ChartOverlay[] = [
-    {
+    createChart({
       id: 'chart-initial-1',
       title: t('app.demo.chartTitle'),
       type: 'bar',
-      x: 640,
-      y: 110,
       width: 540,
       height: 330,
       startFrame: 1,
@@ -193,15 +193,13 @@ export default function App() {
         { label: shortMonth(3), value: 185, color: '#a855f7' },
       ],
       visible: true,
-    },
+    }, { x: 640 + 270, y: 110 + 165 }),
   ];
 
   const initialTexts: TextOverlay[] = [
-    {
+    createText({
       id: 'text-initial-1',
       text: t('app.demo.headline'),
-      x: 640,
-      y: 70,
       fontSize: 28,
       color: '#ffffff',
       startFrame: 1,
@@ -209,12 +207,10 @@ export default function App() {
       effect: 'fadeRise',
       visible: true,
       isNumberCounter: false,
-    },
-    {
+    }, { x: 640, y: 70 }),
+    createText({
       id: 'text-counter-1',
       text: t('app.demo.counterLabel'),
-      x: 640,
-      y: 480,
       fontSize: 24,
       color: '#38bdf8',
       startFrame: 5,
@@ -226,7 +222,7 @@ export default function App() {
       counterEnd: 15400,
       counterPrefix: '+',
       counterSuffix: ' devs',
-    },
+    }, { x: 640, y: 480 }),
   ];
 
   // ================= UNDO / REDO HISTORY ENGINE =================
@@ -811,12 +807,10 @@ export default function App() {
       newName = t('timeline.layer.chart');
       newColor = '#0ea5e9';
       targetId = `chart-${Date.now()}`;
-      const newChart: ChartOverlay = {
+      const newChart = createChart({
         id: targetId,
         title: t('app.newChartTitle'),
         type: 'bar',
-        x: Math.round(canvasDimensions.width * 0.42),
-        y: Math.round(canvasDimensions.height * 0.22),
         width: 480,
         height: 280,
         startFrame: currentFrame,
@@ -829,33 +823,25 @@ export default function App() {
           { label: shortMonth(3), value: 110, color: '#10b981' },
         ],
         visible: true,
-        hasMotionTween: false,
-        endX: Math.round(canvasDimensions.width * 0.42),
-        endY: Math.round(canvasDimensions.height * 0.22),
         easing: 'easeOut',
-      };
+      }, { x: Math.round(canvasDimensions.width * 0.42) + 240, y: Math.round(canvasDimensions.height * 0.22) + 140 });
       updatedCharts.push(newChart);
       setSelectedObject({ type: 'chart', id: targetId });
     } else if (type === 'text') {
       newName = t('timeline.layer.text');
       newColor = '#10b981';
       targetId = `text-${Date.now()}`;
-      const newText: TextOverlay = {
+      const newText = createText({
         id: targetId,
         text: t('app.newText'),
-        x: Math.round(canvasDimensions.width * 0.38),
-        y: Math.round(canvasDimensions.height * 0.28),
         fontSize: 32,
         color: '#ffffff',
         startFrame: currentFrame,
         durationFrames: 60,
         effect: 'fadeRise',
         visible: true,
-        hasMotionTween: false,
-        endX: Math.round(canvasDimensions.width * 0.38),
-        endY: Math.round(canvasDimensions.height * 0.28),
         easing: 'easeOut',
-      };
+      }, { x: Math.round(canvasDimensions.width * 0.38), y: Math.round(canvasDimensions.height * 0.28) });
       updatedTexts.push(newText);
       setSelectedObject({ type: 'text', id: targetId });
     } else if (type === 'video') {
@@ -1006,8 +992,8 @@ export default function App() {
   };
 
   // ================= CHARTS & TEXTS HANDLERS =================
-  const handleUpdateChart = (updatedChart: ChartOverlay) => {
-    history.pushSnapshot(t('history.updateChart', { name: updatedChart.title }), {
+  const handleUpdateChart = (updatedChart: ChartOverlay, description?: string) => {
+    history.pushSnapshot(description ?? t('history.updateChart', { name: updatedChart.title }), {
       ...history.present,
       charts: charts.map((c) => (c.id === updatedChart.id ? updatedChart : c)),
     });
@@ -1021,8 +1007,8 @@ export default function App() {
     if (selectedObject?.id === chartId) setSelectedObject(null);
   };
 
-  const handleUpdateText = (updatedText: TextOverlay) => {
-    history.pushSnapshot(t('history.updateText', { name: updatedText.text.slice(0, 15) }), {
+  const handleUpdateText = (updatedText: TextOverlay, description?: string) => {
+    history.pushSnapshot(description ?? t('history.updateText', { name: updatedText.text.slice(0, 15) }), {
       ...history.present,
       texts: texts.map((t) => (t.id === updatedText.id ? updatedText : t)),
     });
@@ -1233,38 +1219,42 @@ export default function App() {
    * Links an actor to a path: it travels the whole path, eased, during the part of the timeline where
    * both are visible (the timing can be edited afterwards like any keyframes).
    */
-  const handleAttachActorToPath = (actorId: string, pathId: string) => {
+  /** Links any animated object (actor, chart, text) to a drawn path; see `attachToPath`. */
+  const handleAttachToPath = (kind: 'actor' | 'chart' | 'text', id: string, pathId: string) => {
     const present = history.present;
     const path = present.paths.find((p) => p.id === pathId);
-    const actor = present.actors.find((a) => a.id === actorId);
-    if (!path || !actor) return;
-    let start = Math.max(actor.startFrame, path.startFrame);
-    let end = Math.min(actor.startFrame + actor.durationFrames, path.startFrame + path.durationFrames);
-    if (end - start < 2) {
-      start = actor.startFrame;
-      end = actor.startFrame + actor.durationFrames;
-    }
-    const progress = buildFollowProgress({
-      anchorProgress: samplePath(path).anchorProgress,
-      startFrame: start,
-      endFrame: end,
-      easing: 'easeInOut',
-      holdFrames: 0,
-    });
-    history.pushSnapshot(t('history.follow', { actor: actor.name, path: path.name }), {
+    if (!path) return;
+    const link = <T extends { id: string } & Animated>(list: T[]) =>
+      list.map((o) => (o.id === id ? attachToPath(o, path) : o));
+    const name =
+      kind === 'actor'
+        ? present.actors.find((a) => a.id === id)?.name
+        : kind === 'chart'
+          ? present.charts.find((c) => c.id === id)?.title
+          : present.texts.find((x) => x.id === id)?.text;
+    history.pushSnapshot(t('history.follow', { actor: name ?? '', path: path.name }), {
       ...present,
-      actors: present.actors.map((a) => (a.id === actorId ? { ...a, follow: { pathId, orient: true, progress } } : a)),
+      actors: kind === 'actor' ? link(present.actors) : present.actors,
+      charts: kind === 'chart' ? link(present.charts) : present.charts,
+      texts: kind === 'text' ? link(present.texts) : present.texts,
     });
-    setSelectedObject({ type: 'actor', id: actorId });
+    setSelectedObject({ type: kind, id });
   };
+  const handleAttachActorToPath = (actorId: string, pathId: string) => handleAttachToPath('actor', actorId, pathId);
 
-  /** Removes the path and unlinks actors that followed it (they keep their own position). */
-  const withoutPath = (snapshot: HistorySnapshot, pathId: string): HistorySnapshot => ({
-    ...snapshot,
-    paths: snapshot.paths.filter((p) => p.id !== pathId),
-    actors: snapshot.actors.map((a) => (a.follow?.pathId === pathId ? { ...a, follow: undefined } : a)),
-    layers: snapshot.layers.filter((l) => l.targetId !== pathId),
-  });
+  /** Removes the path and unlinks the objects that followed it (they keep their own position). */
+  const withoutPath = (snapshot: HistorySnapshot, pathId: string): HistorySnapshot => {
+    const unlink = <T extends Animated>(list: T[]) =>
+      list.map((o) => (o.follow?.pathId === pathId ? { ...o, follow: undefined } : o));
+    return {
+      ...snapshot,
+      paths: snapshot.paths.filter((p) => p.id !== pathId),
+      actors: unlink(snapshot.actors),
+      charts: unlink(snapshot.charts),
+      texts: unlink(snapshot.texts),
+      layers: snapshot.layers.filter((l) => l.targetId !== pathId),
+    };
+  };
 
   const handleDeletePath = (pathId: string) => {
     const path = history.present.paths.find((p) => p.id === pathId);
@@ -1901,12 +1891,10 @@ export default function App() {
           onUpdateChart={handleUpdateChart}
           onDeleteChart={handleDeleteChart}
           onAddChart={(chartType) => {
-            const newChart: ChartOverlay = {
+            const newChart = createChart({
               id: `chart-${Date.now()}`,
               title: t('app.newChart'),
               type: chartType || 'bar',
-              x: Math.round(canvasDimensions.width * 0.5),
-              y: Math.round(canvasDimensions.height * 0.22),
               width: 480,
               height: 280,
               startFrame: currentFrame,
@@ -1918,7 +1906,7 @@ export default function App() {
                 { label: 'C', value: 60, color: '#6366f1' },
               ],
               visible: true,
-            };
+            }, { x: Math.round(canvasDimensions.width * 0.5) + 240, y: Math.round(canvasDimensions.height * 0.22) + 140 });
             history.pushSnapshot(t('history.add', { name: newChart.title }), {
               ...history.present,
               charts: [...charts, newChart],
@@ -1929,11 +1917,9 @@ export default function App() {
           onUpdateText={handleUpdateText}
           onDeleteText={handleDeleteText}
           onAddText={(isNumber) => {
-            const newText: TextOverlay = {
+            const newText = createText({
               id: `text-${Date.now()}`,
               text: isNumber ? t('app.newCounter') : t('app.newText'),
-              x: Math.round(canvasDimensions.width * 0.5),
-              y: Math.round(canvasDimensions.height * 0.3),
               fontSize: 28,
               color: '#ffffff',
               startFrame: currentFrame,
@@ -1945,7 +1931,7 @@ export default function App() {
               counterEnd: 1000,
               counterPrefix: '',
               counterSuffix: '',
-            };
+            }, { x: Math.round(canvasDimensions.width * 0.5), y: Math.round(canvasDimensions.height * 0.3) });
             history.pushSnapshot(t('history.add', { name: isNumber ? t('app.newCounter') : t('selection.text') }), {
               ...history.present,
               texts: [...texts, newText],
@@ -2016,6 +2002,7 @@ export default function App() {
           onUpdatePath={handleUpdatePath}
           onDeletePath={handleDeletePath}
           onAttachActorToPath={handleAttachActorToPath}
+          onAttachToPath={handleAttachToPath}
         />
       </div>
 
