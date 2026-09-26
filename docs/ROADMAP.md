@@ -19,7 +19,16 @@ Base: `docs/RESEARCH.md`.
 - [x] T9 — Diálogo de export: MP4, WebM transparente (VP9 alpha), trecho de quadros
 - [x] T10 — PWA instalável (manifest, service worker, ícones, abrir .fmproj pelo sistema)
 - [x] T11 — Template de mapa: mapa-múndi + rota por países gerando keyframes
-- [ ] T12 — PR
+- [x] T12 — PR
+
+## Próximos passos sugeridos
+
+1. Áudio de referência (narração/música) com forma de onda na timeline e mixado no export.
+2. Migrar gráficos e textos para o mesmo modelo de keyframes dos atores (hoje usam "motion tween P1→P2").
+3. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+4. Timeline com zoom e tempo em segundos; desenhar a grade com CSS em vez de uma div por frame.
+5. Biblioteca de ícones/veículos (carro, navio, pino) para o template de rota.
+6. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
