@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
 import {
   Play,
   Pause,
@@ -26,6 +26,9 @@ import {
   MoveHorizontal,
   Image as ImageIcon,
   Route as RouteIcon,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from 'lucide-react';
 import { isTypingTarget } from '../utils/keyboard';
 import { useI18n } from '../i18n';
@@ -42,30 +45,30 @@ import {
   AudioClip,
 } from '../types';
 import { AudioLanes, AudioList } from './AudioTracks';
+import {
+  clampZoom,
+  fitPxPerFrame,
+  formatSeconds,
+  scrollForZoom,
+  timelineScale,
+  TimelineScale,
+  TimeUnit,
+} from '../engine/timelineScale';
 import { actorKeyframes, moveActorKeys, shiftActorTime } from '../engine/actor';
 
 type ClipType = 'chart' | 'text' | 'actor' | 'path';
 
-const GRID_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
-
-/** Frames between labelled ruler marks: about 30 labels at most. */
-function labelStep(totalFrames: number): number {
-  return GRID_STEPS.find((s) => s >= 5 && totalFrames / s <= 30) ?? 10000;
-}
-
 /**
- * Frame grid drawn as CSS background tiles (cheap at any timeline length): a strong line at every
- * labelled mark and faint lines in between, as dense as stays readable (every frame when zoomed in).
+ * Grid drawn as CSS background tiles (cheap at any timeline length): a strong line at every labelled
+ * mark and faint lines in between when they are far enough apart.
  */
-function frameGridStyle(totalFrames: number, ruler: boolean): React.CSSProperties {
-  const major = labelStep(totalFrames);
-  const minor = GRID_STEPS.find((s) => s < major && totalFrames / s <= 300);
+function frameGridStyle(scale: TimelineScale, totalFrames: number, ruler: boolean): React.CSSProperties {
   const line = (color: string) => `linear-gradient(to left, ${color} 1px, transparent 1px)`;
   const layers = [line(ruler ? 'rgba(14, 165, 233, 0.45)' : 'rgba(38, 38, 38, 0.8)')];
-  const sizes = [`${(100 * major) / totalFrames}% 100%`];
-  if (minor) {
+  const sizes = [`${(100 * scale.major) / totalFrames}% 100%`];
+  if (scale.minor) {
     layers.push(line(ruler ? 'rgba(64, 64, 64, 0.6)' : 'rgba(23, 23, 23, 0.5)'));
-    sizes.push(`${(100 * minor) / totalFrames}% ${ruler ? '30%' : '100%'}`);
+    sizes.push(`${(100 * scale.minor) / totalFrames}% ${ruler ? '30%' : '100%'}`);
   }
   return {
     backgroundImage: layers.join(', '),
@@ -75,12 +78,13 @@ function frameGridStyle(totalFrames: number, ruler: boolean): React.CSSPropertie
   };
 }
 
-/** Frame numbers shown on the ruler: frame 1 plus every labelled mark. */
-function rulerLabels(totalFrames: number): number[] {
-  const step = labelStep(totalFrames);
-  const labels = [1];
-  for (let f = step; f <= totalFrames; f += step) labels.push(f);
-  return labels;
+const TIME_UNIT_KEY = 'flashmotion.timeUnit';
+function readTimeUnit(): TimeUnit {
+  try {
+    return localStorage.getItem(TIME_UNIT_KEY) === 'frames' ? 'frames' : 'seconds';
+  } catch {
+    return 'seconds';
+  }
 }
 type ClipMode = 'move' | 'trim-start' | 'trim-end';
 const MIN_CLIP_FRAMES = 5;
@@ -189,9 +193,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   audioScrub,
   setAudioScrub,
 }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const rulerRef = useRef<HTMLDivElement>(null);
-  const tracksContainerRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
   // The layer list and the tracks scroll separately: keep their rows aligned
   const layerListRef = useRef<HTMLDivElement>(null);
@@ -200,6 +203,83 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (from && to && to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
   };
   const [rulerScrubbing, setRulerScrubbing] = useState(false);
+  /** Width of the whole timeline content in pixels (the frame area, zoomed). */
+  const trackWidth = () => rulerRef.current?.getBoundingClientRect().width || 800;
+
+  // ================= ZOOM & TIME UNIT =================
+  const [timeUnit, setTimeUnitState] = useState<TimeUnit>(readTimeUnit);
+  const setTimeUnit = (unit: TimeUnit) => {
+    setTimeUnitState(unit);
+    try {
+      localStorage.setItem(TIME_UNIT_KEY, unit);
+    } catch {
+      // preference only
+    }
+  };
+  // Visible width of the tracks area; the zoom is in pixels per frame, null = whole timeline fits
+  const [viewWidth, setViewWidth] = useState(0);
+  const [zoomPx, setZoomPx] = useState<number | null>(null);
+  const fitPx = fitPxPerFrame(viewWidth || 800, totalFrames);
+  const pxPerFrame = zoomPx === null ? fitPx : clampZoom(zoomPx, viewWidth || 800, totalFrames);
+  const zoomed = pxPerFrame > fitPx + 1e-6;
+  const scale = timelineScale(totalFrames, fps, pxPerFrame, timeUnit, locale);
+  const pendingScrollLeft = useRef<number | null>(null);
+
+  useEffect(() => {
+    const el = trackListRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setViewWidth(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  /** Zooms keeping the frame at `anchorX` (px from the visible left edge) still. */
+  const zoomTo = (nextPx: number, anchorX?: number) => {
+    const el = trackListRef.current;
+    const width = viewWidth || 800;
+    const clamped = clampZoom(nextPx, width, totalFrames);
+    if (el) {
+      const playheadX = (currentFrame - 1) * pxPerFrame - el.scrollLeft;
+      const x = anchorX ?? (playheadX >= 0 && playheadX <= width ? playheadX : width / 2);
+      pendingScrollLeft.current = scrollForZoom(el.scrollLeft, x, pxPerFrame, clamped);
+    }
+    setZoomPx(clamped <= fitPxPerFrame(width, totalFrames) + 1e-6 ? null : clamped);
+  };
+
+  // The new scroll position can only be applied once the content has its new width
+  useLayoutEffect(() => {
+    const el = trackListRef.current;
+    if (el && pendingScrollLeft.current !== null) {
+      el.scrollLeft = pendingScrollLeft.current;
+      pendingScrollLeft.current = null;
+    }
+  }, [pxPerFrame]);
+
+  // Ctrl/⌘ + wheel zooms around the cursor (native listener: React's wheel handler is passive)
+  const zoomRef = useRef(zoomTo);
+  zoomRef.current = zoomTo;
+  const pxRef = useRef(pxPerFrame);
+  pxRef.current = pxPerFrame;
+  useEffect(() => {
+    const el = trackListRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.0025);
+      zoomRef.current(pxRef.current * factor, e.clientX - el.getBoundingClientRect().left);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // While playing zoomed in, the view pages along with the playhead
+  useEffect(() => {
+    const el = trackListRef.current;
+    if (!isPlaying || !zoomed || !el) return;
+    const x = (currentFrame - 1) * pxPerFrame;
+    if (x < el.scrollLeft || x > el.scrollLeft + el.clientWidth - 24) el.scrollLeft = Math.max(0, x - 24);
+  }, [currentFrame, isPlaying, zoomed, pxPerFrame]);
 
   // A newly added sound lives at the bottom of the list: bring it into view
   const audioCountRef = useRef(audioClips.length);
@@ -368,7 +448,6 @@ export const Timeline: React.FC<TimelineProps> = ({
     e.stopPropagation();
     e.preventDefault();
 
-    const trackWidth = tracksContainerRef.current?.getBoundingClientRect().width || 800;
     const baseSnapshot = getCurrentSnapshot ? getCurrentSnapshot() : undefined;
 
     setActiveClipDrag({
@@ -379,7 +458,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       initialStartFrame: startFrame,
       initialDuration: durationFrames,
       initialActor: type === 'actor' ? actors.find((a) => a.id === id) : undefined,
-      trackWidth,
+      trackWidth: trackWidth(),
       baseSnapshot,
       hasMoved: false,
     });
@@ -591,6 +670,51 @@ export const Timeline: React.FC<TimelineProps> = ({
 
         {/* Right: FPS & Total Frames Duration */}
         <div className="flex items-center gap-3">
+          {/* Ruler unit and zoom (Ctrl + wheel over the tracks also zooms) */}
+          <div className="flex items-center gap-1">
+            <div className="flex bg-neutral-950 rounded p-0.5 border border-neutral-800" role="group" aria-label={t('timeline.unit')}>
+              {(['seconds', 'frames'] as const).map((unit) => (
+                <button
+                  key={unit}
+                  id={`timeline-unit-${unit}`}
+                  onClick={() => setTimeUnit(unit)}
+                  title={t(unit === 'seconds' ? 'timeline.unitSecondsHint' : 'timeline.unitFramesHint')}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition ${
+                    timeUnit === unit ? 'bg-sky-500 text-neutral-950 font-bold' : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  {t(unit === 'seconds' ? 'timeline.unitSeconds' : 'timeline.unitFrames')}
+                </button>
+              ))}
+            </div>
+            <button
+              id="timeline-zoom-out"
+              onClick={() => zoomTo(pxPerFrame / 1.5)}
+              disabled={!zoomed}
+              title={t('timeline.zoomOut')}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white disabled:opacity-30 transition"
+            >
+              <ZoomOut size={13} />
+            </button>
+            <button
+              id="timeline-zoom-in"
+              onClick={() => zoomTo(pxPerFrame * 1.5)}
+              title={t('timeline.zoomIn')}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
+            >
+              <ZoomIn size={13} />
+            </button>
+            <button
+              id="timeline-zoom-fit"
+              onClick={() => setZoomPx(null)}
+              disabled={!zoomed}
+              title={t('timeline.zoomFit')}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white disabled:opacity-30 transition"
+            >
+              <Maximize2 size={12} />
+            </button>
+          </div>
+
           <div className="flex items-center gap-1">
             <span className="text-neutral-400 text-[11px]">FPS:</span>
             <div className="flex bg-neutral-950 rounded p-0.5 border border-neutral-800">
@@ -623,6 +747,9 @@ export const Timeline: React.FC<TimelineProps> = ({
               }
               className="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-center font-mono text-neutral-200 focus:border-sky-500 outline-none text-[11px]"
             />
+            <span className="text-neutral-500 text-[11px] font-mono" id="timeline-duration">
+              {formatSeconds(totalFrames / fps, totalFrames / fps >= 10 ? 1 : 0.5, locale)}
+            </span>
           </div>
         </div>
       </div>
@@ -925,11 +1052,17 @@ export const Timeline: React.FC<TimelineProps> = ({
         </div>
 
         {/* ================= RIGHT: KEYFRAME RULER & TRACKS ================= */}
+        {/* One scroll area for both axes: the ruler sticks to the top, the content is as wide as the zoom */}
         <div
-          ref={tracksContainerRef}
-          className="flex-1 flex flex-col min-w-0 bg-neutral-950 overflow-x-auto relative"
+          ref={trackListRef}
+          onScroll={() => syncScroll(trackListRef.current, layerListRef.current)}
+          className="flex-1 min-w-0 bg-neutral-950 overflow-auto relative"
         >
-          {/* Frame Number Ruler */}
+          <div
+            className="min-h-full flex flex-col relative"
+            style={{ width: zoomed ? `${Math.round(totalFrames * pxPerFrame)}px` : '100%' }}
+          >
+          {/* Time Ruler */}
           <div
             id="timeline-ruler"
             ref={rulerRef}
@@ -938,19 +1071,17 @@ export const Timeline: React.FC<TimelineProps> = ({
               handleTimelineScrub(e);
               setRulerScrubbing(true);
             }}
-            className="h-8 border-b border-neutral-800 bg-neutral-900/70 relative cursor-pointer select-none shrink-0"
+            className="h-8 sticky top-0 z-40 border-b border-neutral-800 bg-neutral-900 relative cursor-pointer select-none shrink-0"
           >
-            {/* Frame lines (CSS, not one element per frame) and labels spaced to stay readable */}
-            <div className="absolute inset-0 pointer-events-none" style={frameGridStyle(totalFrames, true)} />
-            {rulerLabels(totalFrames).map((fNum) => (
+            {/* Lines (CSS, not one element per frame) and labels spaced to stay readable */}
+            <div className="absolute inset-0 pointer-events-none" style={frameGridStyle(scale, totalFrames, true)} />
+            {scale.labels.map((label) => (
               <span
-                key={fNum}
-                style={{ left: `${((fNum - 1) / totalFrames) * 100}%` }}
-                className={`absolute top-0.5 pl-1 text-[9px] font-mono select-none leading-none pointer-events-none ${
-                  fNum > 1 ? 'text-sky-400 font-bold' : 'text-neutral-400'
-                }`}
+                key={label.x}
+                style={{ left: `${label.x * 100}%` }}
+                className="absolute top-0.5 pl-1 text-[9px] font-mono select-none leading-none pointer-events-none text-sky-400 font-bold whitespace-nowrap"
               >
-                {fNum}
+                {label.text}
               </span>
             ))}
 
@@ -969,12 +1100,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Keyframe Tracks Corresponding to Each Layer */}
-          <div
-            ref={trackListRef}
-            onScroll={() => syncScroll(trackListRef.current, layerListRef.current)}
-            onClick={handleTimelineScrub}
-            className="flex-1 overflow-y-auto relative cursor-pointer"
-          >
+          <div onClick={handleTimelineScrub} className="flex-1 relative cursor-pointer">
             {/* Vertical Red Playhead Line extending down all tracks */}
             <div
               style={{
@@ -1013,7 +1139,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   }`}
                 >
                   {/* 1. Underlying grid columns */}
-                  <div className="absolute inset-0 pointer-events-none" style={frameGridStyle(totalFrames, false)} />
+                  <div className="absolute inset-0 pointer-events-none" style={frameGridStyle(scale, totalFrames, false)} />
 
                   {/* 2A. VISIBLE INTERACTIVE CLIP SPAN FOR CHART OVERLAYS */}
                   {chart && (
@@ -1073,7 +1199,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       </div>
 
                       {/* Clip Label and Indicators */}
-                      <div className="flex items-center gap-1.5 overflow-hidden mx-1 pointer-events-none">
+                      <div className="flex items-center gap-1.5 overflow-hidden mx-1 mr-auto sticky left-3 pointer-events-none">
                         <BarChart3 size={11} className="shrink-0 text-sky-300" />
                         <span className="text-[10px] font-bold truncate">
                           {chart.title}
@@ -1169,7 +1295,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       </div>
 
                       {/* Clip Label */}
-                      <div className="flex items-center gap-1.5 overflow-hidden mx-1 pointer-events-none">
+                      <div className="flex items-center gap-1.5 overflow-hidden mx-1 mr-auto sticky left-3 pointer-events-none">
                         <Type size={11} className="shrink-0 text-emerald-300" />
                         <span className="text-[10px] font-bold truncate">
                           {text.text}
@@ -1231,7 +1357,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'trim-start', path.startFrame, path.durationFrames)}
                         className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-l"
                       />
-                      <span className="text-[10px] font-semibold text-sky-200 truncate px-1 pointer-events-none">
+                      <span className="text-[10px] font-semibold text-sky-200 truncate px-1 mr-auto sticky left-3 pointer-events-none">
                         {path.name}
                         {!path.style.visible && t('timeline.invisibleGuide')}
                       </span>
@@ -1271,7 +1397,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           }
                           className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-l"
                         />
-                        <span className="text-[10px] font-bold text-orange-200 truncate px-1 pointer-events-none">
+                        <span className="text-[10px] font-bold text-orange-200 truncate px-1 mr-auto sticky left-3 pointer-events-none">
                           {actor.name}
                         </span>
                         <div
@@ -1295,7 +1421,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                               fromFrame: f,
                               toFrame: f,
                               startClientX: e.clientX,
-                              trackWidth: tracksContainerRef.current?.getBoundingClientRect().width || 800,
+                              trackWidth: trackWidth(),
                               baseSnapshot: getCurrentSnapshot?.(),
                             });
                           }}
@@ -1387,8 +1513,9 @@ export const Timeline: React.FC<TimelineProps> = ({
               onTransientUpdate={onTransientUpdateAudioClip}
               onCommit={onCommitAudioClip}
               getCurrentSnapshot={getCurrentSnapshot}
-              getTrackWidth={() => rulerRef.current?.getBoundingClientRect().width ?? 0}
+              getTrackWidth={trackWidth}
             />
+          </div>
           </div>
         </div>
       </div>

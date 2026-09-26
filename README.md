@@ -26,6 +26,8 @@ qualquer editor.
 - **Áudio de referência**: narração, música ou efeitos (ou o som de um vídeo) na timeline com forma de onda.
   Mova e corte as faixas, ajuste volume/mudo e ouça o trecho ao arrastar o cursor (scrub) para acertar a
   animação na palavra ou na batida. O áudio vai junto no export (opcional) e fica salvo dentro do projeto.
+- **Timeline em segundos ou quadros**, com zoom (Ctrl + roda do mouse, ancorado no cursor) para ajustar
+  quadro a quadro ou ver minutos inteiros; a vista acompanha o cursor durante o play.
 - **Projeto em arquivo** `.fmproj` (Ctrl+S / Ctrl+O), autosave com recuperação, e o app instalado abre
   `.fmproj` direto do sistema.
 - **Export** MP4 (H.264) ou WebM transparente, com trecho de frames, codificado via WebCodecs com tempo exato.

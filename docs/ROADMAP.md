@@ -31,14 +31,16 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T15 — CI (GitHub Actions): typecheck, testes, `i18n:scan` e build em todo PR e push na main
 - [x] T16 — Áudio de referência: faixas de áudio (narração, música, efeito ou o som de um vídeo) com forma de
   onda na timeline, mover/cortar, volume/mudo, ouvir ao arrastar (scrub), mixadas no export
+- [x] T17 — Timeline em segundos (ou quadros) com zoom: régua adaptativa, Ctrl+roda ancorado no cursor,
+  botões de zoom/ajustar, a vista acompanha o cursor no play, rótulos dos clipes fixos à esquerda
 
 ## Próximos passos sugeridos
 
-1. Timeline com zoom e tempo em segundos (a grade já é CSS desde T16).
-2. Migrar gráficos e textos para o mesmo modelo de keyframes dos atores (hoje usam "motion tween P1→P2").
-3. Biblioteca de modelos montados sobre as peças genéricas.
-4. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-5. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
+1. Migrar gráficos e textos para o mesmo modelo de keyframes dos atores (hoje usam "motion tween P1→P2").
+2. Biblioteca de modelos montados sobre as peças genéricas.
+3. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+4. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
+5. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
 6. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
@@ -103,5 +105,11 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   ~1 quadro com fade, `mixdown` renderiza o trecho exportado num OfflineAudioContext. Export: faixa de áudio
   opcional (AAC no MP4 quando o navegador codifica; senão Opus); WebM transparente começa sem áudio.
   Importar áudio estende a timeline para caber (nunca encolhe). UI: `components/AudioTracks.tsx`.
-- Timeline: grade e régua por CSS (`frameGridStyle`/`rulerLabels`), sem um elemento por quadro; as listas da
-  esquerda e da direita têm rolagem sincronizada; arrastar na régua faz scrub contínuo. Máx. 36.000 quadros.
+- Timeline: grade e régua por CSS (`frameGridStyle`), sem um elemento por quadro. Escala pura em
+  `src/engine/timelineScale.ts`: `timelineScale(total, fps, pxPorQuadro, unidade)` escolhe passo das linhas
+  fortes (rótulos ≥ 56 px) e fracas (≥ 6 px); em segundos usa tempos "redondos" (0,25 s, 1 s, 5 s, 1:00…) e,
+  com zoom máximo, "1s" + "5f". Zoom = px por quadro (null = caber tudo), entre caber e 60 px/quadro;
+  `scrollForZoom` mantém o quadro sob o cursor. A área da direita é um único scroll (régua `sticky`), com
+  rolagem vertical sincronizada com a lista de camadas. Posições dentro dela continuam em % da largura do
+  conteúdo; medidas de arrasto usam a largura da régua (`trackWidth()`). Unidade salva em
+  `localStorage['flashmotion.timeUnit']` (padrão: segundos). Máx. 36.000 quadros.
