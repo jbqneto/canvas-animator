@@ -8,11 +8,25 @@ import {
   StickFigure,
   DrawingStroke,
   LayerType,
+  ActorOverlay,
 } from '../types';
+import { sampleActor } from '../engine/actor';
 import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtils';
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
+
+/** Everything that makes up the scene, independent of which frame is drawn. */
+export interface SceneContent {
+  frames: Record<number, FrameData>;
+  charts: ChartOverlay[];
+  texts: TextOverlay[];
+  images: ImageOverlay[];
+  actors: ActorOverlay[];
+  layers?: StudioLayer[];
+  videoBg: VideoBackground;
+  videoElement?: HTMLVideoElement | null;
+}
 
 export interface RenderOptions {
   /** Editor-only helper grid. Never part of an exported frame. */
@@ -45,15 +59,11 @@ export function renderCompositeFrame(
   width: number,
   height: number,
   currentFrame: number,
-  frameData: FrameData | undefined,
-  charts: ChartOverlay[],
-  texts: TextOverlay[],
-  images: ImageOverlay[],
-  videoBg: VideoBackground,
-  videoElement?: HTMLVideoElement | null,
-  layers?: StudioLayer[],
+  scene: SceneContent,
   options: RenderOptions = {}
 ) {
+  const { charts, texts, images, actors, videoBg, videoElement, layers } = scene;
+  const frameData = scene.frames[currentFrame];
   ctx.save();
   ctx.clearRect(0, 0, width, height);
 
@@ -133,6 +143,11 @@ export function renderCompositeFrame(
     if (currentFrame < img.startFrame || currentFrame > img.startFrame + img.durationFrames) return;
     add(img.id, 'image', BACK, () => drawImageOverlay(ctx, img, currentFrame, width, height));
   });
+  actors.forEach((actor) => {
+    const state = sampleActor(actor, currentFrame);
+    if (!state.visible || state.opacity <= 0) return;
+    add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state));
+  });
   frameData?.stickFigures?.forEach((stick) => {
     add(stick.id, 'drawing', FRONT, () => drawStickFigure(ctx, stick));
   });
@@ -189,6 +204,22 @@ function drawImageOverlay(
   const w = img.width * scale;
   const h = img.height * scale;
   ctx.drawImage(imgEl, cx - w / 2, cy - h / 2 + floatY, w, h);
+  ctx.restore();
+}
+
+function drawActor(
+  ctx: CanvasRenderingContext2D,
+  actor: ActorOverlay,
+  state: ReturnType<typeof sampleActor>
+) {
+  const img = getCachedImage(actor.src);
+  if (!isImageReady(img)) return;
+  ctx.save();
+  ctx.globalAlpha = state.opacity;
+  ctx.translate(state.x, state.y);
+  ctx.rotate((state.rotation * Math.PI) / 180);
+  ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
+  ctx.drawImage(img, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
   ctx.restore();
 }
 
@@ -665,26 +696,23 @@ async function pickOutputFormat(width: number, height: number) {
  * (MediaRecorder timestamps by wall clock: slow video seeks stretched the exported video.)
  */
 export async function exportVideoSequence(
-  frames: Record<number, FrameData>,
-  totalFrames: number,
-  fps: number,
-  charts: ChartOverlay[],
-  texts: TextOverlay[],
-  images: ImageOverlay[],
-  videoBg: VideoBackground,
-  videoElement: HTMLVideoElement | null,
-  onProgress?: (progress: number) => void,
-  layers?: StudioLayer[],
-  canvasWidth: number = 1280,
-  canvasHeight: number = 720
+  scene: SceneContent,
+  options: {
+    totalFrames: number;
+    fps: number;
+    width: number;
+    height: number;
+    onProgress?: (progress: number) => void;
+  }
 ): Promise<ExportedVideo> {
+  const { totalFrames, fps, onProgress } = options;
   if (typeof VideoEncoder === 'undefined') {
     throw new Error('Este navegador não suporta WebCodecs. Use Chrome ou Edge atualizados.');
   }
 
   // H.264 requires even dimensions
-  const width = canvasWidth - (canvasWidth % 2);
-  const height = canvasHeight - (canvasHeight % 2);
+  const width = options.width - (options.width % 2);
+  const height = options.height - (options.height % 2);
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width = width;
   exportCanvas.height = height;
@@ -697,9 +725,9 @@ export async function exportVideoSequence(
 
   // Everything the frames depend on must be ready before encoding starts
   await document.fonts.ready;
-  await preloadImages(images.map((img) => img.url));
+  await preloadSceneImages(scene);
 
-  const video = videoBg.type !== 'color' ? videoElement : null;
+  const video = scene.videoBg.type !== 'color' ? scene.videoElement ?? null : null;
   const restoreVideoTime = video?.currentTime ?? 0;
   video?.pause();
 
@@ -720,19 +748,7 @@ export async function exportVideoSequence(
         await seekVideo(video, videoTimeForFrame(f, fps, video.duration));
       }
 
-      renderCompositeFrame(
-        ctx,
-        width,
-        height,
-        f,
-        frames[f],
-        charts,
-        texts,
-        images,
-        videoBg,
-        video,
-        layers
-      );
+      renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video });
       await source.add((f - 1) * frameDuration, frameDuration);
 
       if (onProgress) {
@@ -768,31 +784,17 @@ export async function renderFrameToDataURL(params: {
   width: number;
   height: number;
   frame: number;
-  frameData: FrameData | undefined;
-  charts: ChartOverlay[];
-  texts: TextOverlay[];
-  images: ImageOverlay[];
-  videoBg: VideoBackground;
-  videoElement: HTMLVideoElement | null;
-  layers?: StudioLayer[];
+  scene: SceneContent;
 }): Promise<string> {
   await document.fonts.ready;
-  await preloadImages(params.images.map((img) => img.url));
+  await preloadSceneImages(params.scene);
   const canvas = document.createElement('canvas');
   canvas.width = params.width;
   canvas.height = params.height;
-  renderCompositeFrame(
-    canvas.getContext('2d')!,
-    params.width,
-    params.height,
-    params.frame,
-    params.frameData,
-    params.charts,
-    params.texts,
-    params.images,
-    params.videoBg,
-    params.videoElement,
-    params.layers
-  );
+  renderCompositeFrame(canvas.getContext('2d')!, params.width, params.height, params.frame, params.scene);
   return canvas.toDataURL('image/png');
+}
+
+function preloadSceneImages(scene: SceneContent): Promise<void> {
+  return preloadImages([...scene.images.map((img) => img.url), ...scene.actors.map((a) => a.src)]);
 }

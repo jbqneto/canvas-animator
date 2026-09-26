@@ -12,7 +12,11 @@ import {
   StickFigure,
   CanvasDimensions,
   HistorySnapshot,
+  ActorOverlay,
 } from './types';
+import { createActor } from './engine/actor';
+import { isTypingTarget } from './utils/keyboard';
+import { loadImageFileAsActorSource } from './utils/importImage';
 import {
   createDefaultStickFigure,
   applyPoseToStickFigure,
@@ -214,10 +218,11 @@ export default function App() {
     charts: initialCharts,
     texts: initialTexts,
     images: [],
+    actors: [],
     layers: initialLayers,
   });
 
-  const { frames, charts, texts, images, layers } = history.present;
+  const { frames, charts, texts, images, actors, layers } = history.present;
 
   // UI Modals & Export state
   const [exportProgress, setExportProgress] = useState<number>(0);
@@ -722,12 +727,15 @@ export default function App() {
     let updatedCharts = charts;
     let updatedTexts = texts;
     let updatedFrames = history.present.frames;
+    let updatedActors = actors;
 
     if (layer.targetId) {
       if (layer.type === 'chart') {
         updatedCharts = charts.filter((c) => c.id !== layer.targetId);
       } else if (layer.type === 'text') {
         updatedTexts = texts.filter((t) => t.id !== layer.targetId);
+      } else if (layer.type === 'actor') {
+        updatedActors = actors.filter((a) => a.id !== layer.targetId);
       } else if (layer.type === 'group') {
         // Stick figure layer: remove the figure from every frame, otherwise it stays on stage
         updatedFrames = {};
@@ -746,6 +754,7 @@ export default function App() {
       charts: updatedCharts,
       texts: updatedTexts,
       frames: updatedFrames,
+      actors: updatedActors,
     });
 
     if (selectedLayerId === layerId) {
@@ -833,16 +842,97 @@ export default function App() {
     if (selectedObject?.id === textId) setSelectedObject(null);
   };
 
+  // ================= ACTORS (imported images animated by keyframes) =================
+  const handleAddActor = (params: { src: string; name: string; width: number; height: number }) => {
+    const id = `actor-${Date.now()}`;
+    const actor = createActor({
+      id,
+      name: params.name,
+      src: params.src,
+      width: params.width,
+      height: params.height,
+      x: Math.round(canvasDimensions.width / 2),
+      y: Math.round(canvasDimensions.height / 2),
+      startFrame: 1,
+      durationFrames: Math.max(1, totalFrames - 1),
+    });
+    const layer: StudioLayer = {
+      id: `layer-actor-${id}`,
+      name: params.name,
+      type: 'actor',
+      visible: true,
+      locked: false,
+      color: '#f97316',
+      targetId: id,
+    };
+    history.pushSnapshot(`Importar "${params.name}"`, {
+      ...history.present,
+      actors: [...history.present.actors, actor],
+      layers: [layer, ...history.present.layers],
+    });
+    setSelectedObject({ type: 'actor', id });
+    setSelectedLayerId(layer.id);
+  };
+
+  const handleImportImageFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    for (const file of list) {
+      try {
+        const { src, width, height } = await loadImageFileAsActorSource(
+          file,
+          canvasDimensions.width,
+          canvasDimensions.height
+        );
+        handleAddActor({ src, width, height, name: file.name.replace(/\.[^.]+$/, '') });
+      } catch (err) {
+        alert(`Não foi possível importar ${file.name}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  };
+
+  const handleUpdateActor = (actor: ActorOverlay, description = `Editar "${actor.name}"`) => {
+    history.pushSnapshot(description, {
+      ...history.present,
+      actors: history.present.actors.map((a) => (a.id === actor.id ? actor : a)),
+    });
+  };
+
+  const handleTransientUpdateActor = useCallback(
+    (actor: ActorOverlay) => {
+      history.updatePresent((prev) => ({
+        ...prev,
+        actors: prev.actors.map((a) => (a.id === actor.id ? actor : a)),
+      }));
+    },
+    [history]
+  );
+
+  const handleCommitActor = useCallback(
+    (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => {
+      const current = history.presentRef.current;
+      history.commitAction(description, baseSnapshot, {
+        ...current,
+        actors: current.actors.map((a) => (a.id === actor.id ? actor : a)),
+      });
+    },
+    [history]
+  );
+
+  const handleDeleteActor = (actorId: string) => {
+    const actor = history.present.actors.find((a) => a.id === actorId);
+    history.pushSnapshot(`Excluir "${actor?.name ?? 'ator'}"`, {
+      ...history.present,
+      actors: history.present.actors.filter((a) => a.id !== actorId),
+      layers: history.present.layers.filter((l) => l.targetId !== actorId),
+    });
+    if (selectedObject?.id === actorId) setSelectedObject(null);
+  };
+
   // ================= KEYBOARD SHORTCUTS =================
   // Flash-standard Ctrl+Z, Ctrl+Y, Ctrl+G, Ctrl+B, Delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
+      if (isTypingTarget(e.target)) return;
 
       // Ctrl+Z / Cmd+Z -> Undo
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -879,6 +969,7 @@ export default function App() {
           e.preventDefault();
           if (selectedObject.type === 'chart') handleDeleteChart(selectedObject.id);
           else if (selectedObject.type === 'text') handleDeleteText(selectedObject.id);
+          else if (selectedObject.type === 'actor') handleDeleteActor(selectedObject.id);
           else if (selectedObject.type === 'stick') {
             handleDeleteStickFigure(selectedObject.id, false);
           }
@@ -1033,6 +1124,8 @@ export default function App() {
       charts: [],
       texts: [],
       images: [],
+      actors: [],
+      layers: history.present.layers.filter((l) => l.type !== 'actor'),
     });
     setCurrentFrame(1);
   };
@@ -1057,20 +1150,13 @@ export default function App() {
     setIsPlaying(false);
 
     try {
-      const { blob, extension } = await exportVideoSequence(
-        frames,
+      const { blob, extension } = await exportVideoSequence(sceneContent(), {
         totalFrames,
         fps,
-        charts,
-        texts,
-        images,
-        videoBg,
-        videoEl,
-        (progress) => setExportProgress(progress),
-        layers,
-        canvasDimensions.width,
-        canvasDimensions.height
-      );
+        width: canvasDimensions.width,
+        height: canvasDimensions.height,
+        onProgress: (progress) => setExportProgress(progress),
+      });
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1089,17 +1175,21 @@ export default function App() {
   };
 
   // Clean render of the current frame (no editor grid or selection handles)
+  const sceneContent = () => ({
+    frames,
+    charts,
+    texts,
+    images,
+    actors,
+    layers,
+    videoBg,
+    videoElement: videoEl,
+  });
   const currentFrameRenderParams = () => ({
     width: canvasDimensions.width,
     height: canvasDimensions.height,
     frame: currentFrame,
-    frameData: frames[currentFrame],
-    charts,
-    texts,
-    images,
-    videoBg,
-    videoElement: videoEl,
-    layers,
+    scene: sceneContent(),
   });
 
   // Snapshot PNG
@@ -1201,6 +1291,10 @@ export default function App() {
             canvasWidth={canvasDimensions.width}
             canvasHeight={canvasDimensions.height}
             getCurrentSnapshot={() => history.presentRef.current}
+            actors={actors}
+            onTransientUpdateActor={handleTransientUpdateActor}
+            onCommitActor={handleCommitActor}
+            onImportImageFiles={handleImportImageFiles}
           />
         </div>
 
@@ -1314,6 +1408,11 @@ export default function App() {
           timelineHeight={timelineHeight}
           setTimelineHeight={setTimelineHeight}
           onDeleteStickFigure={handleDeleteStickFigure}
+          actors={actors}
+          onUpdateActor={handleUpdateActor}
+          onDeleteActor={handleDeleteActor}
+          onImportImageFiles={handleImportImageFiles}
+          onJumpToFrame={setCurrentFrame}
         />
       </div>
 
@@ -1362,6 +1461,9 @@ export default function App() {
           onCommitText={handleCommitText}
           getCurrentSnapshot={() => history.presentRef.current}
           onJumpToFrame={setCurrentFrame}
+          actors={actors}
+          onUpdateActor={handleTransientUpdateActor}
+          onCommitActor={handleCommitActor}
         />
       </div>
 
@@ -1373,10 +1475,7 @@ export default function App() {
         totalFrames={totalFrames}
         canvasSnapshot={canvasSnapshot}
         onAddImageOverlay={(img) => {
-          history.pushSnapshot('Adicionar Imagem IA', {
-            ...history.present,
-            images: [...images, img],
-          });
+          handleAddActor({ src: img.url, name: 'Imagem IA', width: img.width, height: img.height });
         }}
         onSetAsBackground={(url) => {
           setVideoBg({

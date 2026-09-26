@@ -23,6 +23,7 @@ import {
   Zap,
   Upload,
   VideoOff,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   ChartOverlay,
@@ -36,7 +37,9 @@ import {
   StickFigure,
   CanvasGroup,
   HistorySnapshot,
+  ActorOverlay,
 } from '../types';
+import { ActorInspector } from './ActorInspector';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
 interface PropertiesInspectorProps {
@@ -75,6 +78,12 @@ interface PropertiesInspectorProps {
   setTimelineHeight: (h: number | ((prev: number) => number)) => void;
   // Stick Figure deletion
   onDeleteStickFigure?: (stickId: string, allFrames?: boolean) => void;
+  // Actors (imported images)
+  actors: ActorOverlay[];
+  onUpdateActor: (actor: ActorOverlay, description: string) => void;
+  onDeleteActor: (id: string) => void;
+  onImportImageFiles: (files: FileList) => void;
+  onJumpToFrame: (frame: number) => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -114,6 +123,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   timelineHeight,
   setTimelineHeight,
   onDeleteStickFigure,
+  actors,
+  onUpdateActor,
+  onDeleteActor,
+  onImportImageFiles,
+  onJumpToFrame,
   pastSteps,
   futureSteps,
   onJumpToHistory,
@@ -134,6 +148,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     selectedObject?.type === 'text'
       ? texts.find((t) => t.id === selectedObject.id)
       : null;
+
+  const activeActor =
+    selectedObject?.type === 'actor' ? actors.find((a) => a.id === selectedObject.id) : undefined;
 
   const activeStick =
     selectedObject?.type === 'stick'
@@ -273,6 +290,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {/* ================= TAB 1: PROPERTIES (CONTEXTUAL) ================= */}
         {activeTab === 'properties' && (
           <>
+            {activeActor && (
+              <ActorInspector
+                actor={activeActor}
+                currentFrame={currentFrame}
+                totalFrames={totalFrames}
+                fps={fps}
+                onChange={onUpdateActor}
+                onDelete={onDeleteActor}
+                onJumpToFrame={onJumpToFrame}
+              />
+            )}
+
             {/* 1. CHART SELECTED */}
             {activeChart && (
               <div className="space-y-4">
@@ -887,7 +916,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             )}
 
             {/* 4. NO OBJECT SELECTED -> DOCUMENT PROPERTIES (FLASH STYLE) */}
-            {!activeChart && !activeText && !activeStick && !activeGroup && (
+            {!activeChart && !activeText && !activeStick && !activeGroup && !activeActor && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-neutral-800">
                   <div className="p-1.5 rounded bg-sky-500/10 text-sky-400">
@@ -1174,6 +1203,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
                     Inserir Elementos na Cena
                   </span>
+                  <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
+                    <ImageIcon size={14} />
+                    <span className="text-xs">
+                      Importar imagem (PNG, SVG, WebP…)
+                      <span className="block text-[10px] text-orange-200/60">
+                        ou arraste o arquivo para o palco
+                      </span>
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) onImportImageFiles(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => onAddChart('bar')}

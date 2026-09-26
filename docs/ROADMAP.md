@@ -11,8 +11,8 @@ Base: `docs/RESEARCH.md`.
 - [x] T1 — Pesquisa + roadmap (este arquivo)
 - [x] T2 — Infra de testes (Vitest) + testes dos utilitários existentes
 - [x] T3 — Motor de keyframes (puro, testado): easing por keyframe, interpolação, spline de caminho, orientação
-- [ ] T4 — Ator: importar imagem local (botão + arrastar para o palco), renderizar, selecionar, mover
-- [ ] T5 — Auto-keyframe + inspector do ator + losangos de keyframe na timeline
+- [x] T4 — Ator: importar imagem local (botão + arrastar para o palco), renderizar, selecionar, mover
+- [x] T5 — Auto-keyframe + inspector do ator + losangos de keyframe na timeline
 - [ ] T6 — Caminho de movimento visível, caminho suave/reto, orientar ao caminho
 - [ ] T7 — Boneco palito: FK (girar osso em volta do pai) + interpolar pose entre dois quadros
 - [ ] T8 — Salvar/abrir projeto (arquivo local) + autosave/recuperação
@@ -33,3 +33,10 @@ Base: `docs/RESEARCH.md`.
   segmento que COMEÇA nele; clamp antes/depois. `sampleTrack(track, frame, fallback)`,
   `samplePosition(track, frame, fallback, smooth)` → `{x, y, angle}` (Catmull-Rom centrípeta, velocidade
   constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam `DEFAULT_EASING`.
+- Ator (`ActorOverlay` em `types.ts`, lógica em `src/engine/actor.ts`): imagem como data URL, `base` + `tracks`
+  (position/scale/rotation/opacity). Regra do cronômetro (AE): propriedade sem keys edita `base`; com keys,
+  editar grava key no frame atual (`setActorProperty`). Cada ator tem camada própria (`type: 'actor'`,
+  `targetId`). Mover o clipe na timeline desloca os keys (`shiftActorTime`); arrastar losango retima
+  (`moveActorKeys`). Inspector: `ActorInspector.tsx`. Import: `utils/importImage.ts` (reduz > 2048 px).
+- `renderCompositeFrame(ctx, w, h, frame, scene: SceneContent, options)`; `exportVideoSequence(scene, opts)`.
+- Atalhos: usar `isTypingTarget` (`utils/keyboard.ts`) para decidir se a tecla é do campo ou do editor.

@@ -12,7 +12,9 @@ import {
   SelectedObjectRef,
   CanvasGroup,
   HistorySnapshot,
+  ActorOverlay,
 } from '../types';
+import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue } from '../engine/actor';
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
 import { onImageLoaded } from '../utils/imageCache';
 import {
@@ -87,6 +89,10 @@ interface FlashCanvasProps {
   canvasWidth?: number;
   canvasHeight?: number;
   getCurrentSnapshot: () => HistorySnapshot;
+  actors: ActorOverlay[];
+  onTransientUpdateActor: (actor: ActorOverlay) => void;
+  onCommitActor: (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => void;
+  onImportImageFiles: (files: FileList) => void;
 }
 
 const emptyFrame = (frameNumber: number): FrameData => ({
@@ -149,6 +155,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   canvasWidth = 1280,
   canvasHeight = 720,
   getCurrentSnapshot,
+  actors,
+  onTransientUpdateActor,
+  onCommitActor,
+  onImportImageFiles,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -168,7 +178,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
   // Drag Session tracking for mouse interaction
   const dragSessionRef = useRef<{
-    targetType: 'stick' | 'joint' | 'chart' | 'chart-resize' | 'text';
+    targetType: 'stick' | 'joint' | 'chart' | 'chart-resize' | 'text' | 'actor';
     targetId: string;
     jointId?: string;
     resizeCorner?: string;
@@ -231,13 +241,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       canvasWidth,
       canvasHeight,
       currentFrame,
-      currentFrameData,
-      charts,
-      texts,
-      images,
-      videoBg,
-      videoElement,
-      layers,
+      { frames, charts, texts, images, actors, videoBg, videoElement, layers },
       { showGrid: true }
     );
 
@@ -441,6 +445,29 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.restore();
       });
 
+      // 3D. Actor selection: rotated box around the image at its animated position
+      if (selectedObject?.type === 'actor') {
+        const actor = actors.find((a) => a.id === selectedObject.id);
+        if (actor) {
+          const st = sampleActor(actor, currentFrame);
+          const w = actor.width * st.scale;
+          const h = actor.height * st.scale;
+          ctx.save();
+          ctx.translate(st.x, st.y);
+          ctx.rotate((st.rotation * Math.PI) / 180);
+          ctx.strokeStyle = '#f97316';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash(st.visible ? [] : [6, 4]);
+          ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#f97316';
+          ctx.beginPath();
+          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
       // 3C. Text Selection Bounding Box
       texts.forEach((txt) => {
         if (!txt.visible) return;
@@ -484,6 +511,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     isPlaying,
     frames,
     assetTick,
+    actors,
   ]);
 
   // ================= GLOBAL WINDOW DRAG LISTENERS =================
@@ -498,7 +526,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       // mouse down, so props captured by the closure would be stale during the drag.
       const latest = getCurrentSnapshot();
       const currentFrameData = latest.frames[currentFrame] || emptyFrame(currentFrame);
-      const { charts, texts } = latest;
+      const { charts, texts, actors } = latest;
 
       const pt = getCanvasCoordinates(e);
       const dist = Math.hypot(pt.x - session.startCanvasPt.x, pt.y - session.startCanvasPt.y);
@@ -574,6 +602,15 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         });
       }
 
+      // Handle Actor Drag: stopwatch rule (static value, or key at the current frame)
+      else if (session.targetType === 'actor') {
+        const actor = actors.find((a) => a.id === session.targetId);
+        if (actor) {
+          const pos = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
+          onTransientUpdateActor(setActorProperty(actor, 'position', currentFrame, pos));
+        }
+      }
+
       // Handle Text Overlay Drag
       else if (session.targetType === 'text') {
         const txt = texts.find((t) => t.id === session.targetId);
@@ -589,6 +626,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       getCurrentSnapshot,
       currentFrame,
       onTransientUpdateFrameData,
+      onTransientUpdateActor,
       onTransientUpdateChart,
       onTransientUpdateText,
     ]
@@ -607,7 +645,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       // Same as mousemove: commit what the drag produced, not the pre-drag props of this closure
       const latest = getCurrentSnapshot();
       const currentFrameData = latest.frames[currentFrame] || emptyFrame(currentFrame);
-      const { charts, texts } = latest;
+      const { charts, texts, actors } = latest;
 
       // Only commit to history if the object was actually dragged!
       // This eliminates intermediate movements and guarantees 1-step undo!
@@ -642,6 +680,11 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           if (txt) {
             onCommitText(txt, `Mover Texto "${txt.text}"`, session.baseSnapshot);
           }
+        } else if (session.targetType === 'actor') {
+          const actor = actors.find((a) => a.id === session.targetId);
+          if (actor) {
+            onCommitActor(actor, `Mover "${actor.name}" (frame ${currentFrame})`, session.baseSnapshot);
+          }
         }
       }
     },
@@ -652,11 +695,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       onCommitFrameData,
       onCommitChart,
       onCommitText,
+      onCommitActor,
     ]
   );
 
   // Hidden or locked layers can't be picked or edited on the stage
-  const isEditable = (targetId: string | undefined, type: 'drawing' | 'chart' | 'text') => {
+  const isEditable = (targetId: string | undefined, type: 'drawing' | 'chart' | 'text' | 'actor') => {
     const resolved = resolveObjectLayer(layers, targetId, type);
     return !resolved || (resolved.layer.visible && !resolved.layer.locked);
   };
@@ -806,6 +850,30 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       }
     }
 
+    // 2C'. Hit Test: Actors, front-most layer first
+    const actorDepth = (a: ActorOverlay) => {
+      const i = layers.findIndex((l) => l.targetId === a.id);
+      return i === -1 ? -1 : i;
+    };
+    const actorsFrontFirst = [...actors].sort((a, b) => actorDepth(a) - actorDepth(b));
+    for (const actor of actorsFrontFirst) {
+      if (!isEditable(actor.id, 'actor') || !hitTestActor(actor, currentFrame, pt)) continue;
+      const pos = actorPropertyValue(actor, 'position', currentFrame);
+      onSelectObject({ type: 'actor', id: actor.id });
+      dragSessionRef.current = {
+        targetType: 'actor',
+        targetId: actor.id,
+        startCanvasPt: pt,
+        baseSnapshot,
+        hasMoved: false,
+        offsetX: pt.x - pos.x,
+        offsetY: pt.y - pos.y,
+      };
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
+      return;
+    }
+
     // 2D. Hit Test: Chart Overlays (Top to bottom)
     for (let i = charts.length - 1; i >= 0; i--) {
       const c = charts[i];
@@ -916,6 +984,14 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     <div
       ref={containerRef}
       className="relative flex-1 h-full flex bg-neutral-950/90 select-none overflow-hidden"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (e.dataTransfer.files.length === 0) return;
+        e.preventDefault();
+        onImportImageFiles(e.dataTransfer.files);
+      }}
     >
       {/* ================= FLASH CLASSIC TOOLBAR (LEFT) ================= */}
       <aside className="w-12 bg-neutral-950 border-r border-neutral-800 flex flex-col items-center py-2 gap-1.5 shrink-0 z-10">

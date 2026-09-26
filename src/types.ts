@@ -1,3 +1,5 @@
+import type { Track, Vec2 } from './engine/keyframes';
+
 /**
  * Types for FlashMotion Studio - Adobe Flash & Remotion Hybrid Studio
  */
@@ -164,6 +166,46 @@ export interface ImageOverlay {
   animationType: 'pop' | 'fade' | 'float';
 }
 
+/** Animatable transform of an actor. Rotation in degrees, opacity 0..1, scale 1 = base size. */
+export interface ActorTransform {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+}
+
+/**
+ * Actor ("símbolo" in Flash, "layer" in After Effects): an imported image animated by keyframe tracks.
+ * A property without keys uses its `base` value (AE stopwatch off); once it has keys, edits at the
+ * current frame create/update keys (stopwatch on).
+ */
+export interface ActorOverlay {
+  id: string;
+  name: string;
+  kind: 'image';
+  /** Image as data URL so projects can be saved to a single file. */
+  src: string;
+  /** Size at scale 1, in canvas pixels. The anchor point is the image center. */
+  width: number;
+  height: number;
+  startFrame: number;
+  durationFrames: number;
+  base: ActorTransform;
+  tracks: {
+    position?: Track<Vec2>;
+    scale?: Track<number>;
+    rotation?: Track<number>;
+    opacity?: Track<number>;
+  };
+  /** Curved path through position keys (AE Auto Bezier) instead of straight lines. */
+  smoothPath: boolean;
+  /** Rotate to follow the direction of travel (Flash "Orient to path"). */
+  orientToPath: boolean;
+  /** Mirror horizontally (e.g. a plane image drawn facing the other way). */
+  flipX: boolean;
+}
+
 export interface FrameData {
   frameNumber: number;
   stickFigures: StickFigure[];
@@ -171,7 +213,7 @@ export interface FrameData {
   groups?: CanvasGroup[];
 }
 
-export type LayerType = 'drawing' | 'chart' | 'text' | 'group' | 'video' | 'image';
+export type LayerType = 'drawing' | 'chart' | 'text' | 'group' | 'video' | 'image' | 'actor';
 
 export interface StudioLayer {
   id: string;
@@ -199,6 +241,7 @@ export type SelectedObjectType =
   | 'image'
   | 'drawing'
   | 'group'
+  | 'actor'
   | null;
 
 export interface SelectedObjectRef {
@@ -213,6 +256,7 @@ export interface HistorySnapshot {
   charts: ChartOverlay[];
   texts: TextOverlay[];
   images: ImageOverlay[];
+  actors: ActorOverlay[];
   groups?: CanvasGroup[];
   videoBg?: VideoBackground;
 }
