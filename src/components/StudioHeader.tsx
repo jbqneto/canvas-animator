@@ -10,6 +10,8 @@ import {
   Group,
   Ungroup,
   Monitor,
+  FolderOpen,
+  Save,
 } from 'lucide-react';
 import { CanvasDimensions, CANVAS_PRESETS } from '../types';
 
@@ -34,6 +36,10 @@ interface StudioHeaderProps {
   // Canvas Dimensions
   canvasDimensions: CanvasDimensions;
   onUpdateCanvasDimensions: (dim: CanvasDimensions) => void;
+  projectName: string;
+  isDirty: boolean;
+  onOpenProject: () => void;
+  onSaveProject: () => void;
 }
 
 export const StudioHeader: React.FC<StudioHeaderProps> = ({
@@ -55,6 +61,10 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   hasSelection,
   canvasDimensions,
   onUpdateCanvasDimensions,
+  projectName,
+  isDirty,
+  onOpenProject,
+  onSaveProject,
 }) => {
   return (
     <header className="h-14 px-4 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between shrink-0 select-none z-20">
@@ -73,9 +83,31 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                 Flash + Remotion
               </span>
             </div>
-            <p className="text-[10px] text-neutral-400 leading-tight">
-              Animação 2D, Camadas, Gráficos & Stick Figures
+            <p
+              className="text-[10px] text-neutral-400 leading-tight flex items-center gap-1 max-w-56"
+              title={isDirty ? 'Alterações não salvas' : 'Tudo salvo'}
+            >
+              <span className="truncate">{projectName}</span>
+              {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
             </p>
+          </div>
+          <div className="flex items-center gap-0.5 ml-1">
+            <button
+              onClick={onOpenProject}
+              title="Abrir projeto (Ctrl+O)"
+              className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition"
+            >
+              <FolderOpen size={15} />
+            </button>
+            <button
+              onClick={onSaveProject}
+              title="Salvar projeto (Ctrl+S) — Ctrl+Shift+S para salvar como"
+              className={`p-1.5 rounded hover:bg-neutral-800 transition ${
+                isDirty ? 'text-amber-300 hover:text-amber-200' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <Save size={15} />
+            </button>
           </div>
         </div>
 

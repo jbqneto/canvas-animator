@@ -18,6 +18,9 @@ import { createActor } from './engine/actor';
 import { tweenStickFrames } from './engine/stickRig';
 import type { EasingName } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
+import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
+import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
+import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
 import { loadImageFileAsActorSource } from './utils/importImage';
 import {
   createDefaultStickFigure,
@@ -233,6 +236,125 @@ export default function App() {
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
 
   const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // ================= PROJECT FILE (save / open / autosave) =================
+  const [projectName, setProjectName] = useState('Projeto sem título');
+  const [videoFileName, setVideoFileName] = useState<string | undefined>();
+  const [pendingRestore, setPendingRestore] = useState<AutosaveEntry | null>(null);
+  const fileHandleRef = useRef<ProjectFileHandle | undefined>(undefined);
+  const autosaveReadyRef = useRef(false);
+
+  // Unsaved-changes tracking: state is immutable, so comparing references with the values at the
+  // last save/open is exact (and immune to effects running twice in StrictMode).
+  const currentMarker = { present: history.present, fps, totalFrames, canvasDimensions, videoBg, projectName };
+  const [savedMarker, setSavedMarker] = useState(currentMarker);
+  // When set, the state rendered next becomes the "saved" reference (after open/restore)
+  const markSavedOnRenderRef = useRef(false);
+  useEffect(() => {
+    if (!markSavedOnRenderRef.current) return;
+    markSavedOnRenderRef.current = false;
+    setSavedMarker(currentMarker);
+  });
+  const isDirty = (Object.keys(currentMarker) as (keyof typeof currentMarker)[]).some(
+    (k) => currentMarker[k] !== savedMarker[k]
+  );
+
+  const serializeCurrent = () => {
+    const { description: _d, ...content } = history.presentRef.current;
+    return serializeProject(
+      { name: projectName, fps, totalFrames, canvas: canvasDimensions, videoBg, content },
+      videoFileName
+    );
+  };
+
+  // Any content/settings change schedules an autosave
+  useEffect(() => {
+    if (!autosaveReadyRef.current) return;
+    const timer = setTimeout(() => {
+      writeAutosave({ text: serializeCurrent(), savedAt: Date.now(), name: projectName });
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.present, fps, totalFrames, canvasDimensions, videoBg, projectName]);
+
+  // On startup, offer to restore work that was never saved to a file
+  useEffect(() => {
+    readAutosave().then((entry) => {
+      if (entry) setPendingRestore(entry);
+      else autosaveReadyRef.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
+  const applyProjectText = (text: string, name?: string) => {
+    const project = parseProject(text);
+    markSavedOnRenderRef.current = true;
+    setFps(project.fps);
+    setTotalFrames(project.totalFrames);
+    setCanvasDimensions(project.canvas);
+    setVideoBg(project.videoBg);
+    setVideoFileName(undefined);
+    setProjectName(name ?? project.name);
+    history.reset({ description: 'Projeto aberto', ...project.content });
+    setCurrentFrame(1);
+    setSelectedObject(null);
+    setIsPlaying(false);
+    return project;
+  };
+
+  const handleSaveProject = async (saveAs = false) => {
+    try {
+      const result = await saveProjectFile(serializeCurrent(), projectName, fileHandleRef.current, saveAs);
+      if (result === null) return; // cancelled
+      if (result) {
+        fileHandleRef.current = result;
+        setProjectName(projectNameFromFile(result.name));
+        markSavedOnRenderRef.current = true; // the name change is part of the save
+      }
+      setSavedMarker(currentMarker);
+    } catch (err) {
+      alert(`Não foi possível salvar: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
+  const handleOpenProject = async () => {
+    if (isDirty && !confirm('Há alterações não salvas. Abrir outro projeto mesmo assim?')) return;
+    try {
+      const opened = await openProjectFile();
+      if (!opened) return;
+      const project = applyProjectText(opened.text, projectNameFromFile(opened.fileName));
+      fileHandleRef.current = opened.handle;
+      if (project.missingVideo) {
+        alert(`Este projeto usava o vídeo "${project.missingVideo}". Carregue-o de novo em Vídeo de Fundo.`);
+      }
+    } catch (err) {
+      alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
+    }
+  };
+
+  const handleRestoreAutosave = (restore: boolean) => {
+    if (restore && pendingRestore) {
+      try {
+        applyProjectText(pendingRestore.text, pendingRestore.name);
+        markSavedOnRenderRef.current = false; // restored work still isn't in a file
+      } catch {
+        clearAutosave();
+      }
+    } else {
+      clearAutosave();
+    }
+    setPendingRestore(null);
+    autosaveReadyRef.current = true;
+  };
 
   // Sync hidden video currentTime with timeline scrubber (while paused; playback drives itself)
   useEffect(() => {
@@ -990,6 +1112,17 @@ export default function App() {
   // Flash-standard Ctrl+Z, Ctrl+Y, Ctrl+G, Ctrl+B, Delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // File shortcuts work everywhere, even while typing in a field
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveProject(e.shiftKey);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        handleOpenProject();
+        return;
+      }
       if (isTypingTarget(e.target)) return;
 
       // Ctrl+Z / Cmd+Z -> Undo
@@ -1192,6 +1325,7 @@ export default function App() {
   const handleUploadVideo = (file: File) => {
     if (videoBg.url?.startsWith('blob:')) URL.revokeObjectURL(videoBg.url);
     fitTimelineToVideoRef.current = true;
+    setVideoFileName(file.name);
     const objectUrl = URL.createObjectURL(file);
     setVideoBg({
       type: 'upload',
@@ -1303,7 +1437,32 @@ export default function App() {
         hasSelection={selectedObject !== null}
         canvasDimensions={canvasDimensions}
         onUpdateCanvasDimensions={setCanvasDimensions}
+        projectName={projectName}
+        isDirty={isDirty}
+        onOpenProject={handleOpenProject}
+        onSaveProject={() => handleSaveProject(false)}
       />
+
+      {pendingRestore && (
+        <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
+          <span className="flex-1">
+            Encontramos alterações não salvas de <b>{pendingRestore.name}</b> (
+            {new Date(pendingRestore.savedAt).toLocaleString('pt-BR')}). Deseja restaurar?
+          </span>
+          <button
+            onClick={() => handleRestoreAutosave(true)}
+            className="px-3 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400"
+          >
+            Restaurar
+          </button>
+          <button
+            onClick={() => handleRestoreAutosave(false)}
+            className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10"
+          >
+            Descartar
+          </button>
+        </div>
+      )}
 
       {/* Middle Stage & Inspector Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
