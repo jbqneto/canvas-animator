@@ -13,19 +13,19 @@ export interface CanvasDimensions {
   preset: 'youtube-1080p' | 'youtube-720p' | 'youtube-shorts' | 'square' | 'portrait' | 'ultrawide' | 'custom';
 }
 
+/** Output size presets. Labels are translated as `canvas.preset.<id>`. */
 export const CANVAS_PRESETS: {
   id: CanvasDimensions['preset'];
-  name: string;
   width: number;
   height: number;
   ratio: string;
 }[] = [
-  { id: 'youtube-1080p', name: 'YouTube Full HD (16:9)', width: 1920, height: 1080, ratio: '16:9' },
-  { id: 'youtube-720p', name: 'YouTube HD (16:9)', width: 1280, height: 720, ratio: '16:9' },
-  { id: 'youtube-shorts', name: 'YouTube Shorts / TikTok (9:16)', width: 1080, height: 1920, ratio: '9:16' },
-  { id: 'square', name: 'Instagram / Feed (1:1)', width: 1080, height: 1080, ratio: '1:1' },
-  { id: 'portrait', name: 'Social Retrato (4:5)', width: 1080, height: 1350, ratio: '4:5' },
-  { id: 'ultrawide', name: 'Cinema Ultrawide (21:9)', width: 2560, height: 1080, ratio: '21:9' },
+  { id: 'youtube-1080p', width: 1920, height: 1080, ratio: '16:9' },
+  { id: 'youtube-720p', width: 1280, height: 720, ratio: '16:9' },
+  { id: 'youtube-shorts', width: 1080, height: 1920, ratio: '9:16' },
+  { id: 'square', width: 1080, height: 1080, ratio: '1:1' },
+  { id: 'portrait', width: 1080, height: 1350, ratio: '4:5' },
+  { id: 'ultrawide', width: 2560, height: 1080, ratio: '21:9' },
 ];
 
 export interface Point {
@@ -35,7 +35,7 @@ export interface Point {
 
 export interface Joint {
   id: string;
-  name: string;
+  name?: string;
   x: number;
   y: number;
   parent?: string;

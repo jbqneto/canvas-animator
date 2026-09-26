@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Film, Layers, Loader2, X } from 'lucide-react';
 import type { ExportFormat } from '../utils/exportVideo';
+import { MessageKey, useI18n } from '../i18n';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -21,20 +22,9 @@ interface ExportDialogProps {
   hasBackgroundVideo: boolean;
 }
 
-const FORMATS: { id: ExportFormat; title: string; description: string; icon: React.ReactNode }[] = [
-  {
-    id: 'mp4',
-    title: 'Vídeo completo (MP4)',
-    description: 'Animação com o fundo do palco (cor ou vídeo). Pronto para publicar.',
-    icon: <Film size={16} />,
-  },
-  {
-    id: 'webm-alpha',
-    title: 'Camada transparente (WebM)',
-    description:
-      'Só a animação, com fundo transparente, para colocar por cima do seu vídeo no Premiere, DaVinci, CapCut…',
-    icon: <Layers size={16} />,
-  },
+const FORMATS: { id: ExportFormat; title: MessageKey; description: MessageKey; icon: React.ReactNode }[] = [
+  { id: 'mp4', title: 'export.mp4.title', description: 'export.mp4.description', icon: <Film size={16} /> },
+  { id: 'webm-alpha', title: 'export.alpha.title', description: 'export.alpha.description', icon: <Layers size={16} /> },
 ];
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({
@@ -49,6 +39,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   height,
   hasBackgroundVideo,
 }) => {
+  const { t } = useI18n();
   const [format, setFormat] = useState<ExportFormat>('mp4');
   const [startFrame, setStartFrame] = useState(1);
   const [endFrame, setEndFrame] = useState(totalFrames);
@@ -72,7 +63,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white">Exportar vídeo</h3>
+          <h3 className="text-sm font-bold text-white">{t('export.title')}</h3>
           <button
             onClick={onClose}
             disabled={isExporting}
@@ -96,20 +87,20 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             >
               <span className={format === f.id ? 'text-sky-400' : 'text-neutral-500'}>{f.icon}</span>
               <span>
-                <span className="block font-semibold text-white">{f.title}</span>
-                <span className="block text-[11px] text-neutral-400 mt-0.5">{f.description}</span>
+                <span className="block font-semibold text-white">{t(f.title)}</span>
+                <span className="block text-[11px] text-neutral-400 mt-0.5">{t(f.description)}</span>
               </span>
             </button>
           ))}
           {format === 'webm-alpha' && hasBackgroundVideo && (
             <p className="text-[11px] text-amber-300">
-              O vídeo de fundo não entra na camada transparente (ele serve só de referência).
+              {t('export.alpha.noVideo')}
             </p>
           )}
         </div>
 
         <div className="flex items-center gap-2 text-neutral-300">
-          <span>Do frame</span>
+          <span>{t('export.fromFrame')}</span>
           <input
             type="number"
             min={1}
@@ -119,7 +110,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             onChange={(e) => setStartFrame(Number(e.target.value))}
             className="w-16 bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 font-mono text-white"
           />
-          <span>até</span>
+          <span>{t('export.toFrame')}</span>
           <input
             type="number"
             min={1}
@@ -137,7 +128,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         {isExporting ? (
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-sky-300">
-              <Loader2 size={14} className="animate-spin" /> Renderizando… {progress}%
+              <Loader2 size={14} className="animate-spin" /> {t('export.rendering', { progress })}
             </div>
             <div className="h-1.5 rounded bg-neutral-800 overflow-hidden">
               <div className="h-full bg-sky-500 transition-all" style={{ width: `${progress}%` }} />
@@ -148,7 +139,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             onClick={() => onExport({ format, startFrame: first, endFrame: last })}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
           >
-            <Download size={15} /> Exportar {format === 'mp4' ? 'MP4' : 'WebM transparente'}
+            <Download size={15} /> {format === 'mp4' ? t('export.buttonMp4') : t('export.buttonAlpha')}
           </button>
         )}
       </div>

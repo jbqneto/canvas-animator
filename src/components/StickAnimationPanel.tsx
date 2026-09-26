@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Copy, Wand2 } from 'lucide-react';
 import type { FrameData } from '../types';
-import { EASING_OPTIONS, EasingName, DEFAULT_EASING } from '../engine/keyframes';
+import { EASING_NAMES, EasingName, DEFAULT_EASING } from '../engine/keyframes';
+import { useI18n } from '../i18n';
 
 interface StickAnimationPanelProps {
   stickId: string;
@@ -27,6 +28,7 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
   onCopyToFrame,
   onTween,
 }) => {
+  const { t } = useI18n();
   // Frames where this figure was posed by hand (key poses)
   const keyPoses = useMemo(
     () =>
@@ -57,16 +59,14 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
   return (
     <div className="space-y-2 pt-2 border-t border-neutral-800">
       <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
-        Animar pose (tween clássico)
+        {t('stickAnim.title')}
       </span>
       <p className="text-[10px] text-neutral-500 leading-snug">
-        1) Faça a pose aqui. 2) Copie o boneco para um frame à frente e mude a pose lá.
-        3) Interpole: os frames do meio são gerados. Arrastar uma articulação gira o osso;
-        com <kbd className="px-1 rounded bg-neutral-800">Alt</kbd> ela se move livre.
+        {t('stickAnim.help')}
       </p>
 
       <div className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-        <span className="flex-1">Copiar para o frame</span>
+        <span className="flex-1">{t('stickAnim.copyTo')}</span>
         <input
           type="number"
           min={1}
@@ -77,7 +77,7 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
         />
         <button
           onClick={() => onCopyToFrame(stickId, Math.max(1, Math.min(totalFrames, copyTo)))}
-          title="Copia este boneco (pose atual) para o frame e vai até lá"
+          title={t('stickAnim.copyHint')}
           className="p-1.5 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-amber-300"
         >
           <Copy size={12} />
@@ -85,9 +85,9 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
       </div>
 
       <div className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-        <span>De</span>
+        <span>{t('stickAnim.from')}</span>
         <input type="number" min={1} value={from} onChange={(e) => setFrom(Number(e.target.value))} className={inputClass} />
-        <span>até</span>
+        <span>{t('stickAnim.to')}</span>
         <input type="number" min={1} value={to} onChange={(e) => setTo(Number(e.target.value))} className={inputClass} />
       </div>
       <select
@@ -95,9 +95,9 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
         onChange={(e) => setEasing(e.target.value as EasingName)}
         className="w-full bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 text-xs text-white"
       >
-        {EASING_OPTIONS.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
+        {EASING_NAMES.map((o) => (
+          <option key={o} value={o}>
+            {t(`easing.${o}`)}
           </option>
         ))}
       </select>
@@ -106,17 +106,17 @@ export const StickAnimationPanel: React.FC<StickAnimationPanelProps> = ({
         onClick={() => onTween(stickId, from, to, easing)}
         title={
           canTween
-            ? `Gera as poses dos frames ${from + 1} a ${to - 1}`
-            : 'Os dois frames precisam ter este boneco posado à mão, com pelo menos um frame entre eles'
+            ? t('stickAnim.tweenHint', { from: from + 1, to: to - 1 })
+            : t('stickAnim.tweenDisabled')
         }
         className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <Wand2 size={13} />
-        Interpolar poses
+        {t('stickAnim.tween')}
       </button>
       {keyPoses.length > 0 && (
         <p className="text-[10px] text-neutral-500">
-          Poses-chave: {keyPoses.slice(0, 12).map((f) => `F${f}`).join(', ')}
+          {t('stickAnim.keyPoses')} {keyPoses.slice(0, 12).map((f) => `F${f}`).join(', ')}
           {keyPoses.length > 12 && ` … (+${keyPoses.length - 12})`}
         </p>
       )}

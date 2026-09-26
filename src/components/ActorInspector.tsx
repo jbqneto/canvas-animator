@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronLeft, ChevronRight, Image as ImageIcon, Timer, Trash2 } from 'lucide-react';
 import type { ActorOverlay, MotionPath } from '../types';
 import { ActorFollowPanel } from './ActorFollowPanel';
+import { MessageKey, useI18n } from '../i18n';
 import {
   ActorProperty,
   actorHasKeyAt,
@@ -13,7 +14,7 @@ import {
   followedPath,
 } from '../engine/actor';
 import {
-  EASING_OPTIONS,
+  EASING_NAMES,
   EasingName,
   DEFAULT_EASING,
   hasKeyframeAt,
@@ -36,11 +37,11 @@ interface ActorInspectorProps {
   onSelectPath: (pathId: string) => void;
 }
 
-const PROPS: { id: ActorProperty; label: string }[] = [
-  { id: 'position', label: 'Posição' },
-  { id: 'scale', label: 'Escala' },
-  { id: 'rotation', label: 'Rotação' },
-  { id: 'opacity', label: 'Opacidade' },
+const PROPS: { id: ActorProperty; labelKey: MessageKey }[] = [
+  { id: 'position', labelKey: 'actor.prop.position' },
+  { id: 'scale', labelKey: 'actor.prop.scale' },
+  { id: 'rotation', labelKey: 'actor.prop.rotation' },
+  { id: 'opacity', labelKey: 'actor.prop.opacity' },
 ];
 
 const inputClass =
@@ -58,6 +59,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
   onAttachToPath,
   onSelectPath,
 }) => {
+  const { t } = useI18n();
   const following = !!followedPath(actor, paths);
   const track = (prop: ActorProperty) => actor.tracks[prop] as Track<unknown> | undefined;
   const keyFrames = actorKeyframes(actor);
@@ -67,8 +69,8 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
 
   // Easing shown for the keys at the current frame (they share one when set from here)
   const easingHere = (() => {
-    for (const t of [...PROPS.map((p) => track(p.id)), actor.follow?.progress]) {
-      const k = t?.find((key) => key.frame === currentFrame);
+    for (const tr of [...PROPS.map((p) => track(p.id)), actor.follow?.progress]) {
+      const k = tr?.find((key) => key.frame === currentFrame);
       if (k) return k.easing ?? DEFAULT_EASING;
     }
     return null;
@@ -77,20 +79,22 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
   const setValue = (prop: ActorProperty, value: any, label: string) => {
     onChange(
       setActorProperty(actor, prop, currentFrame, value),
-      isAnimated(actor, prop) ? `Keyframe de ${label} (frame ${currentFrame})` : `Alterar ${label}`
+      isAnimated(actor, prop)
+        ? t('actor.history.key', { label, frame: currentFrame })
+        : t('actor.history.change', { label })
     );
   };
 
   /** Diamond button: add a key with the current value, or remove the key at this frame. */
   const toggleKeyHere = (prop: ActorProperty, label: string) => {
-    const t = track(prop);
-    if (hasKeyframeAt(t, currentFrame)) {
-      const tracks = { ...actor.tracks, [prop]: removeKeyframe(t, currentFrame) };
-      onChange({ ...actor, tracks }, `Remover keyframe de ${label}`);
+    const current = track(prop);
+    if (hasKeyframeAt(current, currentFrame)) {
+      const tracks = { ...actor.tracks, [prop]: removeKeyframe(current, currentFrame) };
+      onChange({ ...actor, tracks }, t('actor.history.removeKey', { label }));
     } else {
       const value = actorPropertyValue(actor, prop, currentFrame);
-      const tracks = { ...actor.tracks, [prop]: setKeyframe(t as Track<any>, currentFrame, value) };
-      onChange({ ...actor, tracks }, `Adicionar keyframe de ${label}`);
+      const tracks = { ...actor.tracks, [prop]: setKeyframe(current as Track<any>, currentFrame, value) };
+      onChange({ ...actor, tracks }, t('actor.history.addKey', { label }));
     }
   };
 
@@ -103,7 +107,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       ...actor.follow,
       progress: setKeyframeEasing(actor.follow.progress, currentFrame, easing),
     };
-    onChange({ ...actor, tracks, follow }, `Suavização do keyframe ${currentFrame}`);
+    onChange({ ...actor, tracks, follow }, t('actor.history.easing', { frame: currentFrame }));
   };
 
   const pos = actorPropertyValue(actor, 'position', currentFrame, paths);
@@ -190,13 +194,13 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
           </div>
           <input
             value={actor.name}
-            onChange={(e) => onChange({ ...actor, name: e.target.value }, 'Renomear ator')}
+            onChange={(e) => onChange({ ...actor, name: e.target.value }, t('actor.history.rename'))}
             className="bg-transparent font-bold text-white text-xs outline-none border-b border-transparent focus:border-orange-500 min-w-0"
           />
         </div>
         <button
           onClick={() => onDelete(actor.id)}
-          title="Excluir (Delete)"
+          title={t('actor.delete')}
           className="p-1.5 rounded hover:bg-rose-950/40 text-neutral-400 hover:text-rose-400 transition"
         >
           <Trash2 size={14} />
@@ -205,7 +209,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
 
       {!onScreen && (
         <p className="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded p-2">
-          Fora do trecho visível (F{actor.startFrame}–F{endFrame}). Ajuste a duração na linha do tempo.
+          {t('actor.offscreen', { start: actor.startFrame, end: endFrame })}
         </p>
       )}
 
@@ -214,19 +218,19 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
         <button
           disabled={prevKey === undefined}
           onClick={() => prevKey !== undefined && onJumpToFrame(prevKey)}
-          title="Keyframe anterior"
+          title={t('actor.prevKey')}
           className="p-1 rounded text-neutral-400 hover:text-white disabled:opacity-30"
         >
           <ChevronLeft size={14} />
         </button>
         <span className="text-[10px] text-neutral-400">
-          Frame <b className="text-white font-mono">{currentFrame}</b> ({(currentFrame / fps).toFixed(2)}s){' '}
-          {keyHere ? <span className="text-amber-400">◆ keyframe</span> : <span>sem keyframe</span>}
+          {t('actor.frameInfo')} <b className="text-white font-mono">{currentFrame}</b> ({(currentFrame / fps).toFixed(2)}s){' '}
+          {keyHere ? <span className="text-amber-400">{t('actor.hasKey')}</span> : <span>{t('actor.noKey')}</span>}
         </span>
         <button
           disabled={nextKey === undefined}
           onClick={() => nextKey !== undefined && onJumpToFrame(nextKey)}
-          title="Próximo keyframe"
+          title={t('actor.nextKey')}
           className="p-1 rounded text-neutral-400 hover:text-white disabled:opacity-30"
         >
           <ChevronRight size={14} />
@@ -244,7 +248,8 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
           onAttach={onAttachToPath}
           onSelectPath={onSelectPath}
         />
-        {PROPS.filter(({ id }) => !(following && id === 'position')).map(({ id, label }) => {
+        {PROPS.filter(({ id }) => !(following && id === 'position')).map(({ id, labelKey }) => {
+          const label = t(labelKey);
           const animated = isAnimated(actor, id);
           const keyAtFrame = hasKeyframeAt(track(id), currentFrame);
           return (
@@ -254,13 +259,13 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
                   onClick={() =>
                     onChange(
                       toggleAnimated(actor, id, currentFrame),
-                      animated ? `Parar animação de ${label}` : `Animar ${label}`
+                      animated ? t('actor.history.stopAnimating', { label }) : t('actor.history.animate', { label })
                     )
                   }
                   title={
                     animated
-                      ? 'Desligar animação (remove os keyframes e mantém o valor atual)'
-                      : 'Animar: cria o primeiro keyframe neste frame. Depois, cada mudança grava um keyframe.'
+                      ? t('actor.stopwatchOff')
+                      : t('actor.stopwatchOn')
                   }
                   className={`p-0.5 rounded ${animated ? 'text-orange-400' : 'text-neutral-500 hover:text-white'}`}
                 >
@@ -270,7 +275,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
                 {animated && (
                   <button
                     onClick={() => toggleKeyHere(id, label)}
-                    title={keyAtFrame ? 'Remover keyframe deste frame' : 'Adicionar keyframe neste frame'}
+                    title={keyAtFrame ? t('actor.removeKeyHere') : t('actor.addKeyHere')}
                     className={`w-2.5 h-2.5 rotate-45 border ${
                       keyAtFrame ? 'bg-amber-400 border-amber-300' : 'border-neutral-500 hover:border-amber-400'
                     }`}
@@ -286,16 +291,16 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       {easingHere && (
         <div className="space-y-1">
           <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-            Movimento a partir deste keyframe
+            {t('actor.easingFromKey')}
           </span>
           <select
             value={easingHere}
             onChange={(e) => setEasingHere(e.target.value as EasingName)}
             className={inputClass}
           >
-            {EASING_OPTIONS.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
+            {EASING_NAMES.map((o) => (
+              <option key={o} value={o}>
+                {t(`easing.${o}`)}
               </option>
             ))}
           </select>
@@ -305,13 +310,13 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       {/* Motion path options */}
       <div className="space-y-1.5 pt-2 border-t border-neutral-800">
         <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-          Opções de movimento
+          {t('actor.motionOptions')}
         </span>
         {(
           [
-            ['smoothPath', 'Caminho curvo entre os keyframes de posição'],
-            ['orientToPath', 'Orientar ao caminho dos keyframes (gira na direção do movimento)'],
-            ['flipX', 'Espelhar horizontalmente'],
+            ['smoothPath', t('actor.opt.smoothPath')],
+            ['orientToPath', t('actor.opt.orientToPath')],
+            ['flipX', t('actor.opt.flipX')],
           ] as const
         )
           // The keyframe-path options don't apply while following a drawn path
@@ -346,19 +351,19 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
                     enabled: e.target.checked,
                   },
                 },
-                'Rastro do caminho'
+                t('actor.history.trail')
               )
             }
             className="accent-orange-500"
           />
-          Mostrar rastro (linha do caminho já percorrido)
+          {t('actor.trail')}
         </label>
         {actor.trail?.enabled && (
           <div className="flex items-center gap-2 pl-5 text-[10px] text-neutral-400">
             <input
               type="color"
               value={actor.trail.color}
-              onChange={(e) => onChange({ ...actor, trail: { ...actor.trail!, color: e.target.value } }, 'Cor do rastro')}
+              onChange={(e) => onChange({ ...actor, trail: { ...actor.trail!, color: e.target.value } }, t('actor.history.trailColor'))}
               className="w-6 h-6 bg-transparent border-0 cursor-pointer"
             />
             <input
@@ -367,7 +372,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
               max={30}
               value={actor.trail.width}
               onChange={(e) =>
-                onChange({ ...actor, trail: { ...actor.trail!, width: Math.max(1, Number(e.target.value)) } }, 'Espessura do rastro')
+                onChange({ ...actor, trail: { ...actor.trail!, width: Math.max(1, Number(e.target.value)) } }, t('actor.history.trailWidth'))
               }
               className="w-12 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 font-mono text-white"
             />
@@ -376,10 +381,10 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
               <input
                 type="checkbox"
                 checked={actor.trail.dashed}
-                onChange={(e) => onChange({ ...actor, trail: { ...actor.trail!, dashed: e.target.checked } }, 'Rastro tracejado')}
+                onChange={(e) => onChange({ ...actor, trail: { ...actor.trail!, dashed: e.target.checked } }, t('actor.history.trailDashed'))}
                 className="accent-orange-500"
               />
-              tracejado
+              {t('actor.trailDashed')}
             </label>
           </div>
         )}
@@ -388,32 +393,32 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       {/* Time span & base size */}
       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-800">
         <label className="text-[10px] text-neutral-400 space-y-1">
-          <span>Frame inicial</span>
+          <span>{t('actor.startFrame')}</span>
           <input
             type="number"
             min={1}
             max={totalFrames}
             value={actor.startFrame}
             onChange={(e) =>
-              onChange({ ...actor, startFrame: Math.max(1, Number(e.target.value)) }, 'Frame inicial')
+              onChange({ ...actor, startFrame: Math.max(1, Number(e.target.value)) }, t('actor.history.startFrame'))
             }
             className={inputClass}
           />
         </label>
         <label className="text-[10px] text-neutral-400 space-y-1">
-          <span>Duração (frames)</span>
+          <span>{t('actor.duration')}</span>
           <input
             type="number"
             min={1}
             value={actor.durationFrames}
             onChange={(e) =>
-              onChange({ ...actor, durationFrames: Math.max(1, Number(e.target.value)) }, 'Duração')
+              onChange({ ...actor, durationFrames: Math.max(1, Number(e.target.value)) }, t('actor.history.duration'))
             }
             className={inputClass}
           />
         </label>
         <label className="text-[10px] text-neutral-400 space-y-1 col-span-2">
-          <span>Largura base (px) — a altura acompanha</span>
+          <span>{t('actor.baseWidth')}</span>
           <input
             type="number"
             min={4}
@@ -422,7 +427,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
               const width = Math.max(4, Number(e.target.value));
               onChange(
                 { ...actor, width, height: (actor.height / actor.width) * width },
-                'Tamanho base'
+                t('actor.history.baseSize')
               );
             }}
             className={inputClass}

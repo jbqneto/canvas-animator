@@ -14,6 +14,7 @@ import {
 import { sampleActor, trailPoints } from '../engine/actor';
 import { polylineUpTo, samplePath } from '../engine/path';
 import { sampleTrack, Vec2 } from '../engine/keyframes';
+import { t } from '../i18n';
 import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtils';
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
@@ -786,7 +787,7 @@ export async function exportVideoSequence(
   const first = Math.max(1, Math.min(totalFrames, options.startFrame ?? 1));
   const last = Math.max(first, Math.min(totalFrames, options.endFrame ?? totalFrames));
   if (typeof VideoEncoder === 'undefined') {
-    throw new Error('Este navegador não suporta WebCodecs. Use Chrome ou Edge atualizados.');
+    throw new Error(t('exportVideo.error.noWebCodecs'));
   }
 
   // H.264 requires even dimensions
@@ -801,8 +802,8 @@ export async function exportVideoSequence(
   if (!picked) {
     throw new Error(
       transparent
-        ? 'Este navegador não codifica VP9/VP8, necessários para vídeo transparente.'
-        : 'Nenhum codec de vídeo (H.264, VP9 ou VP8) disponível neste navegador.'
+        ? t('exportVideo.error.noAlphaCodec')
+        : t('exportVideo.error.noCodec')
     );
   }
 

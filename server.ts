@@ -39,7 +39,7 @@ app.get('/api/health', (req, res) => {
 // Chatbot endpoint with multi-turn history & role instruction
 app.post('/api/gemini/chat', async (req, res) => {
   try {
-    const { messages, role, model } = req.body;
+    const { messages, role, model, locale } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required.' });
@@ -62,6 +62,12 @@ Seu objetivo é ajudar o usuário a planejar e criar animações incríveis, inc
     } else if (role === 'generator') {
       systemInstruction += `\nFoco atual: GERADOR DE DADOS DE CENA. Quando sugerir uma animação de gráfico ou stick figure, forneça sugestões concretas de valores numéricos, títulos e sequências de frames que o usuário possa aplicar diretamente.`;
     }
+
+    // Reply in the interface language chosen in the app
+    systemInstruction +=
+      locale === 'en-US'
+        ? '\nAlways answer in English (US).'
+        : '\nResponda sempre em português do Brasil.';
 
     // Format conversation history for Gemini API
     const formattedContents = messages.map((m: { role: string; content: string }) => ({

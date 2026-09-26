@@ -3,6 +3,7 @@
  * so Ctrl+S overwrites the same file; falls back to download / file input elsewhere.
  */
 import { PROJECT_EXTENSION } from './projectFile';
+import { t } from '../i18n';
 
 // Minimal typings: the File System Access API is not in TypeScript's DOM lib yet
 interface WritableFileStream {
@@ -22,8 +23,9 @@ declare global {
   }
 }
 
-const PICKER_TYPES: PickerType[] = [
-  { description: 'Projeto FlashMotion', accept: { 'application/json': [PROJECT_EXTENSION] } },
+// A function so the description follows the current language
+const pickerTypes = (): PickerType[] => [
+  { description: t('project.fileType'), accept: { 'application/json': [PROJECT_EXTENSION] } },
 ];
 
 export const supportsFileSystemAccess = () =>
@@ -35,7 +37,7 @@ const isAbort = (err: unknown) => err instanceof DOMException && err.name === 'A
 export async function openProjectFile(): Promise<{ text: string; fileName: string; handle?: ProjectFileHandle } | null> {
   if (window.showOpenFilePicker) {
     try {
-      const [handle] = await window.showOpenFilePicker({ types: PICKER_TYPES });
+      const [handle] = await window.showOpenFilePicker({ types: pickerTypes() });
       const file = await handle.getFile();
       return { text: await file.text(), fileName: file.name, handle };
     } catch (err) {
@@ -72,7 +74,7 @@ export async function saveProjectFile(
       const target =
         handle && !saveAs
           ? handle
-          : await window.showSaveFilePicker!({ types: PICKER_TYPES, suggestedName: `${suggestedName}${PROJECT_EXTENSION}` });
+          : await window.showSaveFilePicker!({ types: pickerTypes(), suggestedName: `${suggestedName}${PROJECT_EXTENSION}` });
       const writable = await target.createWritable();
       await writable.write(blob);
       await writable.close();

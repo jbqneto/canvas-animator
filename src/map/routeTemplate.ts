@@ -6,6 +6,7 @@
 import type { ActorFollow, MotionPath, TextOverlay } from '../types';
 import type { Track, Vec2 } from '../engine/keyframes';
 import { buildFollowProgress, samplePath } from '../engine/path';
+import { t } from '../i18n';
 
 export interface RouteStop {
   name: string;
@@ -71,7 +72,7 @@ export function buildRouteTemplate(stops: RouteStop[], timing: RouteTiming, path
 
   const path: MotionPath = {
     id: pathId,
-    name: 'Rota',
+    name: t('route.pathName'),
     points,
     smooth: true,
     closed: false,

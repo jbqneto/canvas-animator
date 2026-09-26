@@ -1,31 +1,32 @@
+import { t } from '../i18n';
 import { StickFigure, Joint, Bone } from '../types';
 
-export function createDefaultStickFigure(id: string = 'stick-1', name: string = 'Stick Palito', x: number = 300, y: number = 260): StickFigure {
+export function createDefaultStickFigure(id: string = 'stick-1', name: string = t('selection.stick'), x: number = 300, y: number = 260): StickFigure {
   const joints: Record<string, Joint> = {
-    head: { id: 'head', name: 'Cabeça', x: 0, y: -90, radius: 22 },
-    neck: { id: 'neck', name: 'Pescoço', x: 0, y: -65 },
-    chest: { id: 'chest', name: 'Peito', x: 0, y: -35 },
-    pelvis: { id: 'pelvis', name: 'Pélvis', x: 0, y: 15 },
+    head: { id: 'head', x: 0, y: -90, radius: 22 },
+    neck: { id: 'neck', x: 0, y: -65 },
+    chest: { id: 'chest', x: 0, y: -35 },
+    pelvis: { id: 'pelvis', x: 0, y: 15 },
     
     // Left Arm
-    lShoulder: { id: 'lShoulder', name: 'Ombro E', x: -16, y: -55 },
-    lElbow: { id: 'lElbow', name: 'Cotovelo E', x: -40, y: -30 },
-    lHand: { id: 'lHand', name: 'Mão E', x: -45, y: 5 },
+    lShoulder: { id: 'lShoulder', x: -16, y: -55 },
+    lElbow: { id: 'lElbow', x: -40, y: -30 },
+    lHand: { id: 'lHand', x: -45, y: 5 },
 
     // Right Arm
-    rShoulder: { id: 'rShoulder', name: 'Ombro D', x: 16, y: -55 },
-    rElbow: { id: 'rElbow', name: 'Cotovelo D', x: 40, y: -30 },
-    rHand: { id: 'rHand', name: 'Mão D', x: 45, y: 5 },
+    rShoulder: { id: 'rShoulder', x: 16, y: -55 },
+    rElbow: { id: 'rElbow', x: 40, y: -30 },
+    rHand: { id: 'rHand', x: 45, y: 5 },
 
     // Left Leg
-    lHip: { id: 'lHip', name: 'Quadril E', x: -14, y: 20 },
-    lKnee: { id: 'lKnee', name: 'Joelho E', x: -20, y: 65 },
-    lFoot: { id: 'lFoot', name: 'Pé E', x: -22, y: 110 },
+    lHip: { id: 'lHip', x: -14, y: 20 },
+    lKnee: { id: 'lKnee', x: -20, y: 65 },
+    lFoot: { id: 'lFoot', x: -22, y: 110 },
 
     // Right Leg
-    rHip: { id: 'rHip', name: 'Quadril D', x: 14, y: 20 },
-    rKnee: { id: 'rKnee', name: 'Joelho D', x: 20, y: 65 },
-    rFoot: { id: 'rFoot', name: 'Pé D', x: 22, y: 110 },
+    rHip: { id: 'rHip', x: 14, y: 20 },
+    rKnee: { id: 'rKnee', x: 20, y: 65 },
+    rFoot: { id: 'rFoot', x: 22, y: 110 },
   };
 
   const bones: Bone[] = [
@@ -67,16 +68,13 @@ export function createDefaultStickFigure(id: string = 'stick-1', name: string = 
   };
 }
 
+/** A ready-made pose. Its label is translated as `pose.<key>.name` / `pose.<key>.desc`. */
 export interface StickPosePreset {
-  name: string;
-  description: string;
   joints: Record<string, { x: number; y: number }>;
 }
 
 export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
   stand: {
-    name: 'Em Pé (Padrão)',
-    description: 'Postura neutra relaxada',
     joints: {
       head: { x: 0, y: -90 },
       neck: { x: 0, y: -65 },
@@ -97,8 +95,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   pointingChart: {
-    name: 'Apontando para Gráfico',
-    description: 'Apresentador indicando dados com confiança',
     joints: {
       head: { x: 8, y: -90 },
       neck: { x: 4, y: -65 },
@@ -119,8 +115,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   wave: {
-    name: 'Acenando (Olá!)',
-    description: 'Braço erguido cumprimentando',
     joints: {
       head: { x: 0, y: -90 },
       neck: { x: 0, y: -65 },
@@ -141,8 +135,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   walkA: {
-    name: 'Caminhada (Passo A)',
-    description: 'Perna esquerda à frente, braço direito à frente',
     joints: {
       head: { x: 5, y: -88 },
       neck: { x: 4, y: -63 },
@@ -163,8 +155,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   walkB: {
-    name: 'Caminhada (Passo B)',
-    description: 'Perna direita à frente, braço esquerdo à frente',
     joints: {
       head: { x: 5, y: -88 },
       neck: { x: 4, y: -63 },
@@ -185,8 +175,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   run: {
-    name: 'Corrida Veloz',
-    description: 'Corpo inclinado para frente em aceleração máxima',
     joints: {
       head: { x: 25, y: -80 },
       neck: { x: 20, y: -55 },
@@ -207,8 +195,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   jump: {
-    name: 'Salto Vitorioso',
-    description: 'Braços abertos no ar e pernas flexionadas',
     joints: {
       head: { x: 0, y: -105 },
       neck: { x: 0, y: -80 },
@@ -229,8 +215,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   kick: {
-    name: 'Golpe de Artes Marciais',
-    description: 'Chute alto estilo Flash combat',
     joints: {
       head: { x: -25, y: -85 },
       neck: { x: -20, y: -60 },
@@ -251,8 +235,6 @@ export const STICK_POSE_PRESETS: Record<string, StickPosePreset> = {
     },
   },
   thinker: {
-    name: 'Pensador & Dúvida',
-    description: 'Mão no queixo analisando informações',
     joints: {
       head: { x: 5, y: -90 },
       neck: { x: 0, y: -65 },

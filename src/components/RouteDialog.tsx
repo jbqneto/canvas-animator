@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Globe2, Loader2, Plane, X } from 'lucide-react';
 import type { ActorOverlay } from '../types';
 import { Country, loadWorld, MapFraming } from '../map/worldMap';
 import { routeDurationFrames } from '../map/routeTemplate';
+import { useI18n } from '../i18n';
 
 export interface RouteRequest {
   stops: Country[];
@@ -29,6 +30,7 @@ const inputClass =
   'bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-xs text-white focus:border-sky-500 outline-none';
 
 export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCreate, actors, fps }) => {
+  const { t, locale } = useI18n();
   const [countries, setCountries] = useState<Country[] | null>(null);
   const [query, setQuery] = useState('');
   const [stops, setStops] = useState<Country[]>([]);
@@ -41,9 +43,17 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
   const [vehicleActorId, setVehicleActorId] = useState<string>('');
   const [busy, setBusy] = useState(false);
 
+  // Country names follow the interface language
   useEffect(() => {
-    if (isOpen && !countries) loadWorld().then((w) => setCountries(w.countries));
-  }, [isOpen, countries]);
+    if (!isOpen) return;
+    let cancelled = false;
+    loadWorld(locale).then((w) => {
+      if (!cancelled) setCountries(w.countries);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, locale]);
 
   const matches = useMemo(() => {
     if (!countries || !query.trim()) return [];
@@ -75,21 +85,20 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Globe2 size={16} className="text-sky-400" /> Rota no mapa
+            <Globe2 size={16} className="text-sky-400" /> {t('route.title')}
           </h3>
           <button onClick={onClose} disabled={busy} className="p-1 rounded text-neutral-400 hover:text-white">
             <X size={16} />
           </button>
         </div>
         <p className="text-[11px] text-neutral-500">
-          Modelo pronto: cria o mapa, um <b>caminho</b> pelos países e uma imagem que o <b>segue</b>, parando em cada
-          um. Depois tudo pode ser editado como qualquer caminho (estilo, pontos, tempo, paradas).
+          {t('route.description')}
         </p>
 
         <div className="space-y-1.5 relative">
           <input
             autoFocus
-            placeholder={countries ? 'Buscar país… (ex: Portugal)' : 'Carregando mapa…'}
+            placeholder={countries ? t('route.search') : t('route.loadingMap')}
             disabled={!countries}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -135,32 +144,32 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
               </button>
             </li>
           ))}
-          {stops.length < 2 && <li className="text-[11px] text-neutral-500">Adicione pelo menos 2 países.</li>}
+          {stops.length < 2 && <li className="text-[11px] text-neutral-500">{t('route.needTwo')}</li>}
         </ol>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1">
-            <span className="block text-[10px] text-neutral-400">Segundos de voo por trecho</span>
+            <span className="block text-[10px] text-neutral-400">{t('route.secondsPerLeg')}</span>
             <input type="number" min={0.5} step={0.5} value={secondsPerLeg} onChange={(e) => setSecondsPerLeg(Math.max(0.5, Number(e.target.value)))} className={`${inputClass} w-full`} />
           </label>
           <label className="space-y-1">
-            <span className="block text-[10px] text-neutral-400">Segundos parado em cada país</span>
+            <span className="block text-[10px] text-neutral-400">{t('route.pauseSeconds')}</span>
             <input type="number" min={0} step={0.5} value={pauseSeconds} onChange={(e) => setPauseSeconds(Math.max(0, Number(e.target.value)))} className={`${inputClass} w-full`} />
           </label>
           <label className="space-y-1">
-            <span className="block text-[10px] text-neutral-400">Enquadramento</span>
+            <span className="block text-[10px] text-neutral-400">{t('route.framing')}</span>
             <select value={framing} onChange={(e) => setFraming(e.target.value as MapFraming)} className={`${inputClass} w-full`}>
-              <option value="world">Mundo inteiro</option>
-              <option value="route">Aproximar nos países da rota</option>
+              <option value="world">{t('route.framing.world')}</option>
+              <option value="route">{t('route.framing.route')}</option>
             </select>
           </label>
           <label className="space-y-1">
-            <span className="block text-[10px] text-neutral-400">Veículo</span>
+            <span className="block text-[10px] text-neutral-400">{t('route.vehicle')}</span>
             <select value={vehicleActorId} onChange={(e) => setVehicleActorId(e.target.value)} className={`${inputClass} w-full`}>
-              <option value="">Avião (padrão)</option>
+              <option value="">{t('route.vehicle.plane')}</option>
               {actors.map((a) => (
                 <option key={a.id} value={a.id}>
-                  Imagem: {a.name}
+                  {t('route.vehicle.image', { name: a.name })}
                 </option>
               ))}
             </select>
@@ -169,15 +178,15 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
         <div className="flex gap-4">
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={highlight} onChange={(e) => setHighlight(e.target.checked)} className="accent-sky-500" />
-            Destacar países da rota
+            {t('route.highlight')}
           </label>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} className="accent-sky-500" />
-            Nome ao pousar
+            {t('route.labels')}
           </label>
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={arc} onChange={(e) => setArc(e.target.checked)} className="accent-sky-500" />
-            Voo em arco
+            {t('route.arc')}
           </label>
         </div>
 
@@ -195,7 +204,7 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold disabled:opacity-40"
         >
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Plane size={14} />}
-          Criar animação {totalSeconds > 0 && `(${totalSeconds.toFixed(1)}s)`}
+          {t('route.create')} {totalSeconds > 0 && `(${totalSeconds.toFixed(1)}s)`}
         </button>
       </div>
     </div>

@@ -52,7 +52,7 @@ describe('project file', () => {
     expect(() => parseProject('not json')).toThrow(ProjectFileError);
     expect(() => parseProject('{"hello":1}')).toThrow(ProjectFileError);
     expect(() => parseProject(JSON.stringify({ format: 'flashmotion-project', version: 99, project: {} }))).toThrow(
-      /versão mais nova/
+      ProjectFileError
     );
   });
 

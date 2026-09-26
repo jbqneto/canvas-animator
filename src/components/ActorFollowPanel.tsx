@@ -5,13 +5,14 @@ import { actorPropertyValue } from '../engine/actor';
 import { buildFollowProgress, samplePath } from '../engine/path';
 import {
   DEFAULT_EASING,
-  EASING_OPTIONS,
+  EASING_NAMES,
   EasingName,
   hasKeyframeAt,
   removeKeyframe,
   sampleTrack,
   setKeyframe,
 } from '../engine/keyframes';
+import { useI18n } from '../i18n';
 
 interface ActorFollowPanelProps {
   actor: ActorOverlay;
@@ -40,6 +41,7 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
   onAttach,
   onSelectPath,
 }) => {
+  const { t } = useI18n();
   const follow = actor.follow;
   const path = follow ? paths.find((p) => p.id === follow.pathId) : undefined;
   const [pickId, setPickId] = useState('');
@@ -59,16 +61,15 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
   if (!follow || !path) {
     return (
       <div className="space-y-1.5">
-        <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">Seguir caminho</span>
+        <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">{t('follow.title')}</span>
         {paths.length === 0 ? (
           <p className="text-[10px] text-neutral-500">
-            Desenhe um caminho com a ferramenta <RouteIcon size={10} className="inline" /> (barra da esquerda) para esta
-            imagem percorrer.
+            <RouteIcon size={10} className="inline" /> {t('follow.noPaths')}
           </p>
         ) : (
           <div className="flex gap-1.5">
             <select value={pickId} onChange={(e) => setPickId(e.target.value)} className={inputClass}>
-              <option value="">Escolher caminho…</option>
+              <option value="">{t('follow.choosePath')}</option>
               {paths.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -80,7 +81,7 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
               onClick={() => onAttach(actor.id, pickId)}
               className="px-2 rounded bg-sky-500/15 border border-sky-500/40 text-sky-300 disabled:opacity-40 flex items-center gap-1 text-[11px]"
             >
-              <Link2 size={12} /> Seguir
+              <Link2 size={12} /> {t('follow.follow')}
             </button>
           </div>
         )}
@@ -105,7 +106,7 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
           holdFrames,
         }),
       },
-      holdFrames > 0 ? 'Percurso com paradas nos pontos' : 'Tempo do percurso'
+      holdFrames > 0 ? t('follow.history.timingStops') : t('follow.history.timing')
     );
   };
 
@@ -114,10 +115,10 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
       <div className="flex items-center justify-between">
         <button
           onClick={() => onSelectPath(path.id)}
-          title="Selecionar o caminho para editar a forma e o estilo"
+          title={t('follow.selectPath')}
           className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-300 hover:text-sky-200"
         >
-          <RouteIcon size={13} /> Seguindo “{path.name}”
+          <RouteIcon size={13} /> {t('follow.following', { name: path.name })}
         </button>
         <button
           onClick={() => {
@@ -125,10 +126,10 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
             const here = actorPropertyValue(actor, 'position', currentFrame, paths);
             onChange(
               { ...actor, follow: undefined, tracks: { ...actor.tracks, position: [] }, base: { ...actor.base, ...here } },
-              'Parar de seguir caminho'
+              t('follow.history.unlink')
             );
           }}
-          title="Desligar do caminho (a imagem fica onde está agora)"
+          title={t('follow.unlink')}
           className="p-1 rounded text-neutral-400 hover:text-rose-300"
         >
           <Unlink size={13} />
@@ -139,34 +140,34 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
         <input
           type="checkbox"
           checked={follow.orient}
-          onChange={(e) => setFollow({ orient: e.target.checked }, 'Orientar ao caminho')}
+          onChange={(e) => setFollow({ orient: e.target.checked }, t('follow.history.orient'))}
           className="accent-sky-500"
         />
-        Girar na direção do caminho
+        {t('follow.orient')}
       </label>
 
       {/* Quick timing: whole path between two frames, optionally stopping at each point */}
       <div className="grid grid-cols-2 gap-1.5 text-[10px] text-neutral-400">
         <label className="space-y-0.5">
-          <span>Sai no frame</span>
+          <span>{t('follow.departs')}</span>
           <input type="number" min={1} value={start} onChange={(e) => setStart(Number(e.target.value))} className={inputClass} />
         </label>
         <label className="space-y-0.5">
-          <span>Chega no frame</span>
+          <span>{t('follow.arrives')}</span>
           <input type="number" min={1} value={end} onChange={(e) => setEnd(Number(e.target.value))} className={inputClass} />
         </label>
         <label className="space-y-0.5">
-          <span>Movimento</span>
+          <span>{t('follow.motion')}</span>
           <select value={easing} onChange={(e) => setEasing(e.target.value as EasingName)} className={inputClass}>
-            {EASING_OPTIONS.filter((o) => o.id !== 'hold').map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
+            {EASING_NAMES.filter((o) => o !== 'hold').map((o) => (
+              <option key={o} value={o}>
+                {t(`easing.${o}`)}
               </option>
             ))}
           </select>
         </label>
         <label className="space-y-0.5">
-          <span>Parar em cada ponto (s)</span>
+          <span>{t('follow.stopSeconds')}</span>
           <input
             type="number"
             min={0}
@@ -181,13 +182,15 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
         onClick={applyTiming}
         className="w-full py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-200 text-[11px]"
       >
-        Aplicar tempo {stopSeconds > 0 ? `com paradas (${path.points.length - 2} pontos intermediários)` : ''}
+        {stopSeconds > 0
+          ? t('follow.applyWithStops', { count: path.points.length - 2 })
+          : t('follow.apply')}
       </button>
 
       {/* Fine control: progress keyframe at the current frame */}
       <div className="space-y-1">
         <div className="flex items-center justify-between text-[10px] text-neutral-400">
-          <span>Progresso no frame {currentFrame}</span>
+          <span>{t('follow.progressAt', { frame: currentFrame })}</span>
           <button
             onClick={() =>
               setFollow(
@@ -196,10 +199,10 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
                     ? removeKeyframe(follow.progress, currentFrame)
                     : setKeyframe(follow.progress, currentFrame, progressNow),
                 },
-                keyHere ? 'Remover keyframe de progresso' : 'Keyframe de progresso'
+                keyHere ? t('follow.history.removeProgressKey') : t('follow.history.progressKey')
               )
             }
-            title={keyHere ? 'Remover keyframe deste frame' : 'Adicionar keyframe neste frame'}
+            title={keyHere ? t('actor.removeKeyHere') : t('actor.addKeyHere')}
             className={`w-2.5 h-2.5 rotate-45 border ${
               keyHere ? 'bg-amber-400 border-amber-300' : 'border-neutral-500 hover:border-amber-400'
             }`}
@@ -215,7 +218,7 @@ export const ActorFollowPanel: React.FC<ActorFollowPanelProps> = ({
             onChange={(e) =>
               setFollow(
                 { progress: setKeyframe(follow.progress, currentFrame, Number(e.target.value) / 100) },
-                `Progresso ${e.target.value}% (frame ${currentFrame})`
+                t('follow.history.progress', { value: e.target.value, frame: currentFrame })
               )
             }
             className="w-full accent-sky-500"

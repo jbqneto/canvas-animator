@@ -28,6 +28,7 @@ import {
   Route as RouteIcon,
 } from 'lucide-react';
 import { isTypingTarget } from '../utils/keyboard';
+import { useI18n } from '../i18n';
 import {
   FrameData,
   ChartOverlay,
@@ -131,6 +132,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onUpdatePath,
   onCommitPath,
 }) => {
+  const { t } = useI18n();
   const rulerRef = useRef<HTMLDivElement>(null);
   const tracksContainerRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
@@ -179,7 +181,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       if (drag.toFrame !== drag.fromFrame && drag.baseSnapshot) {
         onCommitActor(
           moveActorKeys(drag.actor, drag.fromFrame, drag.toFrame),
-          `Mover keyframe ${drag.fromFrame} → ${drag.toFrame}`,
+          t('timeline.history.moveKey', { from: drag.fromFrame, to: drag.toFrame }),
           drag.baseSnapshot
         );
       } else {
@@ -193,7 +195,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [keyDrag, totalFrames, onUpdateActor, onCommitActor, setCurrentFrame]);
+  }, [keyDrag, totalFrames, onUpdateActor, onCommitActor, setCurrentFrame, t]);
 
   // Close "+ Camada" dropdown on outside click
   useEffect(() => {
@@ -338,19 +340,25 @@ export const Timeline: React.FC<TimelineProps> = ({
 
     const onWindowMouseUp = () => {
       if (drag.hasMoved && drag.baseSnapshot) {
-        const verb = drag.mode === 'move' ? 'Mover' : 'Ajustar duração de';
+        const moving = drag.mode === 'move';
         if (drag.type === 'chart' && onCommitChart) {
           const chart = charts.find((c) => c.id === drag.id);
-          if (chart) onCommitChart(chart, `${verb} Gráfico na Linha do Tempo`, drag.baseSnapshot);
+          if (chart) onCommitChart(chart, moving ? t('timeline.history.moveChart') : t('timeline.history.trimChart'), drag.baseSnapshot);
         } else if (drag.type === 'text' && onCommitText) {
           const txt = texts.find((t) => t.id === drag.id);
-          if (txt) onCommitText(txt, `${verb} Texto na Linha do Tempo`, drag.baseSnapshot);
+          if (txt) onCommitText(txt, moving ? t('timeline.history.moveText') : t('timeline.history.trimText'), drag.baseSnapshot);
         } else if (drag.type === 'path') {
           const path = paths.find((p) => p.id === drag.id);
-          if (path) onCommitPath(path, `${verb} caminho na Linha do Tempo`, drag.baseSnapshot);
+          if (path) onCommitPath(path, moving ? t('timeline.history.movePath') : t('timeline.history.trimPath'), drag.baseSnapshot);
         } else if (drag.type === 'actor') {
           const actor = actors.find((a) => a.id === drag.id);
-          if (actor) onCommitActor(actor, `${verb} "${actor.name}" na Linha do Tempo`, drag.baseSnapshot);
+          if (actor) onCommitActor(
+              actor,
+              moving
+                ? t('timeline.history.moveActor', { name: actor.name })
+                : t('timeline.history.trimActor', { name: actor.name }),
+              drag.baseSnapshot
+            );
         }
       }
       setActiveClipDrag(null);
@@ -378,6 +386,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     onCommitActor,
     onUpdatePath,
     onCommitPath,
+    t,
   ]);
 
   const getLayerIcon = (type: string) => {
@@ -414,7 +423,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             <button
               id="timeline-prev-frame-btn"
               onClick={() => setCurrentFrame((f) => Math.max(1, f - 1))}
-              title="Frame Anterior (Seta Esquerda)"
+              title={t('timeline.prevFrame')}
               className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
             >
               <SkipBack size={14} />
@@ -423,7 +432,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             <button
               id="timeline-play-btn"
               onClick={() => setIsPlaying((p) => !p)}
-              title="Play/Pause (Espaço)"
+              title={t('timeline.playPause')}
               className="w-7 h-7 rounded-full bg-sky-500 hover:bg-sky-400 text-neutral-950 flex items-center justify-center font-bold shadow-md shadow-sky-500/20 transition active:scale-95"
             >
               {isPlaying ? (
@@ -436,7 +445,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             <button
               id="timeline-next-frame-btn"
               onClick={() => setCurrentFrame((f) => Math.min(totalFrames, f + 1))}
-              title="Próximo Frame (Seta Direita)"
+              title={t('timeline.nextFrame')}
               className="p-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
             >
               <SkipForward size={14} />
@@ -445,7 +454,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             <button
               id="timeline-loop-btn"
               onClick={() => setIsLooping((l) => !l)}
-              title="Repetir Loop"
+              title={t('timeline.loop')}
               className={`p-1 rounded transition ${
                 isLooping
                   ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
@@ -460,7 +469,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
           {/* Current Frame indicator badge */}
           <span className="text-[11px] font-mono text-neutral-300">
-            Frame <span className="text-sky-400 font-bold">{currentFrame}</span> / {totalFrames}
+            {t('timeline.frame')} <span className="text-sky-400 font-bold">{currentFrame}</span> / {totalFrames}
           </span>
         </div>
 
@@ -469,21 +478,21 @@ export const Timeline: React.FC<TimelineProps> = ({
           <button
             id="timeline-duplicate-frame-btn"
             onClick={onDuplicateCurrentFrame}
-            title="Copiar pose do frame atual para o próximo (ideal para animação fluida passo-a-passo)"
+            title={t('timeline.duplicatePoseHint')}
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 transition font-medium text-[11px]"
           >
             <Copy size={12} />
-            Duplicar Pose (F6)
+            {t('timeline.duplicatePose')}
           </button>
 
           <button
             id="timeline-clear-frame-btn"
             onClick={onClearCurrentFrame}
-            title="Limpar desenhos e palitos do frame atual"
+            title={t('timeline.clearFrameHint')}
             className="flex items-center gap-1 px-2 py-1 rounded hover:bg-rose-950/40 text-neutral-400 hover:text-rose-300 border border-transparent hover:border-rose-800/40 transition text-[11px]"
           >
             <Trash2 size={12} />
-            Limpar Frame
+            {t('timeline.clearFrame')}
           </button>
         </div>
 
@@ -509,7 +518,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           <div className="flex items-center gap-1">
-            <span className="text-neutral-400 text-[11px]">Frames:</span>
+            <span className="text-neutral-400 text-[11px]">{t('timeline.frames')}</span>
             <input
               type="number"
               min="24"
@@ -533,7 +542,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div className="h-8 px-2.5 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between text-[10px] text-neutral-300 font-semibold shrink-0">
             <div className="flex items-center gap-1.5">
               <Layers size={13} className="text-sky-400" />
-              <span>Camadas ({layers.length})</span>
+              <span>{t('timeline.layers', { count: layers.length })}</span>
             </div>
 
             {/* Quick Add Buttons & Dropdown Menu */}
@@ -541,29 +550,29 @@ export const Timeline: React.FC<TimelineProps> = ({
               {/* Quick Add Buttons for instantaneous 1-click creation */}
               <button
                 onClick={() => onAddLayer('chart')}
-                title="Adicionar Novo Gráfico Animado"
+                title={t('timeline.addChartHint')}
                 className="px-1.5 py-0.5 rounded bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 text-[10px] font-medium flex items-center gap-1 transition"
               >
                 <BarChart3 size={11} />
-                <span>+ Gráfico</span>
+                <span>{t('timeline.addChart')}</span>
               </button>
 
               <button
                 onClick={() => onAddLayer('text')}
-                title="Adicionar Novo Texto Cinético / Contador"
+                title={t('timeline.addTextHint')}
                 className="px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-[10px] font-medium flex items-center gap-1 transition"
               >
                 <Type size={11} />
-                <span>+ Texto</span>
+                <span>{t('timeline.addText')}</span>
               </button>
 
               <button
                 onClick={() => onAddLayer('group')}
-                title="Adicionar Novo Boneco Palito"
+                title={t('timeline.addStickHint')}
                 className="px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-medium flex items-center gap-1 transition"
               >
                 <User size={11} />
-                <span>+ Boneco</span>
+                <span>{t('timeline.addStick')}</span>
               </button>
 
               {/* Dropdown Menu Toggle */}
@@ -571,7 +580,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 <button
                   id="timeline-add-layer-dropdown-btn"
                   onClick={() => setAddMenuOpen((prev) => !prev)}
-                  title="Menu de Todas as Camadas"
+                  title={t('timeline.layersMenu')}
                   className={`p-1 rounded transition border ${
                     addMenuOpen
                       ? 'bg-neutral-700 text-white border-sky-500'
@@ -585,7 +594,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 {addMenuOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-52 bg-neutral-900 border border-neutral-700 rounded-lg shadow-2xl py-1.5 z-50 space-y-0.5">
                     <div className="px-2.5 py-1 text-[9px] font-bold text-neutral-400 uppercase tracking-wider border-b border-neutral-800 mb-1">
-                      Adicionar Nova Camada
+                      {t('timeline.addLayer')}
                     </div>
                     <button
                       onClick={() => {
@@ -596,8 +605,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <BarChart3 size={14} className="text-sky-400" />
                       <div>
-                        <div className="font-medium text-white">Camada de Gráfico</div>
-                        <div className="text-[10px] text-neutral-400">Barras, rosca, linha e métricas</div>
+                        <div className="font-medium text-white">{t('timeline.layer.chart')}</div>
+                        <div className="text-[10px] text-neutral-400">{t('timeline.layer.chartDesc')}</div>
                       </div>
                     </button>
                     <button
@@ -609,8 +618,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <Type size={14} className="text-emerald-400" />
                       <div>
-                        <div className="font-medium text-white">Camada de Texto / Contador</div>
-                        <div className="text-[10px] text-neutral-400">Texto cinético e contador numérico</div>
+                        <div className="font-medium text-white">{t('timeline.layer.text')}</div>
+                        <div className="text-[10px] text-neutral-400">{t('timeline.layer.textDesc')}</div>
                       </div>
                     </button>
                     <button
@@ -622,8 +631,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <User size={14} className="text-amber-400" />
                       <div>
-                        <div className="font-medium text-white">Camada de Boneco Palito</div>
-                        <div className="text-[10px] text-neutral-400">Boneco articulado e poses</div>
+                        <div className="font-medium text-white">{t('timeline.layer.stick')}</div>
+                        <div className="text-[10px] text-neutral-400">{t('timeline.layer.stickDesc')}</div>
                       </div>
                     </button>
                     <button
@@ -635,8 +644,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <PenTool size={14} className="text-pink-400" />
                       <div>
-                        <div className="font-medium text-white">Camada de Desenho Livre</div>
-                        <div className="text-[10px] text-neutral-400">Caneta e traços manuais</div>
+                        <div className="font-medium text-white">{t('timeline.layer.drawing')}</div>
+                        <div className="text-[10px] text-neutral-400">{t('timeline.layer.drawingDesc')}</div>
                       </div>
                     </button>
                     <button
@@ -648,8 +657,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <Video size={14} className="text-purple-400" />
                       <div>
-                        <div className="font-medium text-white">Camada de Fundo de Vídeo</div>
-                        <div className="text-[10px] text-neutral-400">Cenário de fundo</div>
+                        <div className="font-medium text-white">{t('timeline.layer.video')}</div>
+                        <div className="text-[10px] text-neutral-400">{t('timeline.layer.videoDesc')}</div>
                       </div>
                     </button>
                   </div>
@@ -726,7 +735,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           setEditingLayerId(layer.id);
                           setEditingName(layer.name);
                         }}
-                        title="Clique duplo para renomear"
+                        title={t('timeline.renameHint')}
                         className={`truncate text-[11px] select-none ${
                           isSelected ? 'font-semibold text-white' : 'text-neutral-300'
                         }`}
@@ -743,7 +752,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         e.stopPropagation();
                         onToggleLayerVisible(layer.id);
                       }}
-                      title={layer.visible ? 'Ocultar Camada' : 'Exibir Camada'}
+                      title={layer.visible ? t('timeline.hideLayer') : t('timeline.showLayer')}
                       className={`p-1 rounded hover:bg-neutral-800 transition ${
                         !layer.visible ? 'text-neutral-600' : 'text-neutral-300 hover:text-white'
                       }`}
@@ -756,7 +765,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         e.stopPropagation();
                         onToggleLayerLock(layer.id);
                       }}
-                      title={layer.locked ? 'Desbloquear Camada' : 'Bloquear Camada'}
+                      title={layer.locked ? t('timeline.unlockLayer') : t('timeline.lockLayer')}
                       className={`p-1 rounded hover:bg-neutral-800 transition ${
                         layer.locked ? 'text-amber-400' : 'text-neutral-500 hover:text-white'
                       }`}
@@ -770,7 +779,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         e.stopPropagation();
                         onMoveLayer(layer.id, 'up');
                       }}
-                      title="Mover para Cima"
+                      title={t('timeline.moveUp')}
                       className="p-1 rounded hover:bg-neutral-800 disabled:opacity-20 text-neutral-400 hover:text-white transition"
                     >
                       <ChevronUp size={12} />
@@ -782,7 +791,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         e.stopPropagation();
                         onMoveLayer(layer.id, 'down');
                       }}
-                      title="Mover para Baixo"
+                      title={t('timeline.moveDown')}
                       className="p-1 rounded hover:bg-neutral-800 disabled:opacity-20 text-neutral-400 hover:text-white transition"
                     >
                       <ChevronDown size={12} />
@@ -794,7 +803,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           e.stopPropagation();
                           onDeleteLayer(layer.id);
                         }}
-                        title="Excluir Camada"
+                        title={t('timeline.deleteLayer')}
                         className="p-1 rounded hover:bg-rose-950/40 text-neutral-500 hover:text-rose-400 transition ml-0.5"
                       >
                         <Trash2 size={12} />
@@ -969,15 +978,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           chart.durationFrames
                         )
                       }
-                      title={`Gráfico: "${chart.title}" | Início: Frame ${
-                        chart.startFrame
-                      } | Fim: Frame ${
-                        chart.startFrame + chart.durationFrames
-                      } | Duração: ${chart.durationFrames} frames (${(
-                        chart.durationFrames / fps
-                      ).toFixed(
-                        1
-                      )}s)\n💡 Dica: Arraste a borda direita para estender a duração até 120 frames para uma animação duas vezes mais suave!`}
+                      title={t('timeline.clipInfo', { kind: t('selection.chart'), name: chart.title, start: chart.startFrame, end: chart.startFrame + chart.durationFrames, duration: chart.durationFrames, seconds: (chart.durationFrames / fps).toFixed(1) })}
                       className={`absolute top-1 bottom-1 rounded z-10 flex items-center justify-between px-1 select-none shadow-md border group cursor-grab active:cursor-grabbing transition-all ${
                         selectedObject?.type === 'chart' &&
                         selectedObject.id === chart.id
@@ -997,7 +998,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             chart.durationFrames
                           )
                         }
-                        title="Arraste para alterar o Frame Inicial"
+                        title={t('timeline.trimStart')}
                         className="h-full w-2.5 flex items-center justify-center cursor-col-resize hover:bg-white/30 rounded-l -ml-1 text-[8px] font-mono text-sky-300"
                       >
                         ▌
@@ -1034,7 +1035,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             chart.durationFrames
                           )
                         }
-                        title="Arraste para estender ou encurtar a duração (ex: 60 ou 120 frames)"
+                        title={t('timeline.trimEnd')}
                         className="h-full w-3 flex items-center justify-center cursor-col-resize hover:bg-white/30 rounded-r -mr-1 text-[8px] font-mono text-sky-300 font-bold"
                       >
                         ▐
@@ -1073,13 +1074,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           text.durationFrames
                         )
                       }
-                      title={`Texto: "${text.text}" | Início: Frame ${
-                        text.startFrame
-                      } | Fim: Frame ${
-                        text.startFrame + text.durationFrames
-                      } | Duração: ${text.durationFrames} frames (${(
-                        text.durationFrames / fps
-                      ).toFixed(1)}s)`}
+                      title={t('timeline.clipInfo', { kind: t('selection.text'), name: text.text, start: text.startFrame, end: text.startFrame + text.durationFrames, duration: text.durationFrames, seconds: (text.durationFrames / fps).toFixed(1) })}
                       className={`absolute top-1 bottom-1 rounded z-10 flex items-center justify-between px-1 select-none shadow-md border group cursor-grab active:cursor-grabbing transition-all ${
                         selectedObject?.type === 'text' &&
                         selectedObject.id === text.id
@@ -1099,7 +1094,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             text.durationFrames
                           )
                         }
-                        title="Arraste para alterar o Frame Inicial"
+                        title={t('timeline.trimStart')}
                         className="h-full w-2.5 flex items-center justify-center cursor-col-resize hover:bg-white/30 rounded-l -ml-1 text-[8px] font-mono text-emerald-300"
                       >
                         ▌
@@ -1136,7 +1131,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             text.durationFrames
                           )
                         }
-                        title="Arraste para estender ou encurtar a duração"
+                        title={t('timeline.trimEnd')}
                         className="h-full w-3 flex items-center justify-center cursor-col-resize hover:bg-white/30 rounded-r -mr-1 text-[8px] font-mono text-emerald-300 font-bold"
                       >
                         ▐
@@ -1157,7 +1152,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         onSelectObject({ type: 'path', id: path.id });
                       }}
                       onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'move', path.startFrame, path.durationFrames)}
-                      title={`${path.name} | visível F${path.startFrame} ➔ F${path.startFrame + path.durationFrames}`}
+                      title={t('timeline.pathClip', { name: path.name, start: path.startFrame, end: path.startFrame + path.durationFrames })}
                       className={`absolute top-2 bottom-2 rounded z-10 flex items-center justify-between select-none border border-dashed cursor-grab active:cursor-grabbing ${
                         selectedObject?.type === 'path' && selectedObject.id === path.id
                           ? 'bg-sky-600/30 border-sky-300'
@@ -1170,7 +1165,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       />
                       <span className="text-[10px] font-semibold text-sky-200 truncate px-1 pointer-events-none">
                         {path.name}
-                        {!path.style.visible && ' (guia invisível)'}
+                        {!path.style.visible && t('timeline.invisibleGuide')}
                       </span>
                       <div
                         onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'trim-end', path.startFrame, path.durationFrames)}
@@ -1195,7 +1190,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         onMouseDown={(e) =>
                           startClipDrag(e, 'actor', actor.id, 'move', actor.startFrame, actor.durationFrames)
                         }
-                        title={`${actor.name} | F${actor.startFrame} ➔ F${actor.startFrame + actor.durationFrames}\nArraste para mover (os keyframes vão junto); bordas ajustam a duração`}
+                        title={t('timeline.actorClip', { name: actor.name, start: actor.startFrame, end: actor.startFrame + actor.durationFrames })}
                         className={`absolute top-1 bottom-1 rounded z-10 flex items-center justify-between select-none border cursor-grab active:cursor-grabbing ${
                           selectedObject?.type === 'actor' && selectedObject.id === actor.id
                             ? 'bg-orange-600/40 border-orange-300 ring-1 ring-orange-400'
@@ -1237,7 +1232,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             });
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          title={`Keyframe no frame ${f} — arraste para mudar o tempo`}
+                          title={t('timeline.keyframeHint', { frame: f })}
                           className={`absolute z-20 -translate-x-1/2 w-2.5 h-2.5 rotate-45 border border-neutral-950 ${
                             f === currentFrame ? 'bg-white' : 'bg-amber-400 hover:bg-amber-200'
                           }`}
@@ -1270,12 +1265,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                           >
                             {onlyTweened ? (
                               <div
-                                title={`Pose interpolada no frame ${fNum}`}
+                                title={t('timeline.tweenedPose', { frame: fNum })}
                                 className="w-1.5 h-1.5 rounded-full bg-amber-400/60 z-10"
                               />
                             ) : (
                               <div
-                                title={`Pose-chave de Boneco Palito no Frame ${fNum}`}
+                                title={t('timeline.keyPose', { frame: fNum })}
                                 className="w-3 h-3 rotate-45 bg-amber-400 border border-neutral-900 shadow-md shadow-amber-400/40 z-10"
                               />
                             )}
@@ -1306,7 +1301,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             className="absolute flex items-center justify-center h-full"
                           >
                             <div
-                              title={`Keyframe de Desenho no Frame ${fNum}`}
+                              title={t('timeline.drawingKey', { frame: fNum })}
                               className="w-2.5 h-2.5 rounded-full bg-pink-400 border border-neutral-900 shadow-md z-10"
                             />
                           </div>

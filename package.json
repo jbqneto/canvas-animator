@@ -11,7 +11,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "i18n:scan": "node scripts/i18n-scan.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -30,6 +31,7 @@
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.9",
     "@types/d3-geo": "^3.1.1",
     "@types/express": "^4.17.21",
     "@types/geojson": "^7946.0.16",

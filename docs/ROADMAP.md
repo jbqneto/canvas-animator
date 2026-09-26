@@ -27,6 +27,8 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T13 — Caminhos genéricos: ferramenta "Caminho" (pontilhado/tracejado/contínuo, guia invisível, revelar
   ao percorrer) + "Seguir caminho" para qualquer imagem (tempo, paradas, progresso por keyframe); rota no
   mapa refeita como modelo sobre essas peças
+- [x] T14 — i18n pt-BR / en-US: seletor no topo direito, escolha salva no localStorage
+- [x] T15 — CI (GitHub Actions): typecheck, testes, `i18n:scan` e build em todo PR e push na main
 
 ## Próximos passos sugeridos
 
@@ -84,3 +86,9 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   (paradas opcionais, tempo por trecho proporcional à distância). Keys de progresso aparecem na timeline como
   keys do ator. Excluir caminho desliga os seguidores. UI: ferramenta no palco (FlashCanvas),
   `PathInspector.tsx`, `ActorFollowPanel.tsx`.
+- i18n (`src/i18n/`): `pt-BR.ts` é a fonte; `en-US.ts` é tipado contra ela (chave faltando = erro de tipo) e
+  um teste compara os placeholders `{nome}`. `useI18n()` nos componentes; `t()` global fora do React
+  (erros, nomes padrão). Idioma salvo em `localStorage['flashmotion.locale']`; 1ª visita segue o navegador;
+  `<html lang>` acompanha. Conteúdo do vídeo (formato de números dos contadores, textos já criados) NÃO
+  segue o idioma da interface. Nomes de países do mapa seguem. `npm run i18n:scan` lista textos fora do
+  dicionário (sai com código 1 se houver). Para um novo idioma: criar o dicionário tipado e somar em `LOCALES`.
