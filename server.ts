@@ -1,14 +1,9 @@
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
-import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const PORT = 3000;
 const app = express();
@@ -167,6 +162,8 @@ app.post('/api/gemini/image', async (req, res) => {
 
 async function start() {
   if (process.env.NODE_ENV !== 'production') {
+    // Dev only: the production bundle is CommonJS and must not load Vite at all
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

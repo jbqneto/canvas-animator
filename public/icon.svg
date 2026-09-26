@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- motion path -->
+  <path d="M96 380 C 170 250, 250 390, 330 250 S 420 150, 430 130" fill="none" stroke="#0a0a0f" stroke-width="18" stroke-linecap="round" stroke-dasharray="4 34"/>
+  <!-- keyframes -->
+  <rect x="80" y="364" width="32" height="32" rx="4" transform="rotate(45 96 380)" fill="#0a0a0f"/>
+  <rect x="314" y="234" width="32" height="32" rx="4" transform="rotate(45 330 250)" fill="#0a0a0f"/>
+  <!-- arrow head / object reaching the last key -->
+  <path d="M392 108 L 452 110 L 430 168 Z" fill="#0a0a0f"/>
+</svg>

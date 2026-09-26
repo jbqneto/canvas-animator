@@ -24,7 +24,10 @@ import {
   Clock,
   Sparkles,
   MoveHorizontal,
+  Image as ImageIcon,
+  Route as RouteIcon,
 } from 'lucide-react';
+import { isTypingTarget } from '../utils/keyboard';
 import {
   FrameData,
   ChartOverlay,
@@ -33,7 +36,14 @@ import {
   StudioLayer,
   SelectedObjectRef,
   HistorySnapshot,
+  ActorOverlay,
+  MotionPath,
 } from '../types';
+import { actorKeyframes, moveActorKeys, shiftActorTime } from '../engine/actor';
+
+type ClipType = 'chart' | 'text' | 'actor' | 'path';
+type ClipMode = 'move' | 'trim-start' | 'trim-end';
+const MIN_CLIP_FRAMES = 5;
 
 interface TimelineProps {
   currentFrame: number;
@@ -72,6 +82,12 @@ interface TimelineProps {
   onCommitText?: (text: TextOverlay, description: string, baseSnapshot: HistorySnapshot) => void;
   getCurrentSnapshot?: () => HistorySnapshot;
   onJumpToFrame?: (frame: number) => void;
+  actors: ActorOverlay[];
+  onUpdateActor: (actor: ActorOverlay) => void;
+  onCommitActor: (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => void;
+  paths: MotionPath[];
+  onUpdatePath: (path: MotionPath) => void;
+  onCommitPath: (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => void;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -108,6 +124,12 @@ export const Timeline: React.FC<TimelineProps> = ({
   onCommitText,
   getCurrentSnapshot,
   onJumpToFrame,
+  actors,
+  onUpdateActor,
+  onCommitActor,
+  paths,
+  onUpdatePath,
+  onCommitPath,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
   const tracksContainerRef = useRef<HTMLDivElement>(null);
@@ -119,16 +141,59 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Active clip dragging session on the timeline
   const [activeClipDrag, setActiveClipDrag] = useState<{
-    type: 'chart' | 'text';
+    type: ClipType;
     id: string;
-    mode: 'move' | 'trim-start' | 'trim-end';
+    mode: ClipMode;
     startClientX: number;
     initialStartFrame: number;
     initialDuration: number;
+    /** Actor as it was when the drag started: keys are shifted from it, not cumulatively. */
+    initialActor?: ActorOverlay;
     trackWidth: number;
     baseSnapshot?: HistorySnapshot;
     hasMoved: boolean;
   } | null>(null);
+
+  // Keyframe diamond drag (retime keys); a click without movement just jumps to the frame
+  const [keyDrag, setKeyDrag] = useState<{
+    actor: ActorOverlay;
+    fromFrame: number;
+    startClientX: number;
+    trackWidth: number;
+    baseSnapshot?: HistorySnapshot;
+    toFrame: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!keyDrag) return;
+    const drag = keyDrag;
+    const onMove = (e: MouseEvent) => {
+      const delta = Math.round((e.clientX - drag.startClientX) * (totalFrames / drag.trackWidth));
+      const to = Math.max(1, Math.min(totalFrames, drag.fromFrame + delta));
+      if (to === drag.toFrame) return;
+      drag.toFrame = to;
+      onUpdateActor(moveActorKeys(drag.actor, drag.fromFrame, to));
+      setCurrentFrame(to);
+    };
+    const onUp = () => {
+      if (drag.toFrame !== drag.fromFrame && drag.baseSnapshot) {
+        onCommitActor(
+          moveActorKeys(drag.actor, drag.fromFrame, drag.toFrame),
+          `Mover keyframe ${drag.fromFrame} → ${drag.toFrame}`,
+          drag.baseSnapshot
+        );
+      } else {
+        setCurrentFrame(drag.fromFrame);
+      }
+      setKeyDrag(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [keyDrag, totalFrames, onUpdateActor, onCommitActor, setCurrentFrame]);
 
   // Close "+ Camada" dropdown on outside click
   useEffect(() => {
@@ -148,35 +213,12 @@ export const Timeline: React.FC<TimelineProps> = ({
     };
   }, [addMenuOpen]);
 
-  // Auto-play interval
-  useEffect(() => {
-    let interval: any = null;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setCurrentFrame((prev) => {
-          if (prev >= totalFrames) {
-            if (isLooping) return 1;
-            setIsPlaying(false);
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 1000 / fps);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isPlaying, fps, totalFrames, isLooping, setCurrentFrame, setIsPlaying]);
+  // Playback clock lives in App (synced with the background video)
 
   // Keyboard navigation shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
+      if (isTypingTarget(e.target)) return;
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -222,9 +264,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   // ================= DRAG & RESIZE TIMELINE CLIP HANDLERS =================
   const startClipDrag = (
     e: React.MouseEvent,
-    type: 'chart' | 'text',
+    type: ClipType,
     id: string,
-    mode: 'move' | 'trim-start' | 'trim-end',
+    mode: ClipMode,
     startFrame: number,
     durationFrames: number
   ) => {
@@ -241,6 +283,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       startClientX: e.clientX,
       initialStartFrame: startFrame,
       initialDuration: durationFrames,
+      initialActor: type === 'actor' ? actors.find((a) => a.id === id) : undefined,
       trackWidth,
       baseSnapshot,
       hasMoved: false,
@@ -250,92 +293,64 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Window mouse move & up listeners for timeline clip trimming/moving
   useEffect(() => {
     if (!activeClipDrag) return;
+    const drag = activeClipDrag;
+
+    // New [start, duration] for the clip, kept inside the timeline and at least MIN_CLIP_FRAMES long
+    const computeSpan = (deltaFrames: number) => {
+      const { initialStartFrame: start0, initialDuration: dur0 } = drag;
+      if (drag.mode === 'trim-end') {
+        const durationFrames = Math.max(MIN_CLIP_FRAMES, Math.min(totalFrames - start0 + 1, dur0 + deltaFrames));
+        return { startFrame: start0, durationFrames };
+      }
+      if (drag.mode === 'trim-start') {
+        const maxStart = start0 + dur0 - MIN_CLIP_FRAMES;
+        const startFrame = Math.max(1, Math.min(maxStart, start0 + deltaFrames));
+        return { startFrame, durationFrames: dur0 - (startFrame - start0) };
+      }
+      const maxStart = Math.max(1, totalFrames - dur0 + 1);
+      return { startFrame: Math.max(1, Math.min(maxStart, start0 + deltaFrames)), durationFrames: dur0 };
+    };
 
     const onWindowMouseMove = (e: MouseEvent) => {
-      const deltaPx = e.clientX - activeClipDrag.startClientX;
-      const framesPerPx = totalFrames / activeClipDrag.trackWidth;
-      const deltaFrames = Math.round(deltaPx * framesPerPx);
+      const deltaPx = e.clientX - drag.startClientX;
+      const deltaFrames = Math.round(deltaPx * (totalFrames / drag.trackWidth));
+      if (Math.abs(deltaFrames) > 0) drag.hasMoved = true;
+      const span = computeSpan(deltaFrames);
 
-      if (Math.abs(deltaFrames) > 0) {
-        activeClipDrag.hasMoved = true;
-      }
-
-      if (activeClipDrag.type === 'chart') {
-        const chart = charts.find((c) => c.id === activeClipDrag.id);
-        if (!chart || !onUpdateChart) return;
-
-        if (activeClipDrag.mode === 'trim-end') {
-          // Adjust durationFrames (end frame)
-          const newDuration = Math.max(
-            5,
-            Math.min(
-              totalFrames - activeClipDrag.initialStartFrame + 1,
-              activeClipDrag.initialDuration + deltaFrames
-            )
-          );
-          onUpdateChart({ ...chart, durationFrames: newDuration });
-        } else if (activeClipDrag.mode === 'trim-start') {
-          // Adjust startFrame and compensate duration
-          const maxStart = activeClipDrag.initialStartFrame + activeClipDrag.initialDuration - 5;
-          const newStart = Math.max(1, Math.min(maxStart, activeClipDrag.initialStartFrame + deltaFrames));
-          const newDuration = activeClipDrag.initialDuration - (newStart - activeClipDrag.initialStartFrame);
-          onUpdateChart({ ...chart, startFrame: newStart, durationFrames: newDuration });
-        } else if (activeClipDrag.mode === 'move') {
-          // Slide clip across time
-          const maxStart = totalFrames - activeClipDrag.initialDuration + 1;
-          const newStart = Math.max(1, Math.min(maxStart, activeClipDrag.initialStartFrame + deltaFrames));
-          onUpdateChart({ ...chart, startFrame: newStart });
-        }
-      } else if (activeClipDrag.type === 'text') {
-        const txt = texts.find((t) => t.id === activeClipDrag.id);
-        if (!txt || !onUpdateText) return;
-
-        if (activeClipDrag.mode === 'trim-end') {
-          const newDuration = Math.max(
-            5,
-            Math.min(
-              totalFrames - activeClipDrag.initialStartFrame + 1,
-              activeClipDrag.initialDuration + deltaFrames
-            )
-          );
-          onUpdateText({ ...txt, durationFrames: newDuration });
-        } else if (activeClipDrag.mode === 'trim-start') {
-          const maxStart = activeClipDrag.initialStartFrame + activeClipDrag.initialDuration - 5;
-          const newStart = Math.max(1, Math.min(maxStart, activeClipDrag.initialStartFrame + deltaFrames));
-          const newDuration = activeClipDrag.initialDuration - (newStart - activeClipDrag.initialStartFrame);
-          onUpdateText({ ...txt, startFrame: newStart, durationFrames: newDuration });
-        } else if (activeClipDrag.mode === 'move') {
-          const maxStart = totalFrames - activeClipDrag.initialDuration + 1;
-          const newStart = Math.max(1, Math.min(maxStart, activeClipDrag.initialStartFrame + deltaFrames));
-          onUpdateText({ ...txt, startFrame: newStart });
-        }
+      if (drag.type === 'chart') {
+        const chart = charts.find((c) => c.id === drag.id);
+        if (chart && onUpdateChart) onUpdateChart({ ...chart, ...span });
+      } else if (drag.type === 'text') {
+        const txt = texts.find((t) => t.id === drag.id);
+        if (txt && onUpdateText) onUpdateText({ ...txt, ...span });
+      } else if (drag.type === 'path') {
+        const path = paths.find((p) => p.id === drag.id);
+        if (path) onUpdatePath({ ...path, ...span });
+      } else if (drag.type === 'actor' && drag.initialActor) {
+        // Moving the clip moves its keys too; trimming only changes the visible span
+        const moved =
+          drag.mode === 'move'
+            ? shiftActorTime(drag.initialActor, span.startFrame - drag.initialStartFrame)
+            : { ...drag.initialActor, ...span };
+        onUpdateActor(moved);
       }
     };
 
     const onWindowMouseUp = () => {
-      if (activeClipDrag.hasMoved && activeClipDrag.baseSnapshot) {
-        if (activeClipDrag.type === 'chart' && onCommitChart) {
-          const chart = charts.find((c) => c.id === activeClipDrag.id);
-          if (chart) {
-            onCommitChart(
-              chart,
-              activeClipDrag.mode === 'move'
-                ? `Mover Gráfico na Linha do Tempo`
-                : `Ajustar Duração do Gráfico`,
-              activeClipDrag.baseSnapshot
-            );
-          }
-        } else if (activeClipDrag.type === 'text' && onCommitText) {
-          const txt = texts.find((t) => t.id === activeClipDrag.id);
-          if (txt) {
-            onCommitText(
-              txt,
-              activeClipDrag.mode === 'move'
-                ? `Mover Texto na Linha do Tempo`
-                : `Ajustar Duração do Texto`,
-              activeClipDrag.baseSnapshot
-            );
-          }
+      if (drag.hasMoved && drag.baseSnapshot) {
+        const verb = drag.mode === 'move' ? 'Mover' : 'Ajustar duração de';
+        if (drag.type === 'chart' && onCommitChart) {
+          const chart = charts.find((c) => c.id === drag.id);
+          if (chart) onCommitChart(chart, `${verb} Gráfico na Linha do Tempo`, drag.baseSnapshot);
+        } else if (drag.type === 'text' && onCommitText) {
+          const txt = texts.find((t) => t.id === drag.id);
+          if (txt) onCommitText(txt, `${verb} Texto na Linha do Tempo`, drag.baseSnapshot);
+        } else if (drag.type === 'path') {
+          const path = paths.find((p) => p.id === drag.id);
+          if (path) onCommitPath(path, `${verb} caminho na Linha do Tempo`, drag.baseSnapshot);
+        } else if (drag.type === 'actor') {
+          const actor = actors.find((a) => a.id === drag.id);
+          if (actor) onCommitActor(actor, `${verb} "${actor.name}" na Linha do Tempo`, drag.baseSnapshot);
         }
       }
       setActiveClipDrag(null);
@@ -352,11 +367,17 @@ export const Timeline: React.FC<TimelineProps> = ({
     activeClipDrag,
     charts,
     texts,
+    actors,
+    paths,
     totalFrames,
     onUpdateChart,
     onUpdateText,
+    onUpdateActor,
     onCommitChart,
     onCommitText,
+    onCommitActor,
+    onUpdatePath,
+    onCommitPath,
   ]);
 
   const getLayerIcon = (type: string) => {
@@ -369,6 +390,10 @@ export const Timeline: React.FC<TimelineProps> = ({
         return <Video size={13} className="text-purple-400" />;
       case 'group':
         return <Group size={13} className="text-amber-400" />;
+      case 'actor':
+        return <ImageIcon size={13} className="text-orange-400" />;
+      case 'path':
+        return <RouteIcon size={13} className="text-sky-400" />;
       case 'drawing':
       default:
         return <PenTool size={13} className="text-pink-400" />;
@@ -650,6 +675,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                         onSelectObject({ type: 'text', id: layer.targetId });
                       } else if (layer.type === 'group') {
                         onSelectObject({ type: 'stick', id: layer.targetId });
+                      } else if (layer.type === 'actor') {
+                        onSelectObject({ type: 'actor', id: layer.targetId });
+                      } else if (layer.type === 'path') {
+                        onSelectObject({ type: 'path', id: layer.targetId });
                       }
                     }
                   }}
@@ -873,6 +902,14 @@ export const Timeline: React.FC<TimelineProps> = ({
               const text =
                 layer.type === 'text'
                   ? texts.find((t) => t.id === layer.targetId)
+                  : null;
+              const actor =
+                layer.type === 'actor'
+                  ? actors.find((a) => a.id === layer.targetId)
+                  : null;
+              const path =
+                layer.type === 'path'
+                  ? paths.find((p) => p.id === layer.targetId)
                   : null;
 
               return (
@@ -1107,19 +1144,120 @@ export const Timeline: React.FC<TimelineProps> = ({
                     </div>
                   )}
 
+                  {/* 2C''. PATH CLIP SPAN (when the line is visible) */}
+                  {path && (
+                    <div
+                      style={{
+                        left: `${((path.startFrame - 1) / totalFrames) * 100}%`,
+                        width: `${Math.max(1, (path.durationFrames / totalFrames) * 100)}%`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectLayer(layer.id);
+                        onSelectObject({ type: 'path', id: path.id });
+                      }}
+                      onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'move', path.startFrame, path.durationFrames)}
+                      title={`${path.name} | visível F${path.startFrame} ➔ F${path.startFrame + path.durationFrames}`}
+                      className={`absolute top-2 bottom-2 rounded z-10 flex items-center justify-between select-none border border-dashed cursor-grab active:cursor-grabbing ${
+                        selectedObject?.type === 'path' && selectedObject.id === path.id
+                          ? 'bg-sky-600/30 border-sky-300'
+                          : 'bg-sky-950/50 border-sky-500/50 hover:border-sky-400'
+                      }`}
+                    >
+                      <div
+                        onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'trim-start', path.startFrame, path.durationFrames)}
+                        className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-l"
+                      />
+                      <span className="text-[10px] font-semibold text-sky-200 truncate px-1 pointer-events-none">
+                        {path.name}
+                        {!path.style.visible && ' (guia invisível)'}
+                      </span>
+                      <div
+                        onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'trim-end', path.startFrame, path.durationFrames)}
+                        className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-r"
+                      />
+                    </div>
+                  )}
+
+                  {/* 2C'. ACTOR CLIP SPAN + KEYFRAME DIAMONDS */}
+                  {actor && (
+                    <>
+                      <div
+                        style={{
+                          left: `${((actor.startFrame - 1) / totalFrames) * 100}%`,
+                          width: `${Math.max(1, (actor.durationFrames / totalFrames) * 100)}%`,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectLayer(layer.id);
+                          onSelectObject({ type: 'actor', id: actor.id });
+                        }}
+                        onMouseDown={(e) =>
+                          startClipDrag(e, 'actor', actor.id, 'move', actor.startFrame, actor.durationFrames)
+                        }
+                        title={`${actor.name} | F${actor.startFrame} ➔ F${actor.startFrame + actor.durationFrames}\nArraste para mover (os keyframes vão junto); bordas ajustam a duração`}
+                        className={`absolute top-1 bottom-1 rounded z-10 flex items-center justify-between select-none border cursor-grab active:cursor-grabbing ${
+                          selectedObject?.type === 'actor' && selectedObject.id === actor.id
+                            ? 'bg-orange-600/40 border-orange-300 ring-1 ring-orange-400'
+                            : 'bg-orange-950/70 border-orange-500/50 hover:border-orange-400'
+                        }`}
+                      >
+                        <div
+                          onMouseDown={(e) =>
+                            startClipDrag(e, 'actor', actor.id, 'trim-start', actor.startFrame, actor.durationFrames)
+                          }
+                          className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-l"
+                        />
+                        <span className="text-[10px] font-bold text-orange-200 truncate px-1 pointer-events-none">
+                          {actor.name}
+                        </span>
+                        <div
+                          onMouseDown={(e) =>
+                            startClipDrag(e, 'actor', actor.id, 'trim-end', actor.startFrame, actor.durationFrames)
+                          }
+                          className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-r"
+                        />
+                      </div>
+                      {actorKeyframes(actor).map((f) => (
+                        <button
+                          key={f}
+                          style={{ left: `${((f - 1) / totalFrames) * 100}%` }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onSelectLayer(layer.id);
+                            onSelectObject({ type: 'actor', id: actor.id });
+                            setKeyDrag({
+                              actor,
+                              fromFrame: f,
+                              toFrame: f,
+                              startClientX: e.clientX,
+                              trackWidth: tracksContainerRef.current?.getBoundingClientRect().width || 800,
+                              baseSnapshot: getCurrentSnapshot?.(),
+                            });
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          title={`Keyframe no frame ${f} — arraste para mudar o tempo`}
+                          className={`absolute z-20 -translate-x-1/2 w-2.5 h-2.5 rotate-45 border border-neutral-950 ${
+                            f === currentFrame ? 'bg-white' : 'bg-amber-400 hover:bg-amber-200'
+                          }`}
+                        />
+                      ))}
+                    </>
+                  )}
+
                   {/* 2C. STICK FIGURE KEYFRAME DIAMONDS AND SPANS */}
                   {layer.type === 'group' && (
                     <div className="absolute inset-0 flex items-center pointer-events-none">
                       {Array.from({ length: totalFrames }).map((_, i) => {
                         const fNum = i + 1;
                         const frameData = frames[fNum];
-                        const hasStickFigure =
-                          frameData?.stickFigures &&
-                          frameData.stickFigures.some(
-                            (s) => !layer.targetId || s.id === layer.targetId
-                          );
-
-                        if (!hasStickFigure) return null;
+                        const sticksHere = (frameData?.stickFigures ?? []).filter(
+                          (s) => !layer.targetId || s.id === layer.targetId
+                        );
+                        if (sticksHere.length === 0) return null;
+                        // In-betweens generated by a pose tween are dots; hand-made poses are diamonds
+                        const onlyTweened = sticksHere.every((s) => s.tweened);
 
                         return (
                           <div
@@ -1130,10 +1268,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                             }}
                             className="absolute flex items-center justify-center h-full"
                           >
-                            <div
-                              title={`Keyframe de Boneco Palito no Frame ${fNum}`}
-                              className="w-3 h-3 rotate-45 bg-amber-400 border border-neutral-900 shadow-md shadow-amber-400/40 z-10"
-                            />
+                            {onlyTweened ? (
+                              <div
+                                title={`Pose interpolada no frame ${fNum}`}
+                                className="w-1.5 h-1.5 rounded-full bg-amber-400/60 z-10"
+                              />
+                            ) : (
+                              <div
+                                title={`Pose-chave de Boneco Palito no Frame ${fNum}`}
+                                className="w-3 h-3 rotate-45 bg-amber-400 border border-neutral-900 shadow-md shadow-amber-400/40 z-10"
+                              />
+                            )}
                           </div>
                         );
                       })}

@@ -21,6 +21,10 @@ import {
   Palette,
   Check,
   Zap,
+  Upload,
+  VideoOff,
+  Image as ImageIcon,
+  Globe2,
 } from 'lucide-react';
 import {
   ChartOverlay,
@@ -34,7 +38,13 @@ import {
   StickFigure,
   CanvasGroup,
   HistorySnapshot,
+  ActorOverlay,
+  MotionPath,
 } from '../types';
+import { ActorInspector } from './ActorInspector';
+import { PathInspector } from './PathInspector';
+import { StickAnimationPanel } from './StickAnimationPanel';
+import type { EasingName } from '../engine/keyframes';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
 interface PropertiesInspectorProps {
@@ -64,6 +74,7 @@ interface PropertiesInspectorProps {
   setTotalFrames: (total: number) => void;
   videoBg: VideoBackground;
   setVideoBg: React.Dispatch<React.SetStateAction<VideoBackground>>;
+  onUploadVideo: (file: File) => void;
   // Canvas Dimensions & Presets (YouTube, Shorts, etc.)
   canvasDimensions: import('../types').CanvasDimensions;
   onUpdateCanvasDimensions: (dim: import('../types').CanvasDimensions) => void;
@@ -72,6 +83,22 @@ interface PropertiesInspectorProps {
   setTimelineHeight: (h: number | ((prev: number) => number)) => void;
   // Stick Figure deletion
   onDeleteStickFigure?: (stickId: string, allFrames?: boolean) => void;
+  // Actors (imported images)
+  actors: ActorOverlay[];
+  onUpdateActor: (actor: ActorOverlay, description: string) => void;
+  onDeleteActor: (id: string) => void;
+  onImportImageFiles: (files: FileList) => void;
+  onJumpToFrame: (frame: number) => void;
+  // Stick figure pose tween
+  frames: Record<number, FrameData>;
+  onCopyStickToFrame: (stickId: string, toFrame: number) => void;
+  onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
+  onOpenRouteDialog: () => void;
+  // Motion paths
+  paths: MotionPath[];
+  onUpdatePath: (path: MotionPath, description: string) => void;
+  onDeletePath: (id: string) => void;
+  onAttachActorToPath: (actorId: string, pathId: string) => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -105,11 +132,25 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   setTotalFrames,
   videoBg,
   setVideoBg,
+  onUploadVideo,
   canvasDimensions,
   onUpdateCanvasDimensions,
   timelineHeight,
   setTimelineHeight,
   onDeleteStickFigure,
+  actors,
+  onUpdateActor,
+  onDeleteActor,
+  onImportImageFiles,
+  onJumpToFrame,
+  frames,
+  onCopyStickToFrame,
+  onTweenStick,
+  onOpenRouteDialog,
+  paths,
+  onUpdatePath,
+  onDeletePath,
+  onAttachActorToPath,
   pastSteps,
   futureSteps,
   onJumpToHistory,
@@ -130,6 +171,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     selectedObject?.type === 'text'
       ? texts.find((t) => t.id === selectedObject.id)
       : null;
+
+  const activeActor =
+    selectedObject?.type === 'actor' ? actors.find((a) => a.id === selectedObject.id) : undefined;
+
+  const activePath =
+    selectedObject?.type === 'path' ? paths.find((p) => p.id === selectedObject.id) : undefined;
 
   const activeStick =
     selectedObject?.type === 'stick'
@@ -269,6 +316,33 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {/* ================= TAB 1: PROPERTIES (CONTEXTUAL) ================= */}
         {activeTab === 'properties' && (
           <>
+            {activePath && (
+              <PathInspector
+                path={activePath}
+                actors={actors}
+                totalFrames={totalFrames}
+                onChange={onUpdatePath}
+                onDelete={onDeletePath}
+                onAttachActor={onAttachActorToPath}
+                onSelectActor={(id) => onSelectObject({ type: 'actor', id })}
+              />
+            )}
+
+            {activeActor && (
+              <ActorInspector
+                actor={activeActor}
+                currentFrame={currentFrame}
+                totalFrames={totalFrames}
+                fps={fps}
+                onChange={onUpdateActor}
+                onDelete={onDeleteActor}
+                onJumpToFrame={onJumpToFrame}
+                paths={paths}
+                onAttachToPath={onAttachActorToPath}
+                onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+              />
+            )}
+
             {/* 1. CHART SELECTED */}
             {activeChart && (
               <div className="space-y-4">
@@ -806,6 +880,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                 {/* Pose Library for Stick Figures */}
                 {activeStick && (
+                  <StickAnimationPanel
+                    stickId={activeStick.id}
+                    frames={frames}
+                    currentFrame={currentFrame}
+                    totalFrames={totalFrames}
+                    onCopyToFrame={onCopyStickToFrame}
+                    onTween={onTweenStick}
+                  />
+                )}
+
+                {activeStick && (
                   <div className="space-y-2 pt-2 border-t border-neutral-800">
                     <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
                       Poses Prontas da Biblioteca
@@ -815,7 +900,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         <button
                           key={key}
                           onClick={() => {
-                            const updated = applyPoseToStickFigure(activeStick, key as any);
+                            const updated = { ...applyPoseToStickFigure(activeStick, key as any), tweened: false };
                             const updatedSticks = currentFrameData.stickFigures.map((s) =>
                               s.id === activeStick.id ? updated : s
                             );
@@ -883,7 +968,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             )}
 
             {/* 4. NO OBJECT SELECTED -> DOCUMENT PROPERTIES (FLASH STYLE) */}
-            {!activeChart && !activeText && !activeStick && !activeGroup && (
+            {!activeChart && !activeText && !activeStick && !activeGroup && !activeActor && !activePath && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-neutral-800">
                   <div className="p-1.5 rounded bg-sky-500/10 text-sky-400">
@@ -1114,11 +1199,91 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </div>
                 </div>
 
+                {/* Background Video (the footage the overlays enrich) */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
+                    Vídeo de Fundo
+                  </span>
+                  <label className="flex items-center gap-2 p-2 rounded border border-dashed border-neutral-700 hover:border-purple-500 bg-neutral-900 cursor-pointer transition text-xs text-neutral-300">
+                    <Upload size={14} className="text-purple-400" />
+                    <span>
+                      {videoBg.type === 'upload' ? 'Trocar vídeo (MP4/WebM)' : 'Carregar vídeo (MP4/WebM)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onUploadVideo(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {videoBg.type !== 'color' && videoBg.url && (
+                    <>
+                      <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                        <span>Opacidade do vídeo</span>
+                        <span className="font-mono text-neutral-200">
+                          {Math.round(videoBg.opacity * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="1"
+                        step="0.05"
+                        value={videoBg.opacity}
+                        onChange={(e) =>
+                          setVideoBg((prev) => ({ ...prev, opacity: Number(e.target.value) }))
+                        }
+                        className="w-full accent-purple-500"
+                      />
+                      <button
+                        onClick={() => setVideoBg((prev) => ({ ...prev, type: 'color', url: '' }))}
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white text-xs transition"
+                      >
+                        <VideoOff size={13} />
+                        Remover vídeo
+                      </button>
+                    </>
+                  )}
+                </div>
+
                 {/* Quick Add Elements onto Stage */}
                 <div className="space-y-2 pt-2 border-t border-neutral-800">
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
                     Inserir Elementos na Cena
                   </span>
+                  <button
+                    onClick={onOpenRouteDialog}
+                    className="w-full flex items-center gap-2 p-2 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40 text-left transition"
+                  >
+                    <Globe2 size={14} />
+                    <span className="text-xs">
+                      Rota no mapa
+                      <span className="block text-[10px] text-sky-200/60">avião pousando em vários países</span>
+                    </span>
+                  </button>
+                  <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
+                    <ImageIcon size={14} />
+                    <span className="text-xs">
+                      Importar imagem (PNG, SVG, WebP…)
+                      <span className="block text-[10px] text-orange-200/60">
+                        ou arraste o arquivo para o palco
+                      </span>
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) onImportImageFiles(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={() => onAddChart('bar')}

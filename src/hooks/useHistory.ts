@@ -115,8 +115,14 @@ export function useHistory(initialSnapshot: HistorySnapshot) {
     return restored;
   }, []);
 
+  /** Replaces the whole history (e.g. when opening a project): nothing to undo into the old one. */
+  const reset = useCallback((snapshot: HistorySnapshot) => {
+    setHistory({ past: [], present: snapshot, future: [] });
+  }, []);
+
   return {
     present: history.present,
+    reset,
     presentRef,
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,

@@ -12,12 +12,28 @@ import {
   StickFigure,
   CanvasDimensions,
   HistorySnapshot,
+  ActorOverlay,
+  MotionPath,
+  StageTool,
 } from './types';
+import { createActor } from './engine/actor';
+import { tweenStickFrames } from './engine/stickRig';
+import type { EasingName } from './engine/keyframes';
+import { isTypingTarget } from './utils/keyboard';
+import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
+import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
+import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
+import { loadImageFileAsActorSource } from './utils/importImage';
 import {
   createDefaultStickFigure,
   applyPoseToStickFigure,
 } from './utils/stickFigurePresets';
-import { exportVideoSequence, exportSnapshotPNG } from './utils/exportVideo';
+import {
+  exportVideoSequence,
+  exportFramePNG,
+  renderFrameToDataURL,
+  videoTimeForFrame,
+} from './utils/exportVideo';
 import { useHistory } from './hooks/useHistory';
 import { StudioHeader } from './components/StudioHeader';
 import { FlashCanvas } from './components/FlashCanvas';
@@ -25,6 +41,12 @@ import { PropertiesInspector } from './components/PropertiesInspector';
 import { Timeline } from './components/Timeline';
 import { AiImageModal } from './components/AiImageModal';
 import { GeminiChatbot } from './components/GeminiChatbot';
+import { ExportDialog, ExportRequest } from './components/ExportDialog';
+import { PwaStatus } from './components/PwaStatus';
+import { RouteDialog, RouteRequest } from './components/RouteDialog';
+import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
+import { buildFollowProgress, samplePath } from './engine/path';
+import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 
 export default function App() {
   // Timeline playback state
@@ -45,9 +67,7 @@ export default function App() {
   const [timelineHeight, setTimelineHeight] = useState<number>(200);
 
   // Active Flash Canvas Tool
-  const [activeTool, setActiveTool] = useState<
-    'pointer' | 'transform' | 'pen' | 'line' | 'arrow' | 'rect' | 'circle' | 'eraser'
-  >('pointer');
+  const [activeTool, setActiveTool] = useState<StageTool>('pointer');
   const [strokeColor, setStrokeColor] = useState<string>('#38bdf8');
   const [strokeThickness, setStrokeThickness] = useState<number>(4);
   // Default to FALSE to eliminate unwanted onion skin shadows when deleting objects!
@@ -68,7 +88,10 @@ export default function App() {
     opacity: 1,
     playbackRate: 1,
   });
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Kept in state (not only a ref) so children re-render once the <video> element mounts
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  // Set when a new video is uploaded: the timeline is resized to its length once metadata loads
+  const fitTimelineToVideoRef = useRef(false);
 
   // Initial Layers
   const initialLayers: StudioLayer[] = [
@@ -206,26 +229,216 @@ export default function App() {
     charts: initialCharts,
     texts: initialTexts,
     images: [],
+    actors: [],
+    paths: [],
     layers: initialLayers,
   });
 
-  const { frames, charts, texts, images, layers } = history.present;
+  const { frames, charts, texts, images, actors, paths, layers } = history.present;
 
   // UI Modals & Export state
-  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [aiModalOpen, setAiModalOpen] = useState<boolean>(false);
   const [chatbotOpen, setChatbotOpen] = useState<boolean>(false);
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
 
-  // Sync hidden video currentTime with timeline scrubber
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // ================= PROJECT FILE (save / open / autosave) =================
+  const [projectName, setProjectName] = useState('Projeto sem título');
+  const [videoFileName, setVideoFileName] = useState<string | undefined>();
+  const [pendingRestore, setPendingRestore] = useState<AutosaveEntry | null>(null);
+  const fileHandleRef = useRef<ProjectFileHandle | undefined>(undefined);
+  const autosaveReadyRef = useRef(false);
+
+  // Unsaved-changes tracking: state is immutable, so comparing references with the values at the
+  // last save/open is exact (and immune to effects running twice in StrictMode).
+  const currentMarker = { present: history.present, fps, totalFrames, canvasDimensions, videoBg, projectName };
+  const [savedMarker, setSavedMarker] = useState(currentMarker);
+  // When set, the state rendered next becomes the "saved" reference (after open/restore)
+  const markSavedOnRenderRef = useRef(false);
   useEffect(() => {
-    const v = videoRef.current;
-    if (v && videoBg.type !== 'color' && v.duration) {
-      const timeInSec = (currentFrame - 1) / fps;
-      v.currentTime = timeInSec % v.duration;
+    if (!markSavedOnRenderRef.current) return;
+    markSavedOnRenderRef.current = false;
+    setSavedMarker(currentMarker);
+  });
+  const isDirty = (Object.keys(currentMarker) as (keyof typeof currentMarker)[]).some(
+    (k) => currentMarker[k] !== savedMarker[k]
+  );
+
+  const serializeCurrent = () => {
+    const { description: _d, ...content } = history.presentRef.current;
+    return serializeProject(
+      { name: projectName, fps, totalFrames, canvas: canvasDimensions, videoBg, content },
+      videoFileName
+    );
+  };
+
+  // Any content/settings change schedules an autosave
+  useEffect(() => {
+    if (!autosaveReadyRef.current) return;
+    const timer = setTimeout(() => {
+      writeAutosave({ text: serializeCurrent(), savedAt: Date.now(), name: projectName });
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.present, fps, totalFrames, canvasDimensions, videoBg, projectName]);
+
+  // On startup, offer to restore work that was never saved to a file
+  useEffect(() => {
+    readAutosave().then((entry) => {
+      if (entry) setPendingRestore(entry);
+      else autosaveReadyRef.current = true;
+    });
+  }, []);
+
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
+  const applyProjectText = (text: string, name?: string) => {
+    const project = parseProject(text);
+    markSavedOnRenderRef.current = true;
+    setFps(project.fps);
+    setTotalFrames(project.totalFrames);
+    setCanvasDimensions(project.canvas);
+    setVideoBg(project.videoBg);
+    setVideoFileName(undefined);
+    setProjectName(name ?? project.name);
+    history.reset({ description: 'Projeto aberto', ...project.content });
+    setCurrentFrame(1);
+    setSelectedObject(null);
+    setIsPlaying(false);
+    return project;
+  };
+
+  const handleSaveProject = async (saveAs = false) => {
+    try {
+      const result = await saveProjectFile(serializeCurrent(), projectName, fileHandleRef.current, saveAs);
+      if (result === null) return; // cancelled
+      if (result) {
+        fileHandleRef.current = result;
+        setProjectName(projectNameFromFile(result.name));
+        markSavedOnRenderRef.current = true; // the name change is part of the save
+      }
+      setSavedMarker(currentMarker);
+    } catch (err) {
+      alert(`Não foi possível salvar: ${err instanceof Error ? err.message : err}`);
     }
-  }, [currentFrame, fps, videoBg.type]);
+  };
+
+  const handleOpenProject = async () => {
+    if (isDirty && !confirm('Há alterações não salvas. Abrir outro projeto mesmo assim?')) return;
+    try {
+      const opened = await openProjectFile();
+      if (!opened) return;
+      const project = applyProjectText(opened.text, projectNameFromFile(opened.fileName));
+      fileHandleRef.current = opened.handle;
+      if (project.missingVideo) {
+        alert(`Este projeto usava o vídeo "${project.missingVideo}". Carregue-o de novo em Vídeo de Fundo.`);
+      }
+    } catch (err) {
+      alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
+    }
+  };
+
+  // Installed app: files opened from the OS (double-click on .fmproj) arrive through the launch queue
+  const openLaunchedFileRef = useRef<(handle: ProjectFileHandle) => void>(() => undefined);
+  openLaunchedFileRef.current = async (handle) => {
+    if (isDirty && !confirm('Há alterações não salvas. Abrir o arquivo mesmo assim?')) return;
+    try {
+      const file = await handle.getFile();
+      applyProjectText(await file.text(), projectNameFromFile(file.name));
+      fileHandleRef.current = handle;
+      setPendingRestore(null);
+      autosaveReadyRef.current = true;
+    } catch (err) {
+      alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
+    }
+  };
+  useEffect(() => {
+    const queue = (window as unknown as {
+      launchQueue?: { setConsumer(cb: (params: { files: ProjectFileHandle[] }) => void): void };
+    }).launchQueue;
+    queue?.setConsumer((params) => {
+      if (params.files.length > 0) openLaunchedFileRef.current(params.files[0]);
+    });
+  }, []);
+
+  const handleRestoreAutosave = (restore: boolean) => {
+    if (restore && pendingRestore) {
+      try {
+        applyProjectText(pendingRestore.text, pendingRestore.name);
+        markSavedOnRenderRef.current = false; // restored work still isn't in a file
+      } catch {
+        clearAutosave();
+      }
+    } else {
+      clearAutosave();
+    }
+    setPendingRestore(null);
+    autosaveReadyRef.current = true;
+  };
+
+  // Sync hidden video currentTime with timeline scrubber (while paused; playback drives itself)
+  useEffect(() => {
+    const v = videoEl;
+    if (isPlaying || isExporting) return;
+    if (v && videoBg.type !== 'color' && v.duration) {
+      v.currentTime = videoTimeForFrame(currentFrame, fps, v.duration);
+    }
+  }, [currentFrame, fps, videoBg.type, videoEl, isPlaying, isExporting]);
+
+  // Playback clock: wall-clock based requestAnimationFrame loop. The background video plays
+  // natively and is only re-synced when it drifts, instead of being seeked on every frame.
+  const currentFrameRef = useRef(currentFrame);
+  currentFrameRef.current = currentFrame;
+  useEffect(() => {
+    if (!isPlaying) return;
+    const v = videoEl && videoBg.type !== 'color' ? videoEl : null;
+    let baseFrame = currentFrameRef.current >= totalFrames ? 1 : currentFrameRef.current;
+    let baseTime = performance.now();
+    let raf = 0;
+
+    if (v) {
+      v.playbackRate = 1;
+      v.currentTime = videoTimeForFrame(baseFrame, fps, v.duration);
+      v.play().catch(() => undefined);
+    }
+
+    const tick = (now: number) => {
+      let frame = baseFrame + Math.floor(((now - baseTime) / 1000) * fps);
+      if (frame > totalFrames) {
+        if (!isLooping) {
+          setCurrentFrame(totalFrames);
+          setIsPlaying(false);
+          return;
+        }
+        baseFrame = 1;
+        baseTime = now;
+        frame = 1;
+      }
+      if (v && v.duration) {
+        const expected = videoTimeForFrame(frame, fps, v.duration);
+        if (Math.abs(v.currentTime - expected) > 0.25) v.currentTime = expected;
+        if (v.paused) v.play().catch(() => undefined);
+      }
+      setCurrentFrame(frame);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      v?.pause();
+    };
+  }, [isPlaying, fps, totalFrames, isLooping, videoEl, videoBg.type]);
 
   // Frame update handler
   const handleUpdateFrameData = useCallback(
@@ -667,13 +880,31 @@ export default function App() {
 
     let updatedCharts = charts;
     let updatedTexts = texts;
+    let updatedFrames = history.present.frames;
+    let updatedActors = actors;
 
     if (layer.targetId) {
       if (layer.type === 'chart') {
         updatedCharts = charts.filter((c) => c.id !== layer.targetId);
       } else if (layer.type === 'text') {
         updatedTexts = texts.filter((t) => t.id !== layer.targetId);
+      } else if (layer.type === 'actor') {
+        updatedActors = actors.filter((a) => a.id !== layer.targetId);
+      } else if (layer.type === 'group') {
+        // Stick figure layer: remove the figure from every frame, otherwise it stays on stage
+        updatedFrames = {};
+        for (const [fNum, fData] of Object.entries(history.present.frames)) {
+          updatedFrames[Number(fNum)] = {
+            ...fData,
+            stickFigures: fData.stickFigures.filter((s) => s.id !== layer.targetId),
+          };
+        }
       }
+    }
+
+    if (layer.type === 'path' && layer.targetId) {
+      handleDeletePath(layer.targetId);
+      return;
     }
 
     history.pushSnapshot(`Excluir Camada ${layer.name}`, {
@@ -681,6 +912,8 @@ export default function App() {
       layers: layers.filter((l) => l.id !== layerId),
       charts: updatedCharts,
       texts: updatedTexts,
+      frames: updatedFrames,
+      actors: updatedActors,
     });
 
     if (selectedLayerId === layerId) {
@@ -768,16 +1001,379 @@ export default function App() {
     if (selectedObject?.id === textId) setSelectedObject(null);
   };
 
+  // ================= STICK FIGURE POSE ANIMATION (classic tween) =================
+  const emptyFrameData = (frameNumber: number): FrameData => ({
+    frameNumber,
+    stickFigures: [],
+    drawings: [],
+    groups: [],
+  });
+
+  /** Returns frames with `stick` placed (replacing the same id) in frame `f`. */
+  const withStickInFrame = (
+    allFrames: Record<number, FrameData>,
+    f: number,
+    stick: StickFigure
+  ): Record<number, FrameData> => {
+    const data = allFrames[f] ?? emptyFrameData(f);
+    const exists = data.stickFigures.some((s) => s.id === stick.id);
+    return {
+      ...allFrames,
+      [f]: {
+        ...data,
+        stickFigures: exists
+          ? data.stickFigures.map((s) => (s.id === stick.id ? stick : s))
+          : [...data.stickFigures, stick],
+      },
+    };
+  };
+
+  const handleCopyStickToFrame = (stickId: string, toFrame: number) => {
+    const stick = frames[currentFrame]?.stickFigures.find((s) => s.id === stickId);
+    if (!stick || toFrame === currentFrame) return;
+    history.pushSnapshot(`Copiar pose F${currentFrame} → F${toFrame}`, {
+      ...history.present,
+      frames: withStickInFrame(history.present.frames, toFrame, { ...stick, tweened: false }),
+    });
+    if (toFrame > totalFrames) setTotalFrames(toFrame);
+    setCurrentFrame(toFrame);
+  };
+
+  const handleTweenStick = (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => {
+    const a = frames[fromFrame]?.stickFigures.find((s) => s.id === stickId);
+    const b = frames[toFrame]?.stickFigures.find((s) => s.id === stickId);
+    if (!a || !b) {
+      alert(`O boneco precisa existir nos frames ${fromFrame} e ${toFrame}.`);
+      return;
+    }
+    const poses = tweenStickFrames(a, b, fromFrame, toFrame, easing);
+    let updated = history.present.frames;
+    Object.entries(poses).forEach(([f, pose]) => {
+      updated = withStickInFrame(updated, Number(f), pose);
+    });
+    history.pushSnapshot(`Interpolar pose F${fromFrame} → F${toFrame}`, {
+      ...history.present,
+      frames: updated,
+    });
+  };
+
+  // ================= ACTORS (imported images animated by keyframes) =================
+  const handleAddActor = (params: { src: string; name: string; width: number; height: number }) => {
+    const id = `actor-${Date.now()}`;
+    const actor = createActor({
+      id,
+      name: params.name,
+      src: params.src,
+      width: params.width,
+      height: params.height,
+      x: Math.round(canvasDimensions.width / 2),
+      y: Math.round(canvasDimensions.height / 2),
+      startFrame: 1,
+      durationFrames: Math.max(1, totalFrames - 1),
+    });
+    const layer: StudioLayer = {
+      id: `layer-actor-${id}`,
+      name: params.name,
+      type: 'actor',
+      visible: true,
+      locked: false,
+      color: '#f97316',
+      targetId: id,
+    };
+    history.pushSnapshot(`Importar "${params.name}"`, {
+      ...history.present,
+      actors: [...history.present.actors, actor],
+      layers: [layer, ...history.present.layers],
+    });
+    setSelectedObject({ type: 'actor', id });
+    setSelectedLayerId(layer.id);
+  };
+
+  const handleImportImageFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    for (const file of list) {
+      try {
+        const { src, width, height } = await loadImageFileAsActorSource(
+          file,
+          canvasDimensions.width,
+          canvasDimensions.height
+        );
+        handleAddActor({ src, width, height, name: file.name.replace(/\.[^.]+$/, '') });
+      } catch (err) {
+        alert(`Não foi possível importar ${file.name}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  };
+
+  const handleUpdateActor = (actor: ActorOverlay, description = `Editar "${actor.name}"`) => {
+    history.pushSnapshot(description, {
+      ...history.present,
+      actors: history.present.actors.map((a) => (a.id === actor.id ? actor : a)),
+    });
+  };
+
+  const handleTransientUpdateActor = useCallback(
+    (actor: ActorOverlay) => {
+      history.updatePresent((prev) => ({
+        ...prev,
+        actors: prev.actors.map((a) => (a.id === actor.id ? actor : a)),
+      }));
+    },
+    [history]
+  );
+
+  const handleCommitActor = useCallback(
+    (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => {
+      const current = history.presentRef.current;
+      history.commitAction(description, baseSnapshot, {
+        ...current,
+        actors: current.actors.map((a) => (a.id === actor.id ? actor : a)),
+      });
+    },
+    [history]
+  );
+
+  // ================= MOTION PATHS (drawn routes that actors can follow) =================
+  const handleCreatePath = useCallback(
+    (points: { x: number; y: number }[]) => {
+      const present = history.presentRef.current;
+      const id = `path-${Date.now()}`;
+      const path: MotionPath = {
+        id,
+        name: `Caminho ${present.paths.length + 1}`,
+        points,
+        smooth: true,
+        closed: false,
+        style: { visible: true, color: '#f8fafc', width: 4, stroke: 'dotted', reveal: 'full' },
+        startFrame: 1,
+        durationFrames: Math.max(1, totalFrames - 1),
+      };
+      const layer: StudioLayer = {
+        id: `layer-path-${id}`,
+        name: path.name,
+        type: 'path',
+        visible: true,
+        locked: false,
+        color: '#38bdf8',
+        targetId: id,
+      };
+      history.pushSnapshot(`Desenhar ${path.name}`, {
+        ...present,
+        paths: [...present.paths, path],
+        layers: [layer, ...present.layers],
+      });
+      setActiveTool('pointer');
+      setSelectedObject({ type: 'path', id });
+      setSelectedLayerId(layer.id);
+    },
+    [history, totalFrames]
+  );
+
+  const handleUpdatePath = (path: MotionPath, description = `Editar "${path.name}"`) => {
+    history.pushSnapshot(description, {
+      ...history.present,
+      paths: history.present.paths.map((p) => (p.id === path.id ? path : p)),
+    });
+  };
+
+  const handleTransientUpdatePath = useCallback(
+    (path: MotionPath) => {
+      history.updatePresent((prev) => ({ ...prev, paths: prev.paths.map((p) => (p.id === path.id ? path : p)) }));
+    },
+    [history]
+  );
+
+  const handleCommitPath = useCallback(
+    (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => {
+      const current = history.presentRef.current;
+      history.commitAction(description, baseSnapshot, {
+        ...current,
+        paths: current.paths.map((p) => (p.id === path.id ? path : p)),
+      });
+    },
+    [history]
+  );
+
+  /**
+   * Links an actor to a path: it travels the whole path, eased, during the part of the timeline where
+   * both are visible (the timing can be edited afterwards like any keyframes).
+   */
+  const handleAttachActorToPath = (actorId: string, pathId: string) => {
+    const present = history.present;
+    const path = present.paths.find((p) => p.id === pathId);
+    const actor = present.actors.find((a) => a.id === actorId);
+    if (!path || !actor) return;
+    let start = Math.max(actor.startFrame, path.startFrame);
+    let end = Math.min(actor.startFrame + actor.durationFrames, path.startFrame + path.durationFrames);
+    if (end - start < 2) {
+      start = actor.startFrame;
+      end = actor.startFrame + actor.durationFrames;
+    }
+    const progress = buildFollowProgress({
+      anchorProgress: samplePath(path).anchorProgress,
+      startFrame: start,
+      endFrame: end,
+      easing: 'easeInOut',
+      holdFrames: 0,
+    });
+    history.pushSnapshot(`"${actor.name}" segue "${path.name}"`, {
+      ...present,
+      actors: present.actors.map((a) => (a.id === actorId ? { ...a, follow: { pathId, orient: true, progress } } : a)),
+    });
+    setSelectedObject({ type: 'actor', id: actorId });
+  };
+
+  /** Removes the path and unlinks actors that followed it (they keep their own position). */
+  const withoutPath = (snapshot: HistorySnapshot, pathId: string): HistorySnapshot => ({
+    ...snapshot,
+    paths: snapshot.paths.filter((p) => p.id !== pathId),
+    actors: snapshot.actors.map((a) => (a.follow?.pathId === pathId ? { ...a, follow: undefined } : a)),
+    layers: snapshot.layers.filter((l) => l.targetId !== pathId),
+  });
+
+  const handleDeletePath = (pathId: string) => {
+    const path = history.present.paths.find((p) => p.id === pathId);
+    history.pushSnapshot(`Excluir "${path?.name ?? 'caminho'}"`, withoutPath(history.present, pathId));
+    if (selectedObject?.id === pathId) setSelectedObject(null);
+  };
+
+  // ================= MAP ROUTE TEMPLATE =================
+  const [routeDialogOpen, setRouteDialogOpen] = useState(false);
+
+  const handleCreateRoute = async (req: RouteRequest) => {
+    // The map data (~750 KB) is only loaded when this template is used
+    const { loadWorld, makeProjection, renderMapImage, countryAnchor, DEFAULT_MAP_STYLE } = await import(
+      './map/worldMap'
+    );
+    const world = await loadWorld();
+    const W = canvasDimensions.width;
+    const H = canvasDimensions.height;
+    const ids = req.stops.map((c) => c.id);
+    const projection = makeProjection(world, W, H, req.framing, ids);
+    const mapSrc = renderMapImage(world, projection, W, H, DEFAULT_MAP_STYLE, req.highlight ? ids : []);
+    const stops = req.stops.map((c) => {
+      const [x, y] = projection(countryAnchor(c)) ?? [W / 2, H / 2];
+      return { name: c.name, x: Math.round(x), y: Math.round(y) };
+    });
+    const stamp = Date.now();
+    const route = buildRouteTemplate(
+      stops,
+      {
+        fps,
+        secondsPerLeg: req.secondsPerLeg,
+        pauseSeconds: req.pauseSeconds,
+        landedScale: 0.7,
+        arc: req.arc ? 0.18 : 0,
+      },
+      `path-route-${stamp}`
+    );
+    const newTotal = Math.max(totalFrames, route.endFrame);
+    const present = history.presentRef.current;
+
+    const mapActor = createActor({
+      id: `actor-map-${stamp}`,
+      name: 'Mapa-múndi',
+      src: mapSrc,
+      width: W,
+      height: H,
+      x: W / 2,
+      y: H / 2,
+      startFrame: 1,
+      durationFrames: newTotal - 1,
+    });
+    // The vehicle is just an actor following the route path (any imported image works)
+    const existingVehicle = present.actors.find((a) => a.id === req.vehicleActorId);
+    const vehicleWidth = Math.round(W * 0.07);
+    const baseVehicle =
+      existingVehicle ??
+      createActor({
+        id: `actor-plane-${stamp}`,
+        name: 'Avião',
+        src: PLANE_ICON_SRC,
+        width: vehicleWidth,
+        height: Math.round(vehicleWidth * PLANE_ICON_ASPECT),
+        x: stops[0].x,
+        y: stops[0].y,
+        startFrame: 1,
+        durationFrames: route.endFrame - 1,
+      });
+    const vehicle: ActorOverlay = {
+      ...baseVehicle,
+      startFrame: 1,
+      durationFrames: Math.max(baseVehicle.durationFrames, route.endFrame - 1),
+      follow: route.follow,
+      tracks: { ...baseVehicle.tracks, scale: route.scale },
+    };
+    const path = { ...route.path, name: `Rota: ${stops.map((s) => s.name).join(' → ')}` };
+
+    const layerFor = (id: string, name: string, type: 'actor' | 'path', locked = false): StudioLayer => ({
+      id: `layer-${type}-${id}`,
+      name,
+      type,
+      visible: true,
+      locked,
+      color: locked ? '#64748b' : type === 'path' ? '#38bdf8' : '#f97316',
+      targetId: id,
+    });
+    // Map at the back (just above the video/background layer), locked so clicks reach the rest
+    let layersNext = [...present.layers];
+    const videoIndex = layersNext.findIndex((l) => l.type === 'video');
+    layersNext.splice(
+      videoIndex === -1 ? layersNext.length : videoIndex,
+      0,
+      layerFor(mapActor.id, mapActor.name, 'actor', true)
+    );
+    layersNext = [
+      ...(existingVehicle ? [] : [layerFor(vehicle.id, vehicle.name, 'actor')]),
+      layerFor(path.id, path.name, 'path'),
+      ...layersNext,
+    ];
+
+    history.pushSnapshot(`Rota no mapa: ${stops.map((s) => s.name).join(' → ')}`, {
+      ...present,
+      actors: [
+        mapActor,
+        ...present.actors.map((a) => (a.id === vehicle.id ? vehicle : a)),
+        ...(existingVehicle ? [] : [vehicle]),
+      ],
+      paths: [...present.paths, path],
+      texts: req.labels
+        ? [...present.texts, ...buildStopLabels(stops, route.arrivals, route.endFrame, W, `route-${stamp}`)]
+        : present.texts,
+      layers: layersNext,
+    });
+    setTotalFrames(newTotal);
+    setCurrentFrame(1);
+    setSelectedObject({ type: 'actor', id: vehicle.id });
+    setRouteDialogOpen(false);
+  };
+
+  const handleDeleteActor = (actorId: string) => {
+    const actor = history.present.actors.find((a) => a.id === actorId);
+    history.pushSnapshot(`Excluir "${actor?.name ?? 'ator'}"`, {
+      ...history.present,
+      actors: history.present.actors.filter((a) => a.id !== actorId),
+      layers: history.present.layers.filter((l) => l.targetId !== actorId),
+    });
+    if (selectedObject?.id === actorId) setSelectedObject(null);
+  };
+
   // ================= KEYBOARD SHORTCUTS =================
   // Flash-standard Ctrl+Z, Ctrl+Y, Ctrl+G, Ctrl+B, Delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+      // File shortcuts work everywhere, even while typing in a field
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveProject(e.shiftKey);
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        handleOpenProject();
+        return;
+      }
+      if (isTypingTarget(e.target)) return;
 
       // Ctrl+Z / Cmd+Z -> Undo
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -814,6 +1410,8 @@ export default function App() {
           e.preventDefault();
           if (selectedObject.type === 'chart') handleDeleteChart(selectedObject.id);
           else if (selectedObject.type === 'text') handleDeleteText(selectedObject.id);
+          else if (selectedObject.type === 'actor') handleDeleteActor(selectedObject.id);
+          else if (selectedObject.type === 'path') handleDeletePath(selectedObject.id);
           else if (selectedObject.type === 'stick') {
             handleDeleteStickFigure(selectedObject.id, false);
           }
@@ -968,12 +1566,18 @@ export default function App() {
       charts: [],
       texts: [],
       images: [],
+      actors: [],
+      paths: [],
+      layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path'),
     });
     setCurrentFrame(1);
   };
 
   // Video Upload
   const handleUploadVideo = (file: File) => {
+    if (videoBg.url?.startsWith('blob:')) URL.revokeObjectURL(videoBg.url);
+    fitTimelineToVideoRef.current = true;
+    setVideoFileName(file.name);
     const objectUrl = URL.createObjectURL(file);
     setVideoBg({
       type: 'upload',
@@ -984,55 +1588,70 @@ export default function App() {
   };
 
   // Export Video
-  const handleExportVideo = async () => {
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  const handleExportVideo = async (request: ExportRequest) => {
     setIsExporting(true);
     setExportProgress(0);
     setIsPlaying(false);
 
     try {
-      const blob = await exportVideoSequence(
-        frames,
+      const { blob, extension } = await exportVideoSequence(sceneContent(), {
         totalFrames,
         fps,
-        charts,
-        texts,
-        images,
-        videoBg,
-        videoRef.current,
-        (progress) => setExportProgress(progress),
-        layers,
-        canvasDimensions.width,
-        canvasDimensions.height
-      );
+        width: canvasDimensions.width,
+        height: canvasDimensions.height,
+        onProgress: (progress) => setExportProgress(progress),
+        format: request.format,
+        startFrame: request.startFrame,
+        endFrame: request.endFrame,
+      });
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `animacao-flashmotion-${Date.now()}.webm`;
+      const suffix = request.format === 'webm-alpha' ? '-transparente' : '';
+      a.download = `${projectName}${suffix}.${extension}`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revoking synchronously can cancel the download before the browser starts it
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setExportDialogOpen(false);
     } catch (err) {
       console.error('Export error:', err);
+      alert(`Falha ao exportar o vídeo: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsExporting(false);
       setExportProgress(0);
     }
   };
 
+  // Clean render of the current frame (no editor grid or selection handles)
+  const sceneContent = () => ({
+    frames,
+    charts,
+    texts,
+    images,
+    actors,
+    paths,
+    layers,
+    videoBg,
+    videoElement: videoEl,
+  });
+  const currentFrameRenderParams = () => ({
+    width: canvasDimensions.width,
+    height: canvasDimensions.height,
+    frame: currentFrame,
+    scene: sceneContent(),
+  });
+
   // Snapshot PNG
   const handleSnapshot = () => {
-    const canvas = document.querySelector('canvas');
-    if (canvas) {
-      exportSnapshotPNG(canvas, `frame-${currentFrame}-snapshot.png`);
-    }
+    exportFramePNG(currentFrameRenderParams(), `frame-${currentFrame}-snapshot.png`);
   };
 
   // Open AI Image Modal
-  const handleOpenAiImage = () => {
-    const canvas = document.querySelector('canvas');
-    if (canvas) {
-      setCanvasSnapshot(canvas.toDataURL('image/png'));
-    }
+  const handleOpenAiImage = async () => {
+    setCanvasSnapshot(await renderFrameToDataURL(currentFrameRenderParams()));
     setAiModalOpen(true);
   };
 
@@ -1041,8 +1660,16 @@ export default function App() {
       {/* Hidden Video element for background video frame grabbing */}
       {videoBg.url && (
         <video
-          ref={videoRef}
+          ref={setVideoEl}
           src={videoBg.url}
+          onLoadedMetadata={(e) => {
+            if (!fitTimelineToVideoRef.current) return;
+            fitTimelineToVideoRef.current = false;
+            const duration = e.currentTarget.duration;
+            if (Number.isFinite(duration) && duration > 0) {
+              setTotalFrames(Math.max(1, Math.round(duration * fps)));
+            }
+          }}
           crossOrigin="anonymous"
           muted
           playsInline
@@ -1052,7 +1679,7 @@ export default function App() {
 
       {/* Top Flash Studio Header with History & Grouping controls */}
       <StudioHeader
-        onExportVideo={handleExportVideo}
+        onExportVideo={() => setExportDialogOpen(true)}
         isExporting={isExporting}
         exportProgress={exportProgress}
         onSnapshot={handleSnapshot}
@@ -1070,7 +1697,32 @@ export default function App() {
         hasSelection={selectedObject !== null}
         canvasDimensions={canvasDimensions}
         onUpdateCanvasDimensions={setCanvasDimensions}
+        projectName={projectName}
+        isDirty={isDirty}
+        onOpenProject={handleOpenProject}
+        onSaveProject={() => handleSaveProject(false)}
       />
+
+      {pendingRestore && (
+        <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
+          <span className="flex-1">
+            Encontramos alterações não salvas de <b>{pendingRestore.name}</b> (
+            {new Date(pendingRestore.savedAt).toLocaleString('pt-BR')}). Deseja restaurar?
+          </span>
+          <button
+            onClick={() => handleRestoreAutosave(true)}
+            className="px-3 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400"
+          >
+            Restaurar
+          </button>
+          <button
+            onClick={() => handleRestoreAutosave(false)}
+            className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10"
+          >
+            Descartar
+          </button>
+        </div>
+      )}
 
       {/* Middle Stage & Inspector Workspace */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -1107,7 +1759,7 @@ export default function App() {
             onDeleteText={handleDeleteText}
             images={images}
             videoBg={videoBg}
-            videoElement={videoRef.current}
+            videoElement={videoEl}
             isPlaying={isPlaying}
             layers={layers}
             onGroupSelected={handleGroupSelected}
@@ -1116,6 +1768,14 @@ export default function App() {
             canvasWidth={canvasDimensions.width}
             canvasHeight={canvasDimensions.height}
             getCurrentSnapshot={() => history.presentRef.current}
+            actors={actors}
+            onTransientUpdateActor={handleTransientUpdateActor}
+            onCommitActor={handleCommitActor}
+            onImportImageFiles={handleImportImageFiles}
+            paths={paths}
+            onCreatePath={handleCreatePath}
+            onTransientUpdatePath={handleTransientUpdatePath}
+            onCommitPath={handleCommitPath}
           />
         </div>
 
@@ -1131,8 +1791,8 @@ export default function App() {
               id: `chart-${Date.now()}`,
               title: 'Novo Gráfico Animado',
               type: chartType || 'bar',
-              x: 640,
-              y: 160,
+              x: Math.round(canvasDimensions.width * 0.5),
+              y: Math.round(canvasDimensions.height * 0.22),
               width: 480,
               height: 280,
               startFrame: currentFrame,
@@ -1158,8 +1818,8 @@ export default function App() {
             const newText: TextOverlay = {
               id: `text-${Date.now()}`,
               text: isNumber ? 'Contador' : 'Novo Texto Animado',
-              x: 640,
-              y: 220,
+              x: Math.round(canvasDimensions.width * 0.5),
+              y: Math.round(canvasDimensions.height * 0.3),
               fontSize: 28,
               color: '#ffffff',
               startFrame: currentFrame,
@@ -1216,6 +1876,7 @@ export default function App() {
           setTotalFrames={setTotalFrames}
           videoBg={videoBg}
           setVideoBg={setVideoBg}
+          onUploadVideo={handleUploadVideo}
           pastSteps={history.past}
           futureSteps={history.future}
           onJumpToHistory={history.jumpToSnapshot}
@@ -1228,7 +1889,19 @@ export default function App() {
           timelineHeight={timelineHeight}
           setTimelineHeight={setTimelineHeight}
           onDeleteStickFigure={handleDeleteStickFigure}
+          actors={actors}
+          onUpdateActor={handleUpdateActor}
+          onDeleteActor={handleDeleteActor}
+          onImportImageFiles={handleImportImageFiles}
           onJumpToFrame={setCurrentFrame}
+          frames={frames}
+          onCopyStickToFrame={handleCopyStickToFrame}
+          onTweenStick={handleTweenStick}
+          onOpenRouteDialog={() => setRouteDialogOpen(true)}
+          paths={paths}
+          onUpdatePath={handleUpdatePath}
+          onDeletePath={handleDeletePath}
+          onAttachActorToPath={handleAttachActorToPath}
         />
       </div>
 
@@ -1275,10 +1948,39 @@ export default function App() {
           onUpdateText={handleTransientUpdateText}
           onCommitChart={handleCommitChart}
           onCommitText={handleCommitText}
-          getCurrentSnapshot={history.getCurrentSnapshot}
+          getCurrentSnapshot={() => history.presentRef.current}
           onJumpToFrame={setCurrentFrame}
+          actors={actors}
+          onUpdateActor={handleTransientUpdateActor}
+          onCommitActor={handleCommitActor}
+          paths={paths}
+          onUpdatePath={handleTransientUpdatePath}
+          onCommitPath={handleCommitPath}
         />
       </div>
+
+      <ExportDialog
+        isOpen={exportDialogOpen}
+        onClose={() => setExportDialogOpen(false)}
+        onExport={handleExportVideo}
+        isExporting={isExporting}
+        progress={exportProgress}
+        totalFrames={totalFrames}
+        fps={fps}
+        width={canvasDimensions.width}
+        height={canvasDimensions.height}
+        hasBackgroundVideo={videoBg.type !== 'color' && !!videoBg.url}
+      />
+
+      <PwaStatus hasUnsavedChanges={isDirty} />
+
+      <RouteDialog
+        isOpen={routeDialogOpen}
+        onClose={() => setRouteDialogOpen(false)}
+        onCreate={handleCreateRoute}
+        actors={actors}
+        fps={fps}
+      />
 
       {/* AI Image Generation & Editing Modal */}
       <AiImageModal
@@ -1288,10 +1990,7 @@ export default function App() {
         totalFrames={totalFrames}
         canvasSnapshot={canvasSnapshot}
         onAddImageOverlay={(img) => {
-          history.pushSnapshot('Adicionar Imagem IA', {
-            ...history.present,
-            images: [...images, img],
-          });
+          handleAddActor({ src: img.url, name: 'Imagem IA', width: img.width, height: img.height });
         }}
         onSetAsBackground={(url) => {
           setVideoBg({
