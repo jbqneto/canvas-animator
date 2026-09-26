@@ -44,7 +44,7 @@ import {
 import { ActorInspector } from './ActorInspector';
 import { PathInspector } from './PathInspector';
 import { StickAnimationPanel } from './StickAnimationPanel';
-import { useI18n } from '../i18n';
+import { MessageKey, useI18n } from '../i18n';
 import type { EasingName } from '../engine/keyframes';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
@@ -914,7 +914,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-left transition"
                         >
                           <Zap size={11} className="text-amber-400 shrink-0" />
-                          <span className="truncate">{preset.name}</span>
+                          <span className="truncate" title={t(`pose.${key}.desc` as MessageKey)}>
+                            {t(`pose.${key}.name` as MessageKey)}
+                          </span>
                         </button>
                       ))}
                     </div>

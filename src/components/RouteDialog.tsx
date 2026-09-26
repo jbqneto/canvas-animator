@@ -30,7 +30,7 @@ const inputClass =
   'bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-xs text-white focus:border-sky-500 outline-none';
 
 export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCreate, actors, fps }) => {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [countries, setCountries] = useState<Country[] | null>(null);
   const [query, setQuery] = useState('');
   const [stops, setStops] = useState<Country[]>([]);
@@ -43,9 +43,17 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
   const [vehicleActorId, setVehicleActorId] = useState<string>('');
   const [busy, setBusy] = useState(false);
 
+  // Country names follow the interface language
   useEffect(() => {
-    if (isOpen && !countries) loadWorld().then((w) => setCountries(w.countries));
-  }, [isOpen, countries]);
+    if (!isOpen) return;
+    let cancelled = false;
+    loadWorld(locale).then((w) => {
+      if (!cancelled) setCountries(w.countries);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, locale]);
 
   const matches = useMemo(() => {
     if (!countries || !query.trim()) return [];

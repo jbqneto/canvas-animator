@@ -20,6 +20,7 @@ import { createActor } from './engine/actor';
 import { tweenStickFrames } from './engine/stickRig';
 import type { EasingName } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
+import { useI18n } from './i18n';
 import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
@@ -49,6 +50,7 @@ import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 
 export default function App() {
+  const { t, locale } = useI18n();
   // Timeline playback state
   const [currentFrame, setCurrentFrame] = useState<number>(1);
   const [totalFrames, setTotalFrames] = useState<number>(60);
@@ -97,7 +99,7 @@ export default function App() {
   const initialLayers: StudioLayer[] = [
     {
       id: 'layer-drawings',
-      name: 'Camada de Desenhos / Palito',
+      name: t('app.layer.drawings'),
       type: 'drawing',
       visible: true,
       locked: false,
@@ -105,7 +107,7 @@ export default function App() {
     },
     {
       id: 'layer-charts',
-      name: 'Gráficos Interativos',
+      name: t('app.layer.charts'),
       type: 'chart',
       visible: true,
       locked: false,
@@ -114,7 +116,7 @@ export default function App() {
     },
     {
       id: 'layer-texts',
-      name: 'Títulos & Contadores',
+      name: t('app.layer.texts'),
       type: 'text',
       visible: true,
       locked: false,
@@ -123,7 +125,7 @@ export default function App() {
     },
     {
       id: 'layer-video',
-      name: 'Fundo do Palco (Vídeo/Cor)',
+      name: t('app.layer.background'),
       type: 'video',
       visible: true,
       locked: false,
@@ -135,7 +137,7 @@ export default function App() {
   const initialFrames: Record<number, FrameData> = {};
   const presenterStick = createDefaultStickFigure(
     'stick-presenter',
-    'Palito Educativo',
+    t('app.demo.stickName'),
     240,
     430
   );
@@ -170,7 +172,7 @@ export default function App() {
   const initialCharts: ChartOverlay[] = [
     {
       id: 'chart-initial-1',
-      title: 'Crescimento de Audiência',
+      title: t('app.demo.chartTitle'),
       type: 'bar',
       x: 640,
       y: 110,
@@ -192,7 +194,7 @@ export default function App() {
   const initialTexts: TextOverlay[] = [
     {
       id: 'text-initial-1',
-      text: 'ANIMAÇÃO EXPLICATIVA',
+      text: t('app.demo.headline'),
       x: 640,
       y: 70,
       fontSize: 28,
@@ -205,7 +207,7 @@ export default function App() {
     },
     {
       id: 'text-counter-1',
-      text: 'Inscritos',
+      text: t('app.demo.counterLabel'),
       x: 640,
       y: 480,
       fontSize: 24,
@@ -224,7 +226,7 @@ export default function App() {
 
   // ================= UNDO / REDO HISTORY ENGINE =================
   const history = useHistory({
-    description: 'Estado Inicial',
+    description: t('history.initial'),
     frames: initialFrames,
     charts: initialCharts,
     texts: initialTexts,
@@ -245,7 +247,7 @@ export default function App() {
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
   // ================= PROJECT FILE (save / open / autosave) =================
-  const [projectName, setProjectName] = useState('Projeto sem título');
+  const [projectName, setProjectName] = useState(() => t('project.untitled'));
   const [videoFileName, setVideoFileName] = useState<string | undefined>();
   const [pendingRestore, setPendingRestore] = useState<AutosaveEntry | null>(null);
   const fileHandleRef = useRef<ProjectFileHandle | undefined>(undefined);
@@ -311,7 +313,7 @@ export default function App() {
     setVideoBg(project.videoBg);
     setVideoFileName(undefined);
     setProjectName(name ?? project.name);
-    history.reset({ description: 'Projeto aberto', ...project.content });
+    history.reset({ description: t('history.projectOpened'), ...project.content });
     setCurrentFrame(1);
     setSelectedObject(null);
     setIsPlaying(false);
@@ -329,29 +331,29 @@ export default function App() {
       }
       setSavedMarker(currentMarker);
     } catch (err) {
-      alert(`Não foi possível salvar: ${err instanceof Error ? err.message : err}`);
+      alert(t('app.error.save', { error: err instanceof Error ? err.message : String(err) }));
     }
   };
 
   const handleOpenProject = async () => {
-    if (isDirty && !confirm('Há alterações não salvas. Abrir outro projeto mesmo assim?')) return;
+    if (isDirty && !confirm(t('app.confirm.openWithUnsaved'))) return;
     try {
       const opened = await openProjectFile();
       if (!opened) return;
       const project = applyProjectText(opened.text, projectNameFromFile(opened.fileName));
       fileHandleRef.current = opened.handle;
       if (project.missingVideo) {
-        alert(`Este projeto usava o vídeo "${project.missingVideo}". Carregue-o de novo em Vídeo de Fundo.`);
+        alert(t('app.missingVideo', { name: project.missingVideo }));
       }
     } catch (err) {
-      alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
+      alert(err instanceof ProjectFileError ? err.message : t('app.error.open', { error: String(err) }));
     }
   };
 
   // Installed app: files opened from the OS (double-click on .fmproj) arrive through the launch queue
   const openLaunchedFileRef = useRef<(handle: ProjectFileHandle) => void>(() => undefined);
   openLaunchedFileRef.current = async (handle) => {
-    if (isDirty && !confirm('Há alterações não salvas. Abrir o arquivo mesmo assim?')) return;
+    if (isDirty && !confirm(t('app.confirm.openFileWithUnsaved'))) return;
     try {
       const file = await handle.getFile();
       applyProjectText(await file.text(), projectNameFromFile(file.name));
@@ -359,7 +361,7 @@ export default function App() {
       setPendingRestore(null);
       autosaveReadyRef.current = true;
     } catch (err) {
-      alert(err instanceof ProjectFileError ? err.message : `Não foi possível abrir: ${err}`);
+      alert(err instanceof ProjectFileError ? err.message : t('app.error.open', { error: String(err) }));
     }
   };
   useEffect(() => {
@@ -443,7 +445,7 @@ export default function App() {
   // Frame update handler
   const handleUpdateFrameData = useCallback(
     (frameNum: number, data: FrameData) => {
-      history.pushSnapshot('Modificar Palco', {
+      history.pushSnapshot(t('history.editStage'), {
         ...history.present,
         frames: {
           ...history.present.frames,
@@ -540,7 +542,7 @@ export default function App() {
             stickFigures: fData.stickFigures.filter((s) => s.id !== stickId),
           };
         }
-        history.pushSnapshot('Excluir Boneco de Todos os Quadros', {
+        history.pushSnapshot(t('history.deleteStickAll'), {
           ...history.present,
           frames: updatedFrames,
         });
@@ -552,7 +554,7 @@ export default function App() {
           groups: [],
         };
         const updatedSticks = currentData.stickFigures.filter((s) => s.id !== stickId);
-        history.pushSnapshot(`Excluir Boneco do Frame ${currentFrame}`, {
+        history.pushSnapshot(t('history.deleteStickFrame', { frame: currentFrame }), {
           ...history.present,
           frames: {
             ...history.present.frames,
@@ -599,7 +601,7 @@ export default function App() {
     const duplicated: FrameData = JSON.parse(JSON.stringify(current));
     duplicated.frameNumber = nextFrameNum;
 
-    history.pushSnapshot(`Duplicar Frame ${currentFrame} -> ${nextFrameNum}`, {
+    history.pushSnapshot(t('history.duplicateFrame', { from: currentFrame, to: nextFrameNum }), {
       ...history.present,
       frames: {
         ...history.present.frames,
@@ -611,7 +613,7 @@ export default function App() {
 
   // Clear current frame
   const handleClearCurrentFrame = () => {
-    history.pushSnapshot(`Limpar Frame ${currentFrame}`, {
+    history.pushSnapshot(t('history.clearFrame', { frame: currentFrame }), {
       ...history.present,
       frames: {
         ...history.present.frames,
@@ -693,7 +695,7 @@ export default function App() {
         (s) => s.id !== selectedObject.id
       );
 
-      history.pushSnapshot('Desagrupar Boneco Palito em Traços Individuais', {
+      history.pushSnapshot(t('history.breakStick'), {
         ...history.present,
         frames: {
           ...history.present.frames,
@@ -715,7 +717,7 @@ export default function App() {
         (g) => g.id !== selectedObject.id
       );
 
-      history.pushSnapshot('Desagrupar Grupo', {
+      history.pushSnapshot(t('history.ungroup'), {
         ...history.present,
         frames: {
           ...history.present.frames,
@@ -738,7 +740,7 @@ export default function App() {
     if (currentFrameData.drawings.length > 0) {
       const newGroup: CanvasGroup = {
         id: `group-${Date.now()}`,
-        name: `Grupo ${Date.now().toString().slice(-4)}`,
+        name: t('app.newGroup', { n: Date.now().toString().slice(-4) }),
         x: 0,
         y: 0,
         scale: 1,
@@ -746,7 +748,7 @@ export default function App() {
         strokeIds: currentFrameData.drawings.map((d) => d.id),
       };
 
-      history.pushSnapshot('Agrupar Traços do Canvas (Ctrl+G)', {
+      history.pushSnapshot(t('history.group'), {
         ...history.present,
         frames: {
           ...history.present.frames,
@@ -764,7 +766,7 @@ export default function App() {
   // ================= LAYER MANAGEMENT =================
   const handleAddLayer = (type: 'drawing' | 'chart' | 'text' | 'video' | 'group') => {
     const layerId = `layer-${type}-${Date.now()}`;
-    let newName = 'Nova Camada';
+    let newName = t('app.newLayer');
     let newColor = '#38bdf8';
     let targetId: string | undefined = undefined;
 
@@ -773,12 +775,12 @@ export default function App() {
     let updatedFrames = { ...history.present.frames };
 
     if (type === 'chart') {
-      newName = 'Camada de Gráfico';
+      newName = t('timeline.layer.chart');
       newColor = '#0ea5e9';
       targetId = `chart-${Date.now()}`;
       const newChart: ChartOverlay = {
         id: targetId,
-        title: 'Gráfico de Vendas',
+        title: t('app.newChartTitle'),
         type: 'bar',
         x: Math.round(canvasDimensions.width * 0.42),
         y: Math.round(canvasDimensions.height * 0.22),
@@ -802,12 +804,12 @@ export default function App() {
       updatedCharts.push(newChart);
       setSelectedObject({ type: 'chart', id: targetId });
     } else if (type === 'text') {
-      newName = 'Camada de Texto / Contador';
+      newName = t('timeline.layer.text');
       newColor = '#10b981';
       targetId = `text-${Date.now()}`;
       const newText: TextOverlay = {
         id: targetId,
-        text: 'Novo Texto Animado',
+        text: t('app.newText'),
         x: Math.round(canvasDimensions.width * 0.38),
         y: Math.round(canvasDimensions.height * 0.28),
         fontSize: 32,
@@ -824,15 +826,15 @@ export default function App() {
       updatedTexts.push(newText);
       setSelectedObject({ type: 'text', id: targetId });
     } else if (type === 'video') {
-      newName = 'Camada de Fundo de Vídeo';
+      newName = t('timeline.layer.video');
       newColor = '#a855f7';
     } else if (type === 'group') {
-      newName = 'Camada de Boneco Palito';
+      newName = t('timeline.layer.stick');
       newColor = '#f59e0b';
       targetId = `stick-${Date.now()}`;
       const newStick = createDefaultStickFigure(
         targetId,
-        `Boneco Palito ${Date.now() % 1000}`,
+        t('app.newStickNumbered', { n: Date.now() % 1000 }),
         Math.round(canvasDimensions.width / 2),
         Math.round(canvasDimensions.height / 2)
       );
@@ -848,7 +850,7 @@ export default function App() {
       };
       setSelectedObject({ type: 'stick', id: targetId });
     } else if (type === 'drawing') {
-      newName = 'Camada de Desenho';
+      newName = t('timeline.layer.drawing');
       newColor = '#ec4899';
       setActiveTool('pen');
     }
@@ -863,7 +865,7 @@ export default function App() {
       targetId,
     };
 
-    history.pushSnapshot(`Adicionar ${newName}`, {
+    history.pushSnapshot(t('history.add', { name: newName }), {
       ...history.present,
       layers: [newLayer, ...layers],
       charts: updatedCharts,
@@ -907,7 +909,7 @@ export default function App() {
       return;
     }
 
-    history.pushSnapshot(`Excluir Camada ${layer.name}`, {
+    history.pushSnapshot(t('history.deleteLayer', { name: layer.name }), {
       ...history.present,
       layers: layers.filter((l) => l.id !== layerId),
       charts: updatedCharts,
@@ -926,7 +928,7 @@ export default function App() {
     const updated = layers.map((l) =>
       l.id === layerId ? { ...l, visible: !l.visible } : l
     );
-    history.pushSnapshot('Alternar Visibilidade da Camada', {
+    history.pushSnapshot(t('history.toggleLayerVisibility'), {
       ...history.present,
       layers: updated,
     });
@@ -936,7 +938,7 @@ export default function App() {
     const updated = layers.map((l) =>
       l.id === layerId ? { ...l, locked: !l.locked } : l
     );
-    history.pushSnapshot('Alternar Bloqueio da Camada', {
+    history.pushSnapshot(t('history.toggleLayerLock'), {
       ...history.present,
       layers: updated,
     });
@@ -954,7 +956,7 @@ export default function App() {
     newLayers[idx] = newLayers[targetIdx];
     newLayers[targetIdx] = temp;
 
-    history.pushSnapshot('Reordenar Camadas', {
+    history.pushSnapshot(t('history.reorderLayers'), {
       ...history.present,
       layers: newLayers,
     });
@@ -964,7 +966,7 @@ export default function App() {
     const updated = layers.map((l) =>
       l.id === layerId ? { ...l, name: newName } : l
     );
-    history.pushSnapshot(`Renomear Camada p/ "${newName}"`, {
+    history.pushSnapshot(t('history.renameLayer', { name: newName }), {
       ...history.present,
       layers: updated,
     });
@@ -972,14 +974,14 @@ export default function App() {
 
   // ================= CHARTS & TEXTS HANDLERS =================
   const handleUpdateChart = (updatedChart: ChartOverlay) => {
-    history.pushSnapshot(`Atualizar Gráfico "${updatedChart.title}"`, {
+    history.pushSnapshot(t('history.updateChart', { name: updatedChart.title }), {
       ...history.present,
       charts: charts.map((c) => (c.id === updatedChart.id ? updatedChart : c)),
     });
   };
 
   const handleDeleteChart = (chartId: string) => {
-    history.pushSnapshot('Excluir Gráfico', {
+    history.pushSnapshot(t('history.deleteChart'), {
       ...history.present,
       charts: charts.filter((c) => c.id !== chartId),
     });
@@ -987,14 +989,14 @@ export default function App() {
   };
 
   const handleUpdateText = (updatedText: TextOverlay) => {
-    history.pushSnapshot(`Atualizar Texto "${updatedText.text.slice(0, 15)}"`, {
+    history.pushSnapshot(t('history.updateText', { name: updatedText.text.slice(0, 15) }), {
       ...history.present,
       texts: texts.map((t) => (t.id === updatedText.id ? updatedText : t)),
     });
   };
 
   const handleDeleteText = (textId: string) => {
-    history.pushSnapshot('Excluir Texto', {
+    history.pushSnapshot(t('history.deleteText'), {
       ...history.present,
       texts: texts.filter((t) => t.id !== textId),
     });
@@ -1031,7 +1033,7 @@ export default function App() {
   const handleCopyStickToFrame = (stickId: string, toFrame: number) => {
     const stick = frames[currentFrame]?.stickFigures.find((s) => s.id === stickId);
     if (!stick || toFrame === currentFrame) return;
-    history.pushSnapshot(`Copiar pose F${currentFrame} → F${toFrame}`, {
+    history.pushSnapshot(t('history.copyPose', { from: currentFrame, to: toFrame }), {
       ...history.present,
       frames: withStickInFrame(history.present.frames, toFrame, { ...stick, tweened: false }),
     });
@@ -1043,7 +1045,7 @@ export default function App() {
     const a = frames[fromFrame]?.stickFigures.find((s) => s.id === stickId);
     const b = frames[toFrame]?.stickFigures.find((s) => s.id === stickId);
     if (!a || !b) {
-      alert(`O boneco precisa existir nos frames ${fromFrame} e ${toFrame}.`);
+      alert(t('app.error.stickMissing', { from: fromFrame, to: toFrame }));
       return;
     }
     const poses = tweenStickFrames(a, b, fromFrame, toFrame, easing);
@@ -1051,7 +1053,7 @@ export default function App() {
     Object.entries(poses).forEach(([f, pose]) => {
       updated = withStickInFrame(updated, Number(f), pose);
     });
-    history.pushSnapshot(`Interpolar pose F${fromFrame} → F${toFrame}`, {
+    history.pushSnapshot(t('history.tweenPose', { from: fromFrame, to: toFrame }), {
       ...history.present,
       frames: updated,
     });
@@ -1080,7 +1082,7 @@ export default function App() {
       color: '#f97316',
       targetId: id,
     };
-    history.pushSnapshot(`Importar "${params.name}"`, {
+    history.pushSnapshot(t('history.import', { name: params.name }), {
       ...history.present,
       actors: [...history.present.actors, actor],
       layers: [layer, ...history.present.layers],
@@ -1100,12 +1102,12 @@ export default function App() {
         );
         handleAddActor({ src, width, height, name: file.name.replace(/\.[^.]+$/, '') });
       } catch (err) {
-        alert(`Não foi possível importar ${file.name}: ${err instanceof Error ? err.message : err}`);
+        alert(t('app.error.import', { name: file.name, error: err instanceof Error ? err.message : String(err) }));
       }
     }
   };
 
-  const handleUpdateActor = (actor: ActorOverlay, description = `Editar "${actor.name}"`) => {
+  const handleUpdateActor = (actor: ActorOverlay, description = t('history.edit', { name: actor.name })) => {
     history.pushSnapshot(description, {
       ...history.present,
       actors: history.present.actors.map((a) => (a.id === actor.id ? actor : a)),
@@ -1140,7 +1142,7 @@ export default function App() {
       const id = `path-${Date.now()}`;
       const path: MotionPath = {
         id,
-        name: `Caminho ${present.paths.length + 1}`,
+        name: t('app.newPath', { n: present.paths.length + 1 }),
         points,
         smooth: true,
         closed: false,
@@ -1157,7 +1159,7 @@ export default function App() {
         color: '#38bdf8',
         targetId: id,
       };
-      history.pushSnapshot(`Desenhar ${path.name}`, {
+      history.pushSnapshot(t('history.drawPath', { name: path.name }), {
         ...present,
         paths: [...present.paths, path],
         layers: [layer, ...present.layers],
@@ -1169,7 +1171,7 @@ export default function App() {
     [history, totalFrames]
   );
 
-  const handleUpdatePath = (path: MotionPath, description = `Editar "${path.name}"`) => {
+  const handleUpdatePath = (path: MotionPath, description = t('history.edit', { name: path.name })) => {
     history.pushSnapshot(description, {
       ...history.present,
       paths: history.present.paths.map((p) => (p.id === path.id ? path : p)),
@@ -1216,7 +1218,7 @@ export default function App() {
       easing: 'easeInOut',
       holdFrames: 0,
     });
-    history.pushSnapshot(`"${actor.name}" segue "${path.name}"`, {
+    history.pushSnapshot(t('history.follow', { actor: actor.name, path: path.name }), {
       ...present,
       actors: present.actors.map((a) => (a.id === actorId ? { ...a, follow: { pathId, orient: true, progress } } : a)),
     });
@@ -1233,7 +1235,7 @@ export default function App() {
 
   const handleDeletePath = (pathId: string) => {
     const path = history.present.paths.find((p) => p.id === pathId);
-    history.pushSnapshot(`Excluir "${path?.name ?? 'caminho'}"`, withoutPath(history.present, pathId));
+    history.pushSnapshot(t('history.delete', { name: path?.name ?? t('selection.path') }), withoutPath(history.present, pathId));
     if (selectedObject?.id === pathId) setSelectedObject(null);
   };
 
@@ -1272,7 +1274,7 @@ export default function App() {
 
     const mapActor = createActor({
       id: `actor-map-${stamp}`,
-      name: 'Mapa-múndi',
+      name: t('app.map'),
       src: mapSrc,
       width: W,
       height: H,
@@ -1288,7 +1290,7 @@ export default function App() {
       existingVehicle ??
       createActor({
         id: `actor-plane-${stamp}`,
-        name: 'Avião',
+        name: t('app.plane'),
         src: PLANE_ICON_SRC,
         width: vehicleWidth,
         height: Math.round(vehicleWidth * PLANE_ICON_ASPECT),
@@ -1304,7 +1306,7 @@ export default function App() {
       follow: route.follow,
       tracks: { ...baseVehicle.tracks, scale: route.scale },
     };
-    const path = { ...route.path, name: `Rota: ${stops.map((s) => s.name).join(' → ')}` };
+    const path = { ...route.path, name: t('app.routePathName', { stops: stops.map((s) => s.name).join(' → ') }) };
 
     const layerFor = (id: string, name: string, type: 'actor' | 'path', locked = false): StudioLayer => ({
       id: `layer-${type}-${id}`,
@@ -1329,7 +1331,7 @@ export default function App() {
       ...layersNext,
     ];
 
-    history.pushSnapshot(`Rota no mapa: ${stops.map((s) => s.name).join(' → ')}`, {
+    history.pushSnapshot(t('history.mapRoute', { stops: stops.map((s) => s.name).join(' → ') }), {
       ...present,
       actors: [
         mapActor,
@@ -1350,7 +1352,7 @@ export default function App() {
 
   const handleDeleteActor = (actorId: string) => {
     const actor = history.present.actors.find((a) => a.id === actorId);
-    history.pushSnapshot(`Excluir "${actor?.name ?? 'ator'}"`, {
+    history.pushSnapshot(t('history.delete', { name: actor?.name ?? t('selection.actor') }), {
       ...history.present,
       actors: history.present.actors.filter((a) => a.id !== actorId),
       layers: history.present.layers.filter((l) => l.targetId !== actorId),
@@ -1439,7 +1441,7 @@ export default function App() {
   const handleLoadPreset = (presetName: string) => {
     if (presetName === 'presenter') {
       const newFrames: Record<number, FrameData> = {};
-      const baseStick = createDefaultStickFigure('stick-presenter', 'Palito Professor', 240, 430);
+      const baseStick = createDefaultStickFigure('stick-presenter', t('app.scene.teacher'), 240, 430);
       baseStick.scale = 1.25;
 
       for (let f = 1; f <= 60; f++) {
@@ -1467,7 +1469,7 @@ export default function App() {
         };
       }
 
-      history.pushSnapshot('Carregar Cena: Apresentador Educativo', {
+      history.pushSnapshot(t('history.loadScene', { name: t('header.example.presenter') }), {
         ...history.present,
         frames: newFrames,
         charts: initialCharts,
@@ -1478,7 +1480,7 @@ export default function App() {
       setSelectedObject({ type: 'stick', id: 'stick-presenter' });
     } else if (presetName === 'walkcycle') {
       const newFrames: Record<number, FrameData> = {};
-      const baseStick = createDefaultStickFigure('stick-walker', 'Caminhante', 150, 420);
+      const baseStick = createDefaultStickFigure('stick-walker', t('app.scene.walker'), 150, 420);
 
       for (let f = 1; f <= 48; f++) {
         const xPos = 120 + f * 16;
@@ -1498,7 +1500,7 @@ export default function App() {
         };
       }
 
-      history.pushSnapshot('Carregar Cena: Caminhada Stick Figure', {
+      history.pushSnapshot(t('history.loadScene', { name: t('header.example.walkcycle') }), {
         ...history.present,
         frames: newFrames,
       });
@@ -1507,7 +1509,7 @@ export default function App() {
       setSelectedObject({ type: 'stick', id: 'stick-walker' });
     } else if (presetName === 'action') {
       const newFrames: Record<number, FrameData> = {};
-      const fighter = createDefaultStickFigure('stick-action', 'Acrobata Flash', 280, 420);
+      const fighter = createDefaultStickFigure('stick-action', t('app.scene.acrobat'), 280, 420);
       fighter.color = '#ef4444';
 
       for (let f = 1; f <= 48; f++) {
@@ -1540,7 +1542,7 @@ export default function App() {
         };
       }
 
-      history.pushSnapshot('Carregar Cena: Ação Flash', {
+      history.pushSnapshot(t('history.loadScene', { name: t('header.example.action') }), {
         ...history.present,
         frames: newFrames,
       });
@@ -1560,7 +1562,7 @@ export default function App() {
         groups: [],
       };
     }
-    history.pushSnapshot('Reiniciar Projeto', {
+    history.pushSnapshot(t('history.resetProject'), {
       ...history.present,
       frames: emptyFrames,
       charts: [],
@@ -1618,7 +1620,7 @@ export default function App() {
       setExportDialogOpen(false);
     } catch (err) {
       console.error('Export error:', err);
-      alert(`Falha ao exportar o vídeo: ${err instanceof Error ? err.message : String(err)}`);
+      alert(t('app.error.export', { error: err instanceof Error ? err.message : String(err) }));
     } finally {
       setIsExporting(false);
       setExportProgress(0);
@@ -1706,20 +1708,22 @@ export default function App() {
       {pendingRestore && (
         <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
           <span className="flex-1">
-            Encontramos alterações não salvas de <b>{pendingRestore.name}</b> (
-            {new Date(pendingRestore.savedAt).toLocaleString('pt-BR')}). Deseja restaurar?
+            {t('app.restore.message', {
+              name: pendingRestore.name,
+              date: new Date(pendingRestore.savedAt).toLocaleString(locale),
+            })}
           </span>
           <button
             onClick={() => handleRestoreAutosave(true)}
             className="px-3 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400"
           >
-            Restaurar
+            {t('app.restore.restore')}
           </button>
           <button
             onClick={() => handleRestoreAutosave(false)}
             className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10"
           >
-            Descartar
+            {t('app.restore.discard')}
           </button>
         </div>
       )}
@@ -1789,7 +1793,7 @@ export default function App() {
           onAddChart={(chartType) => {
             const newChart: ChartOverlay = {
               id: `chart-${Date.now()}`,
-              title: 'Novo Gráfico Animado',
+              title: t('app.newChart'),
               type: chartType || 'bar',
               x: Math.round(canvasDimensions.width * 0.5),
               y: Math.round(canvasDimensions.height * 0.22),
@@ -1805,7 +1809,7 @@ export default function App() {
               ],
               visible: true,
             };
-            history.pushSnapshot(`Adicionar Gráfico "${newChart.title}"`, {
+            history.pushSnapshot(t('history.add', { name: newChart.title }), {
               ...history.present,
               charts: [...charts, newChart],
             });
@@ -1817,7 +1821,7 @@ export default function App() {
           onAddText={(isNumber) => {
             const newText: TextOverlay = {
               id: `text-${Date.now()}`,
-              text: isNumber ? 'Contador' : 'Novo Texto Animado',
+              text: isNumber ? t('app.newCounter') : t('app.newText'),
               x: Math.round(canvasDimensions.width * 0.5),
               y: Math.round(canvasDimensions.height * 0.3),
               fontSize: 28,
@@ -1832,7 +1836,7 @@ export default function App() {
               counterPrefix: '',
               counterSuffix: '',
             };
-            history.pushSnapshot(`Adicionar ${isNumber ? 'Contador' : 'Texto'}`, {
+            history.pushSnapshot(t('history.add', { name: isNumber ? t('app.newCounter') : t('selection.text') }), {
               ...history.present,
               texts: [...texts, newText],
             });
@@ -1860,7 +1864,7 @@ export default function App() {
             const newId = `stick-${Date.now()}`;
             const newStick = createDefaultStickFigure(
               newId,
-              'Novo Boneco Palito',
+              t('app.newStick'),
               350,
               420
             );
@@ -1909,7 +1913,7 @@ export default function App() {
       <div
         onMouseDown={startResizeTimeline}
         className="h-2 w-full bg-neutral-900 hover:bg-sky-500/30 cursor-row-resize flex items-center justify-center transition select-none group border-t border-neutral-800 shrink-0"
-        title="Arraste para redimensionar o espaço da linha do tempo"
+        title={t('app.timelineResize')}
       >
         <div className="w-16 h-1 rounded-full bg-neutral-700 group-hover:bg-sky-400 transition" />
       </div>
@@ -1990,7 +1994,7 @@ export default function App() {
         totalFrames={totalFrames}
         canvasSnapshot={canvasSnapshot}
         onAddImageOverlay={(img) => {
-          handleAddActor({ src: img.url, name: 'Imagem IA', width: img.width, height: img.height });
+          handleAddActor({ src: img.url, name: t('app.aiImageName'), width: img.width, height: img.height });
         }}
         onSetAsBackground={(url) => {
           setVideoBg({

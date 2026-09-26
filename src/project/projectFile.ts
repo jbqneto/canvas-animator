@@ -1,4 +1,5 @@
 import type { CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
+import { t } from '../i18n';
 
 export const PROJECT_FORMAT = 'flashmotion-project';
 export const PROJECT_VERSION = 1;
@@ -53,13 +54,13 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
   try {
     data = JSON.parse(text);
   } catch {
-    throw new ProjectFileError('O arquivo não é um projeto válido (JSON inválido).');
+    throw new ProjectFileError(t('project.error.invalidJson'));
   }
   if (data?.format !== PROJECT_FORMAT || !data.project) {
-    throw new ProjectFileError('Este arquivo não é um projeto do FlashMotion Studio.');
+    throw new ProjectFileError(t('project.error.notProject'));
   }
   if (asNumber(data.version, 0) > PROJECT_VERSION) {
-    throw new ProjectFileError('Projeto salvo por uma versão mais nova do FlashMotion. Atualize o app.');
+    throw new ProjectFileError(t('project.error.newerVersion'));
   }
 
   const p = data.project;
@@ -80,7 +81,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
   const canvasH = asNumber(p.canvas?.height, 720);
   const videoBg = p.videoBg ?? {};
   return {
-    name: typeof p.name === 'string' && p.name ? p.name : 'Projeto sem título',
+    name: typeof p.name === 'string' && p.name ? p.name : t('project.untitled'),
     fps: asNumber(p.fps, 24),
     totalFrames: Math.max(1, Math.round(asNumber(p.totalFrames, 60))),
     canvas: { width: canvasW, height: canvasH, preset: p.canvas?.preset ?? 'custom' },
@@ -107,5 +108,5 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
 
 /** File name without extension, used as the project name. */
 export function projectNameFromFile(fileName: string): string {
-  return fileName.replace(/\.fmproj$/i, '').replace(/\.json$/i, '') || 'Projeto sem título';
+  return fileName.replace(/\.fmproj$/i, '').replace(/\.json$/i, '') || t('project.untitled');
 }

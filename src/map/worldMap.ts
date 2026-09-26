@@ -1,9 +1,10 @@
 /**
  * World map for route animations. Data: world-atlas (Natural Earth, public domain), loaded on demand
- * so the editor bundle stays small. Country names in Portuguese via i18n-iso-countries.
+ * so the editor bundle stays small. Country names in the interface language via i18n-iso-countries.
  */
 import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from 'geojson';
 import { geoArea, geoCentroid, geoNaturalEarth1, geoPath, GeoProjection } from 'd3-geo';
+import { getLocale, Locale } from '../i18n';
 
 export interface Country {
   /** ISO 3166-1 numeric id used by world-atlas. */
@@ -16,19 +17,21 @@ export interface World {
   countries: Country[];
 }
 
-let worldPromise: Promise<World> | null = null;
+// Geometry is shared; only the names depend on the language
+const worldPromises: Partial<Record<Locale, Promise<World>>> = {};
 
-export function loadWorld(): Promise<World> {
-  worldPromise ??= (async () => {
-    const [topoModule, topojson, isoModule, ptModule] = await Promise.all([
+export function loadWorld(locale: Locale = getLocale()): Promise<World> {
+  worldPromises[locale] ??= (async () => {
+    const lang = locale === 'pt-BR' ? 'pt' : 'en';
+    const [topoModule, topojson, isoModule, langModule] = await Promise.all([
       import('world-atlas/countries-50m.json'),
       import('topojson-client'),
       import('i18n-iso-countries'),
-      import('i18n-iso-countries/langs/pt.json'),
+      lang === 'pt' ? import('i18n-iso-countries/langs/pt.json') : import('i18n-iso-countries/langs/en.json'),
     ]);
     const topo = (topoModule as any).default ?? topoModule;
     const iso = (isoModule as any).default ?? isoModule;
-    iso.registerLocale((ptModule as any).default ?? ptModule);
+    iso.registerLocale((langModule as any).default ?? langModule);
 
     const collection = topojson.feature(topo, topo.objects.countries) as unknown as FeatureCollection;
     const countries = collection.features
@@ -36,13 +39,13 @@ export function loadWorld(): Promise<World> {
       .map((f) => {
         const id = String(f.id);
         const alpha2 = iso.numericToAlpha2(id);
-        const name = (alpha2 && iso.getName(alpha2, 'pt')) || (f.properties as any)?.name || id;
+        const name = (alpha2 && iso.getName(alpha2, lang)) || (f.properties as any)?.name || id;
         return { id, name, feature: f };
       })
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+      .sort((a, b) => a.name.localeCompare(b.name, locale));
     return { countries };
   })();
-  return worldPromise;
+  return worldPromises[locale]!;
 }
 
 /**

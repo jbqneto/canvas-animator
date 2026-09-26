@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 const MAX_SOURCE_SIDE = 2048;
 /** Imported images start at most this fraction of the canvas, so they never cover the whole stage. */
 const MAX_STAGE_FRACTION = 0.35;
@@ -6,7 +8,7 @@ function readAsDataURL(file: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error('Falha ao ler o arquivo'));
+    reader.onerror = () => reject(reader.error ?? new Error(t('import.error.read')));
     reader.readAsDataURL(file);
   });
 }
@@ -15,7 +17,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Formato de imagem não suportado'));
+    img.onerror = () => reject(new Error(t('import.error.format')));
     img.src = src;
   });
 }
