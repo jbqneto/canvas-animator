@@ -1,6 +1,7 @@
-import type { AudioClip, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
+import type { ActorOverlay, AudioClip, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
 import { t } from '../i18n';
 import { migrateChart, migrateText } from '../engine/overlays';
+import { normalizeShape } from '../engine/shapes';
 
 export const PROJECT_FORMAT = 'flashmotion-project';
 export const PROJECT_VERSION = 1;
@@ -121,7 +122,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       charts: asArray(c.charts).map(migrateChart),
       texts: asArray(c.texts).map(migrateText),
       images: asArray(c.images),
-      actors: asArray(c.actors),
+      actors: asArray<ActorOverlay>(c.actors).map(normalizeShape),
       paths: asArray(c.paths),
       audio: parseAudio(c.audio),
       layers: asArray(c.layers),

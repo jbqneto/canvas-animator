@@ -12,6 +12,7 @@ import {
   Monitor,
   FolderOpen,
   Save,
+  LayoutTemplate,
 } from 'lucide-react';
 import { CanvasDimensions, CANVAS_PRESETS } from '../types';
 import { useI18n } from '../i18n';
@@ -23,6 +24,7 @@ interface StudioHeaderProps {
   exportProgress: number;
   onSnapshot: () => void;
   onOpenAiImage: () => void;
+  onOpenTemplates: () => void;
   onToggleChatbot: () => void;
   chatbotOpen: boolean;
   onLoadPreset: (presetName: string) => void;
@@ -50,6 +52,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   exportProgress,
   onSnapshot,
   onOpenAiImage,
+  onOpenTemplates,
   onToggleChatbot,
   chatbotOpen,
   onLoadPreset,
@@ -82,7 +85,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
               <span className="font-extrabold text-sm tracking-tight text-white font-sans">
                 FlashMotion <span className="text-sky-400">Studio</span>
               </span>
-              <span className="hidden min-[1760px]:inline text-[9px] uppercase font-mono tracking-widest px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60">
+              <span className="hidden min-[1850px]:inline text-[9px] uppercase font-mono tracking-widest px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-800/60">
                 Flash + Remotion
               </span>
             </div>
@@ -116,13 +119,13 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
 
         {/* Presets dropdown */}
         <div className="hidden lg:flex items-center gap-2 ml-2 pl-2 border-l border-neutral-800">
-          <span className="hidden min-[1760px]:inline text-[11px] text-neutral-400 font-medium">{t('header.scenes')}</span>
+          <span className="hidden min-[1850px]:inline text-[11px] text-neutral-400 font-medium">{t('header.scenes')}</span>
           <select
             onChange={(e) => {
               if (e.target.value) onLoadPreset(e.target.value);
             }}
             defaultValue=""
-            className="max-w-36 min-[1760px]:max-w-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded px-2 py-1 outline-none transition cursor-pointer"
+            className="max-w-36 min-[1850px]:max-w-none bg-neutral-900 border border-neutral-800 hover:border-neutral-700 text-neutral-200 text-xs rounded px-2 py-1 outline-none transition cursor-pointer"
           >
             <option value="" disabled>
               {t('header.loadExample')}
@@ -149,7 +152,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                 });
               }
             }}
-            className="max-w-40 min-[1760px]:max-w-none bg-transparent text-neutral-200 text-xs font-semibold outline-none cursor-pointer"
+            className="max-w-40 min-[1850px]:max-w-none bg-transparent text-neutral-200 text-xs font-semibold outline-none cursor-pointer"
             title={t('header.canvasSize')}
           >
             {CANVAS_PRESETS.map((p) => (
@@ -173,7 +176,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-white transition flex items-center gap-1"
         >
           <RotateCcw size={14} />
-          <span className="text-[10px] font-mono hidden min-[1760px]:inline">Ctrl+Z</span>
+          <span className="text-[10px] font-mono hidden min-[1850px]:inline">Ctrl+Z</span>
         </button>
 
         <button
@@ -183,7 +186,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-white transition flex items-center gap-1"
         >
           <RotateCcw size={14} className="scale-x-[-1]" />
-          <span className="text-[10px] font-mono hidden min-[1760px]:inline">Ctrl+Y</span>
+          <span className="text-[10px] font-mono hidden min-[1850px]:inline">Ctrl+Y</span>
         </button>
 
         <div className="w-[1px] h-4 bg-neutral-800 mx-1" />
@@ -195,7 +198,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-sky-300 transition flex items-center gap-1"
         >
           <Group size={14} />
-          <span className="text-[10px] font-mono hidden min-[1760px]:inline">Ctrl+G</span>
+          <span className="text-[10px] font-mono hidden min-[1850px]:inline">Ctrl+G</span>
         </button>
 
         <button
@@ -205,12 +208,23 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           className="p-1.5 rounded hover:bg-neutral-800 disabled:opacity-30 text-neutral-300 hover:text-amber-300 transition flex items-center gap-1"
         >
           <Ungroup size={14} />
-          <span className="text-[10px] font-mono hidden min-[1760px]:inline">Ctrl+B</span>
+          <span className="text-[10px] font-mono hidden min-[1850px]:inline">Ctrl+B</span>
         </button>
       </div>
 
       {/* Right Action Buttons */}
       <div className="flex items-center gap-2">
+        {/* Template library */}
+        <button
+          id="header-templates-btn"
+          onClick={onOpenTemplates}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-xs font-semibold transition"
+          title={t('templates.buttonHint')}
+        >
+          <LayoutTemplate size={14} />
+          <span>{t('templates.button')}</span>
+        </button>
+
         {/* AI Image Generation Trigger */}
         <button
           onClick={onOpenAiImage}
@@ -218,7 +232,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           title={t('header.aiImage')}
         >
           <Sparkles size={14} />
-          <span className="hidden min-[1760px]:inline">{t('header.aiImageButton')}</span>
+          <span className="hidden min-[1850px]:inline">{t('header.aiImageButton')}</span>
         </button>
 
         {/* Gemini Chatbot Trigger */}
@@ -232,7 +246,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           title={t('header.copilot')}
         >
           <Bot size={14} />
-          <span className="hidden min-[1760px]:inline">{t('header.copilotButton')}</span>
+          <span className="hidden min-[1850px]:inline">{t('header.copilotButton')}</span>
         </button>
 
         {/* Snapshot PNG */}

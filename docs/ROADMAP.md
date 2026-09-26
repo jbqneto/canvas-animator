@@ -35,14 +35,17 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   botões de zoom/ajustar, a vista acompanha o cursor no play, rótulos dos clipes fixos à esquerda
 - [x] T18 — Gráficos e textos no mesmo modelo de keyframes dos atores (posição, escala, rotação, opacidade,
   easing por key, seguir caminho, losangos na timeline); projetos antigos migrados (P1→P2 vira 2 keys)
+- [x] T19 — Biblioteca de modelos (título, terço inferior, lista, número, gráfico, destaque com seta, rota no
+  mapa) sobre as peças genéricas + entradas/saídas prontas (fade, slide, pop) aplicáveis a qualquer objeto
+- [x] T20 — Formas editáveis (retângulo, elipse, seta, linha) como tipo de ator: cor, contorno, cantos e
+  tamanho editáveis a qualquer momento; os modelos usam essas formas no lugar de imagens SVG
 
 ## Próximos passos sugeridos
 
-1. Biblioteca de modelos montados sobre as peças genéricas.
-2. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-3. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
-4. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
-5. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+1. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+2. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
+3. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
+4. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -116,6 +119,22 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   ~1 quadro com fade, `mixdown` renderiza o trecho exportado num OfflineAudioContext. Export: faixa de áudio
   opcional (AAC no MP4 quando o navegador codifica; senão Opus); WebM transparente começa sem áudio.
   Importar áudio estende a timeline para caber (nunca encolhe). UI: `components/AudioTracks.tsx`.
+- Modelos (`src/templates/`): um modelo é uma função pura `build(valores, contexto) → { actors, charts,
+  texts, paths, endFrame }`; nada na cena sabe que veio de um modelo. `params` descreve o formulário
+  (text, lines, number, color, select) que o diálogo gera sozinho; textos padrão são chaves i18n. Posições em
+  fração do canvas (funciona em 16:9, 9:16, quadrado). Ids com `idPrefix` único. Inserção no App: uma camada
+  por objeto (textos na frente, imagens atrás), a partir do quadro atual; a timeline cresce se precisar.
+  Prévia no diálogo = `renderCompositeFrame` em loop. Barras e setas dos modelos são atores-forma. Rota no
+  mapa continua com diálogo próprio, aberto pela biblioteca.
+- Formas (`engine/shapes.ts`): ator com `kind: 'shape'`, `src: ''` e `shape: ShapeStyle` (tipo, preenchimento,
+  contorno, espessura, cantos). Por ser ator, herda keyframes, seguir caminho, presets, timeline e salvamento
+  sem código novo. O renderer desenha vetor no lugar da imagem (`drawShape`), centrado na âncora; a linha vai
+  de ponta a ponta da largura (a caixa tem no mínimo 16 px de altura para dar para clicar).
+  `normalizeShape` repara formas lidas de arquivo. Inserção: botões no painel "Inserir".
+- Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance})`
+  gravam keys comuns nas bordas do clipe (fade = opacidade; slides = opacidade + posição; pop = escala com
+  `backOut`), a partir dos valores de repouso do objeto. Disponível no `MotionInspector` para qualquer objeto.
+  Texto com `effect: 'none'` não tem entrada própria (só keyframes) — usado pelos modelos.
 - Timeline: grade e régua por CSS (`frameGridStyle`), sem um elemento por quadro. Escala pura em
   `src/engine/timelineScale.ts`: `timelineScale(total, fps, pxPorQuadro, unidade)` escolhe passo das linhas
   fortes (rótulos ≥ 56 px) e fracas (≥ 6 px); em segundos usa tempos "redondos" (0,25 s, 1 s, 5 s, 1:00…) e,

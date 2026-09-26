@@ -1,6 +1,7 @@
 import React from 'react';
-import { Image as ImageIcon, Trash2 } from 'lucide-react';
-import type { ActorOverlay, MotionPath } from '../types';
+import { Image as ImageIcon, Shapes, Trash2 } from 'lucide-react';
+import type { ActorOverlay, MotionPath, ShapeStyle, ShapeType } from '../types';
+import { SHAPE_TYPES } from '../engine/shapes';
 import { useI18n } from '../i18n';
 import { MotionInspector, motionInputClass as inputClass } from './MotionInspector';
 
@@ -38,7 +39,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
         <div className="flex items-center gap-2 min-w-0">
           <div className="p-1.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
-            <ImageIcon size={16} />
+            {actor.kind === 'shape' ? <Shapes size={16} /> : <ImageIcon size={16} />}
           </div>
           <input
             value={actor.name}
@@ -54,6 +55,13 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
           <Trash2 size={14} />
         </button>
       </div>
+
+      {actor.kind === 'shape' && actor.shape && (
+        <ShapePanel
+          style={actor.shape}
+          onChange={(shape, label) => onChange({ ...actor, shape }, t('shape.history.change', { label }))}
+        />
+      )}
 
       {!onScreen && (
         <p className="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded p-2">
@@ -166,6 +174,30 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
             className={inputClass}
           />
         </label>
+        {actor.kind === 'shape' ? (
+          <>
+            <label className="text-[10px] text-neutral-400 space-y-1">
+              <span>{t('shape.width')}</span>
+              <input
+                type="number"
+                min={4}
+                value={Math.round(actor.width)}
+                onChange={(e) => onChange({ ...actor, width: Math.max(4, Number(e.target.value)) }, t('actor.history.baseSize'))}
+                className={inputClass}
+              />
+            </label>
+            <label className="text-[10px] text-neutral-400 space-y-1">
+              <span>{t('shape.height')}</span>
+              <input
+                type="number"
+                min={4}
+                value={Math.round(actor.height)}
+                onChange={(e) => onChange({ ...actor, height: Math.max(4, Number(e.target.value)) }, t('actor.history.baseSize'))}
+                className={inputClass}
+              />
+            </label>
+          </>
+        ) : (
         <label className="text-[10px] text-neutral-400 space-y-1 col-span-2">
           <span>{t('actor.baseWidth')}</span>
           <input
@@ -182,7 +214,86 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
             className={inputClass}
           />
         </label>
+        )}
       </div>
+    </div>
+  );
+};
+
+/** Look of a shape actor: kind, fill, outline and corners (all editable after creation). */
+const ShapePanel: React.FC<{ style: ShapeStyle; onChange: (style: ShapeStyle, label: string) => void }> = ({
+  style,
+  onChange,
+}) => {
+  const { t } = useI18n();
+  const isLine = style.type === 'line';
+  const set = <K extends keyof ShapeStyle>(key: K, value: ShapeStyle[K], label: string) =>
+    onChange({ ...style, [key]: value }, label);
+  return (
+    <div className="space-y-2" data-shape-panel>
+      <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">{t('shape.appearance')}</span>
+      <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+        <span className="w-20 shrink-0">{t('shape.type')}</span>
+        <select
+          data-shape-field="type"
+          value={style.type}
+          onChange={(e) => set('type', e.target.value as ShapeType, t('shape.type'))}
+          className={inputClass}
+        >
+          {SHAPE_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {t(`shape.type.${type}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {!isLine && (
+        <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+          <span className="w-20 shrink-0">{t('shape.fill')}</span>
+          <input
+            data-shape-field="fill"
+            type="color"
+            value={style.fill}
+            onChange={(e) => set('fill', e.target.value, t('shape.fill'))}
+            className="w-full h-7 bg-neutral-900 border border-neutral-800 rounded cursor-pointer"
+          />
+        </label>
+      )}
+      <div className="flex items-center gap-2 text-[10px] text-neutral-400">
+        <span className="w-20 shrink-0">{t(isLine ? 'shape.line' : 'shape.stroke')}</span>
+        <input
+          data-shape-field="stroke"
+          type="color"
+          value={style.stroke}
+          onChange={(e) => set('stroke', e.target.value, t('shape.stroke'))}
+          className="w-10 h-7 bg-neutral-900 border border-neutral-800 rounded cursor-pointer shrink-0"
+        />
+        <input
+          data-shape-field="strokeWidth"
+          type="number"
+          min={isLine ? 1 : 0}
+          max={80}
+          value={style.strokeWidth}
+          title={t('shape.strokeWidth')}
+          onChange={(e) => set('strokeWidth', Math.max(isLine ? 1 : 0, Number(e.target.value)), t('shape.strokeWidth'))}
+          className={inputClass}
+        />
+        px
+      </div>
+      {style.type === 'rect' && (
+        <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+          <span className="w-20 shrink-0">{t('shape.radius')}</span>
+          <input
+            data-shape-field="radius"
+            type="number"
+            min={0}
+            value={style.radius}
+            onChange={(e) => set('radius', Math.max(0, Number(e.target.value)), t('shape.radius'))}
+            className={inputClass}
+          />
+          px
+        </label>
+      )}
     </div>
   );
 };
