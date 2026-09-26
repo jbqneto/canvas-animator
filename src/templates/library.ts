@@ -4,12 +4,11 @@
  * for any format (16:9, 9:16, square).
  */
 import type { ChartOverlay, ChartType, TextOverlay } from '../types';
-import { createActor } from '../engine/actor';
 import { createChart, createText } from '../engine/overlays';
 import { applyEntrance, applyExit, MotionPreset } from '../engine/motionPresets';
 import { setKeyframe, Track } from '../engine/keyframes';
 import { parseLocaleNumber } from '../utils/motionUtils';
-import { shapeDataUrl } from './shapes';
+import { createShapeActor, defaultShapeStyle } from '../engine/shapes';
 import { AnimationTemplate, emptyOutput, TemplateContext, TemplateValues } from './types';
 
 const str = (v: string | number | undefined) => String(v ?? '');
@@ -104,10 +103,10 @@ const lowerThird: AnimationTemplate = {
     const delay = Math.round(ctx.fps * 0.2);
 
     const bar = enterExit(
-      createActor({
+      createShapeActor({
         id: `${ctx.idPrefix}-bar`,
         name: str(values.name),
-        src: shapeDataUrl('roundedRect', { width: barW, height: barH, color: str(values.color), radius: barH * 0.18 }),
+        style: { ...defaultShapeStyle('rect', str(values.color)), radius: Math.round(barH * 0.18) },
         width: barW,
         height: barH,
         x: left + barW / 2,
@@ -347,10 +346,10 @@ const callout: AnimationTemplate = {
     const len = Math.round(Math.min(ctx.width, ctx.height) * 0.16);
     const cx = Math.round(ctx.width / 2);
     const cy = Math.round(ctx.height / 2);
-    let arrow = createActor({
+    let arrow = createShapeActor({
       id: `${ctx.idPrefix}-arrow`,
       name: str(values.text),
-      src: shapeDataUrl('arrow', { width: len, height: Math.round(len * 0.5), color: str(values.color) }),
+      style: defaultShapeStyle('arrow', str(values.color)),
       width: len,
       height: Math.round(len * 0.5),
       x: cx,

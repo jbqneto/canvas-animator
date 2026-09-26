@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TEMPLATES, parseDataRows } from '../library';
 import { defaultValues, TemplateContext } from '../types';
-import { shapeDataUrl } from '../shapes';
 import { sampleActor } from '../../engine/actor';
 import { translate } from '../../i18n';
 
@@ -70,12 +69,12 @@ describe('helpers', () => {
     ]);
   });
 
-  it('makes self-contained SVG images and rejects odd colors', () => {
-    const url = shapeDataUrl('arrow', { width: 100, height: 50, color: '#ff0000' });
-    expect(url.startsWith('data:image/svg+xml')).toBe(true);
-    expect(decodeURIComponent(url)).toContain('fill="#ff0000"');
-    expect(decodeURIComponent(shapeDataUrl('circle', { width: 10, height: 10, color: '"/><script>' }))).not.toContain(
-      '<script>'
-    );
+  it('uses editable shapes (not images) for bars and arrows, in the chosen color', () => {
+    const lower = TEMPLATES.find((t) => t.id === 'lowerThird')!;
+    const bar = lower.build({ ...defaultValues(lower, (k) => k), color: '#ff0000' }, ctx()).actors[0];
+    expect(bar.kind).toBe('shape');
+    expect(bar.shape).toMatchObject({ type: 'rect', fill: '#ff0000' });
+    const callout = TEMPLATES.find((t) => t.id === 'callout')!;
+    expect(callout.build(defaultValues(callout, (k) => k), ctx()).actors[0].shape?.type).toBe('arrow');
   });
 });

@@ -691,4 +691,24 @@ export const ptBR = {
 
   // Text without intro effect
   'inspector.text.effect.none': 'Nenhum (só keyframes)',
+
+  // Editable shapes
+  'shape.type.rect': 'Retângulo',
+  'shape.type.ellipse': 'Elipse',
+  'shape.type.arrow': 'Seta',
+  'shape.type.line': 'Linha',
+  'shape.addHint': 'Inserir {shape} (forma editável e animável)',
+  'shape.appearance': 'Aparência',
+  'shape.type': 'Forma',
+  'shape.fill': 'Preenchimento',
+  'shape.stroke': 'Contorno',
+  'shape.line': 'Cor da linha',
+  'shape.strokeWidth': 'Espessura',
+  'shape.radius': 'Cantos',
+  'shape.width': 'Largura',
+  'shape.height': 'Altura',
+  'shape.history.change': 'Forma: {label}',
+
+  // Shape selection label
+  'selection.shape': 'Forma',
 };

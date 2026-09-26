@@ -1,6 +1,7 @@
 import {
   FrameData,
   Animated,
+  ShapeStyle,
   ChartOverlay,
   TextOverlay,
   VideoBackground,
@@ -13,6 +14,7 @@ import {
   MotionPath,
 } from '../types';
 import { sampleActor, trailPoints } from '../engine/actor';
+import { arrowPolygon, fittedRadius } from '../engine/shapes';
 import { polylineUpTo, samplePath } from '../engine/path';
 import { sampleTrack, Vec2 } from '../engine/keyframes';
 import { t } from '../i18n';
@@ -261,15 +263,46 @@ function drawActor(
     }
   }
 
-  const img = getCachedImage(actor.src);
-  if (!isImageReady(img)) return;
+  const img = actor.kind === 'shape' ? null : getCachedImage(actor.src);
+  if (actor.kind !== 'shape' && !isImageReady(img!)) return;
   ctx.save();
   ctx.globalAlpha = state.opacity;
   ctx.translate(state.x, state.y);
   ctx.rotate((state.rotation * Math.PI) / 180);
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
-  ctx.drawImage(img, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
+  if (actor.kind === 'shape' && actor.shape) drawShape(ctx, actor.shape, actor.width, actor.height);
+  else ctx.drawImage(img!, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
   ctx.restore();
+}
+
+/** A shape actor's vector shape, centered on the current origin. */
+function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, h: number) {
+  ctx.beginPath();
+  if (style.type === 'line') {
+    ctx.moveTo(-w / 2, 0);
+    ctx.lineTo(w / 2, 0);
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = Math.max(1, style.strokeWidth);
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    return;
+  }
+  if (style.type === 'ellipse') {
+    ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  } else if (style.type === 'arrow') {
+    arrowPolygon(w, h).forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+  } else {
+    ctx.roundRect(-w / 2, -h / 2, w, h, fittedRadius(style.radius, w, h));
+  }
+  ctx.fillStyle = style.fill;
+  ctx.fill();
+  if (style.strokeWidth > 0) {
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = style.strokeWidth;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
 }
 
 /** Canvas dash pattern for a stroke style (dotted = round dots spaced by ~2× the width). */
@@ -908,5 +941,8 @@ export async function renderFrameToDataURL(params: {
 }
 
 function preloadSceneImages(scene: SceneContent): Promise<void> {
-  return preloadImages([...scene.images.map((img) => img.url), ...scene.actors.map((a) => a.src)]);
+  return preloadImages([
+    ...scene.images.map((img) => img.url),
+    ...scene.actors.filter((a) => a.kind !== 'shape' && a.src).map((a) => a.src),
+  ]);
 }

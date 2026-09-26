@@ -17,9 +17,11 @@ import {
   StageTool,
   AudioClip,
   Animated,
+  ShapeType,
 } from './types';
 import { attachToPath, createActor } from './engine/actor';
 import { createChart, createText } from './engine/overlays';
+import { createShapeActor, defaultShapeStyle } from './engine/shapes';
 import { tweenStickFrames } from './engine/stickRig';
 import type { EasingName } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
@@ -1112,6 +1114,40 @@ export default function App() {
     setSelectedLayerId(layer.id);
   };
 
+  /** New shape actor in the middle of the stage, on screen for the whole timeline. */
+  const handleAddShape = (type: ShapeType) => {
+    const id = `shape-${Date.now()}`;
+    const size = Math.round(Math.min(canvasDimensions.width, canvasDimensions.height) * 0.25);
+    const name = t(`shape.type.${type}`);
+    const shape = createShapeActor({
+      id,
+      name,
+      style: defaultShapeStyle(type),
+      width: type === 'rect' || type === 'line' || type === 'arrow' ? Math.round(size * 1.6) : size,
+      height: type === 'arrow' ? Math.round(size * 0.8) : size,
+      x: Math.round(canvasDimensions.width / 2),
+      y: Math.round(canvasDimensions.height / 2),
+      startFrame: 1,
+      durationFrames: Math.max(1, totalFrames - 1),
+    });
+    const layer: StudioLayer = {
+      id: `layer-actor-${id}`,
+      name,
+      type: 'actor',
+      visible: true,
+      locked: false,
+      color: '#f97316',
+      targetId: id,
+    };
+    history.pushSnapshot(t('history.add', { name }), {
+      ...history.present,
+      actors: [...history.present.actors, shape],
+      layers: [layer, ...history.present.layers],
+    });
+    setSelectedObject({ type: 'actor', id });
+    setSelectedLayerId(layer.id);
+  };
+
   const handleImportImageFiles = async (files: FileList | File[]) => {
     const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
     for (const file of list) {
@@ -2050,6 +2086,7 @@ export default function App() {
           onCopyStickToFrame={handleCopyStickToFrame}
           onTweenStick={handleTweenStick}
           onOpenTemplates={() => setTemplatesOpen(true)}
+          onAddShape={handleAddShape}
           paths={paths}
           onUpdatePath={handleUpdatePath}
           onDeletePath={handleDeletePath}

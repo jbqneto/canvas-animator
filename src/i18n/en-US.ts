@@ -690,4 +690,24 @@ export const enUS: Record<keyof typeof ptBR, string> = {
 
   // Text without intro effect
   'inspector.text.effect.none': 'None (keyframes only)',
+
+  // Editable shapes
+  'shape.type.rect': 'Rectangle',
+  'shape.type.ellipse': 'Ellipse',
+  'shape.type.arrow': 'Arrow',
+  'shape.type.line': 'Line',
+  'shape.addHint': 'Insert {shape} (editable, animatable shape)',
+  'shape.appearance': 'Appearance',
+  'shape.type': 'Shape',
+  'shape.fill': 'Fill',
+  'shape.stroke': 'Outline',
+  'shape.line': 'Line color',
+  'shape.strokeWidth': 'Thickness',
+  'shape.radius': 'Corners',
+  'shape.width': 'Width',
+  'shape.height': 'Height',
+  'shape.history.change': 'Shape: {label}',
+
+  // Shape selection label
+  'selection.shape': 'Shape',
 };

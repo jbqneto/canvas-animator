@@ -25,6 +25,10 @@ import {
   VideoOff,
   Image as ImageIcon,
   LayoutTemplate,
+  Square,
+  Circle,
+  ArrowRight,
+  Minus,
 } from 'lucide-react';
 import {
   ChartOverlay,
@@ -40,9 +44,11 @@ import {
   HistorySnapshot,
   ActorOverlay,
   MotionPath,
+  ShapeType,
 } from '../types';
 import { ActorInspector } from './ActorInspector';
 import { MotionInspector } from './MotionInspector';
+import { SHAPE_TYPES } from '../engine/shapes';
 import { PathInspector } from './PathInspector';
 import { StickAnimationPanel } from './StickAnimationPanel';
 import { MessageKey, shortMonth, useI18n } from '../i18n';
@@ -96,6 +102,7 @@ interface PropertiesInspectorProps {
   onCopyStickToFrame: (stickId: string, toFrame: number) => void;
   onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
   onOpenTemplates: () => void;
+  onAddShape: (type: ShapeType) => void;
   // Motion paths
   paths: MotionPath[];
   onUpdatePath: (path: MotionPath, description: string) => void;
@@ -151,6 +158,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onCopyStickToFrame,
   onTweenStick,
   onOpenTemplates,
+  onAddShape,
   paths,
   onUpdatePath,
   onDeletePath,
@@ -1308,6 +1316,21 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <span className="block text-[10px] text-sky-200/60">{t('templates.buttonHint')}</span>
                     </span>
                   </button>
+                  {/* Editable vector shapes (animated like any actor) */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {SHAPE_TYPES.map((type) => (
+                      <button
+                        key={type}
+                        data-add-shape={type}
+                        onClick={() => onAddShape(type)}
+                        title={t('shape.addHint', { shape: t(`shape.type.${type}`) })}
+                        className="flex flex-col items-center gap-1 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-orange-300 border border-neutral-800 transition"
+                      >
+                        {type === 'rect' ? <Square size={14} /> : type === 'ellipse' ? <Circle size={14} /> : type === 'arrow' ? <ArrowRight size={14} /> : <Minus size={14} />}
+                        <span className="text-[9px]">{t(`shape.type.${type}`)}</span>
+                      </button>
+                    ))}
+                  </div>
                   <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
                     <ImageIcon size={14} />
                     <span className="text-xs">

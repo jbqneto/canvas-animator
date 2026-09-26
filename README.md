@@ -22,6 +22,8 @@ qualquer editor.
   tópicos, número em destaque, gráfico que entra, destaque com seta e rota no mapa (mapa-múndi + caminho pelos
   países + avião que pousa em cada um). Prévia animada e parâmetros no diálogo; tudo o que o modelo cria são
   objetos normais, editáveis.
+- **Formas editáveis**: retângulo (com cantos arredondados), elipse, seta e linha, com preenchimento, contorno e
+  tamanho editáveis a qualquer momento, animadas como qualquer ator.
 - **Entradas e saídas prontas** (surgir, subir, descer, deslizar, pop) para qualquer objeto, gravadas como
   keyframes comuns.
 - **Boneco palito**: poses com cinemática direta (girar o osso leva o resto do membro), poses prontas e

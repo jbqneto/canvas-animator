@@ -37,14 +37,15 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   easing por key, seguir caminho, losangos na timeline); projetos antigos migrados (P1→P2 vira 2 keys)
 - [x] T19 — Biblioteca de modelos (título, terço inferior, lista, número, gráfico, destaque com seta, rota no
   mapa) sobre as peças genéricas + entradas/saídas prontas (fade, slide, pop) aplicáveis a qualquer objeto
+- [x] T20 — Formas editáveis (retângulo, elipse, seta, linha) como tipo de ator: cor, contorno, cantos e
+  tamanho editáveis a qualquer momento; os modelos usam essas formas no lugar de imagens SVG
 
 ## Próximos passos sugeridos
 
-1. Formas (retângulo, círculo, seta) como objeto próprio com cor editável — hoje são imagens SVG geradas.
-2. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-3. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
-4. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
-5. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+1. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+2. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
+3. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
+4. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -123,8 +124,13 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   (text, lines, number, color, select) que o diálogo gera sozinho; textos padrão são chaves i18n. Posições em
   fração do canvas (funciona em 16:9, 9:16, quadrado). Ids com `idPrefix` único. Inserção no App: uma camada
   por objeto (textos na frente, imagens atrás), a partir do quadro atual; a timeline cresce se precisar.
-  Prévia no diálogo = `renderCompositeFrame` em loop. Formas = SVG data URL (`templates/shapes.ts`). Rota no
+  Prévia no diálogo = `renderCompositeFrame` em loop. Barras e setas dos modelos são atores-forma. Rota no
   mapa continua com diálogo próprio, aberto pela biblioteca.
+- Formas (`engine/shapes.ts`): ator com `kind: 'shape'`, `src: ''` e `shape: ShapeStyle` (tipo, preenchimento,
+  contorno, espessura, cantos). Por ser ator, herda keyframes, seguir caminho, presets, timeline e salvamento
+  sem código novo. O renderer desenha vetor no lugar da imagem (`drawShape`), centrado na âncora; a linha vai
+  de ponta a ponta da largura (a caixa tem no mínimo 16 px de altura para dar para clicar).
+  `normalizeShape` repara formas lidas de arquivo. Inserção: botões no painel "Inserir".
 - Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance})`
   gravam keys comuns nas bordas do clipe (fade = opacidade; slides = opacidade + posição; pop = escala com
   `backOut`), a partir dos valores de repouso do objeto. Disponível no `MotionInspector` para qualquer objeto.
