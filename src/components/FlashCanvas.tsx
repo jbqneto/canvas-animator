@@ -15,6 +15,9 @@ import {
   ActorOverlay,
 } from '../types';
 import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue } from '../engine/actor';
+import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
+
+const PATH_KEY_HIT_RADIUS = 9;
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
 import { onImageLoaded } from '../utils/imageCache';
 import {
@@ -178,7 +181,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
   // Drag Session tracking for mouse interaction
   const dragSessionRef = useRef<{
-    targetType: 'stick' | 'joint' | 'chart' | 'chart-resize' | 'text' | 'actor';
+    targetType: 'stick' | 'joint' | 'chart' | 'chart-resize' | 'text' | 'actor' | 'path-key';
+    /** For 'path-key': frame of the position key being dragged. */
+    keyFrame?: number;
     targetId: string;
     jointId?: string;
     resizeCorner?: string;
@@ -445,9 +450,46 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.restore();
       });
 
-      // 3D. Actor selection: rotated box around the image at its animated position
+      // 3D. Actor selection: motion path + rotated box around the image at its animated position
       if (selectedObject?.type === 'actor') {
         const actor = actors.find((a) => a.id === selectedObject.id);
+        const posTrack = actor?.tracks.position;
+        if (actor && posTrack && posTrack.length >= 2) {
+          ctx.save();
+          // Path (motion guide)
+          const line = pathPolyline(posTrack, actor.smoothPath);
+          ctx.strokeStyle = 'rgba(249, 115, 22, 0.75)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([6, 5]);
+          ctx.beginPath();
+          line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // One dot per frame: spacing shows the speed (closer = slower), like AE
+          ctx.fillStyle = 'rgba(253, 186, 116, 0.8)';
+          for (let f = posTrack[0].frame; f <= posTrack[posTrack.length - 1].frame; f++) {
+            const p = samplePosition(posTrack, f, actor.base, actor.smoothPath);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Keyframe points (draggable)
+          posTrack.forEach((k) => {
+            const isCurrent = k.frame === currentFrame;
+            ctx.beginPath();
+            ctx.rect(k.value.x - 5, k.value.y - 5, 10, 10);
+            ctx.fillStyle = isCurrent ? '#ffffff' : '#f97316';
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 1.5;
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#fdba74';
+            ctx.font = '10px JetBrains Mono, monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`F${k.frame}`, k.value.x + 8, k.value.y - 8);
+          });
+          ctx.restore();
+        }
         if (actor) {
           const st = sampleActor(actor, currentFrame);
           const w = actor.width * st.scale;
@@ -602,6 +644,16 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         });
       }
 
+      // Handle motion path point drag: edits the key's position without changing the current frame
+      else if (session.targetType === 'path-key' && session.keyFrame !== undefined) {
+        const actor = actors.find((a) => a.id === session.targetId);
+        if (actor) {
+          const value = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
+          const position = setKeyframe(actor.tracks.position, session.keyFrame, value);
+          onTransientUpdateActor({ ...actor, tracks: { ...actor.tracks, position } });
+        }
+      }
+
       // Handle Actor Drag: stopwatch rule (static value, or key at the current frame)
       else if (session.targetType === 'actor') {
         const actor = actors.find((a) => a.id === session.targetId);
@@ -679,6 +731,11 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           const txt = texts.find((t) => t.id === session.targetId);
           if (txt) {
             onCommitText(txt, `Mover Texto "${txt.text}"`, session.baseSnapshot);
+          }
+        } else if (session.targetType === 'path-key') {
+          const actor = actors.find((a) => a.id === session.targetId);
+          if (actor) {
+            onCommitActor(actor, `Editar ponto do caminho (F${session.keyFrame})`, session.baseSnapshot);
           }
         } else if (session.targetType === 'actor') {
           const actor = actors.find((a) => a.id === session.targetId);
@@ -776,6 +833,35 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           window.addEventListener('mouseup', onWindowMouseUp);
           return;
         }
+      }
+    }
+
+    // 2C''. Hit Test: key points of the selected actor's motion path (edited in place, like AE)
+    if (selectedObject?.type === 'actor') {
+      const actor = actors.find((a) => a.id === selectedObject.id);
+      // A key point under the actor's current position (e.g. holding after the last key) means
+      // "drag the object": that must animate at the current frame, not edit an older key.
+      const current = actor ? actorPropertyValue(actor, 'position', currentFrame) : null;
+      const onActorAnchor = !!current && Math.hypot(pt.x - current.x, pt.y - current.y) <= PATH_KEY_HIT_RADIUS;
+      const key = onActorAnchor
+        ? undefined
+        : actor?.tracks.position?.find(
+            (k) => Math.hypot(pt.x - k.value.x, pt.y - k.value.y) <= PATH_KEY_HIT_RADIUS
+          );
+      if (actor && key && (actor.tracks.position?.length ?? 0) >= 2 && isEditable(actor.id, 'actor')) {
+        dragSessionRef.current = {
+          targetType: 'path-key',
+          targetId: actor.id,
+          keyFrame: key.frame,
+          startCanvasPt: pt,
+          baseSnapshot,
+          hasMoved: false,
+          offsetX: pt.x - key.value.x,
+          offsetY: pt.y - key.value.y,
+        };
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
       }
     }
 

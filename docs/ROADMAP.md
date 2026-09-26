@@ -13,7 +13,7 @@ Base: `docs/RESEARCH.md`.
 - [x] T3 — Motor de keyframes (puro, testado): easing por keyframe, interpolação, spline de caminho, orientação
 - [x] T4 — Ator: importar imagem local (botão + arrastar para o palco), renderizar, selecionar, mover
 - [x] T5 — Auto-keyframe + inspector do ator + losangos de keyframe na timeline
-- [ ] T6 — Caminho de movimento visível, caminho suave/reto, orientar ao caminho
+- [x] T6 — Caminho de movimento visível, caminho suave/reto, orientar ao caminho
 - [ ] T7 — Boneco palito: FK (girar osso em volta do pai) + interpolar pose entre dois quadros
 - [ ] T8 — Salvar/abrir projeto (arquivo local) + autosave/recuperação
 - [ ] T9 — Diálogo de export: MP4, WebM transparente (VP9 alpha), trecho de quadros
@@ -40,3 +40,6 @@ Base: `docs/RESEARCH.md`.
   (`moveActorKeys`). Inspector: `ActorInspector.tsx`. Import: `utils/importImage.ts` (reduz > 2048 px).
 - `renderCompositeFrame(ctx, w, h, frame, scene: SceneContent, options)`; `exportVideoSequence(scene, opts)`.
 - Atalhos: usar `isTypingTarget` (`utils/keyboard.ts`) para decidir se a tecla é do campo ou do editor.
+- Caminho no palco (ator selecionado, ≥ 2 keys de posição): linha tracejada, um ponto por frame (espaçamento
+  = velocidade), quadrados nos keys arrastáveis sem mudar o frame atual. Se o clique cai na posição atual
+  do ator, arrastar o ator tem prioridade (grava key no frame atual).
