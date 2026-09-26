@@ -149,7 +149,7 @@ export function hasKeyframeAt<T>(track: Track<T> | undefined, frame: number): bo
  * Centripetal Catmull-Rom point between p1 and p2 (u in 0..1). The centripetal variant (alpha = 0.5)
  * never forms cusps or self-loops on tight turns, which matters for routes with close stops.
  */
-function catmullRom(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, u: number): Vec2 {
+export function catmullRom(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, u: number): Vec2 {
   const knot = (a: Vec2, b: Vec2) => Math.max(1e-4, Math.pow(Math.hypot(b.x - a.x, b.y - a.y), 0.5));
   const t0 = 0;
   const t1 = t0 + knot(p0, p1);

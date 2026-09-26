@@ -208,6 +208,43 @@ export interface ActorOverlay {
   flipX: boolean;
   /** Draws the path already travelled behind the actor (e.g. a dashed flight line). */
   trail?: { enabled: boolean; color: string; width: number; dashed: boolean };
+  /**
+   * Follow a motion path (Flash "motion guide"): while set, the position comes from the path and
+   * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
+   */
+  follow?: ActorFollow;
+}
+
+export interface ActorFollow {
+  pathId: string;
+  progress: Track<number>;
+  /** Rotate to the path direction. */
+  orient: boolean;
+}
+
+export type PathStrokeStyle = 'solid' | 'dashed' | 'dotted';
+
+/**
+ * A drawn motion path ("rota"/"guia"): a line through points that actors can follow. It can be visible
+ * (dotted route) or just a guide, and can reveal itself as its followers travel it.
+ */
+export interface MotionPath {
+  id: string;
+  name: string;
+  points: Vec2[];
+  /** Curve through the points (centripetal Catmull-Rom) instead of straight segments. */
+  smooth: boolean;
+  closed: boolean;
+  style: {
+    visible: boolean;
+    color: string;
+    width: number;
+    stroke: PathStrokeStyle;
+    /** 'full': always drawn; 'follow': only the part already travelled by an actor following it. */
+    reveal: 'full' | 'follow';
+  };
+  startFrame: number;
+  durationFrames: number;
 }
 
 export interface FrameData {
@@ -217,7 +254,7 @@ export interface FrameData {
   groups?: CanvasGroup[];
 }
 
-export type LayerType = 'drawing' | 'chart' | 'text' | 'group' | 'video' | 'image' | 'actor';
+export type LayerType = 'drawing' | 'chart' | 'text' | 'group' | 'video' | 'image' | 'actor' | 'path';
 
 export interface StudioLayer {
   id: string;
@@ -246,6 +283,7 @@ export type SelectedObjectType =
   | 'drawing'
   | 'group'
   | 'actor'
+  | 'path'
   | null;
 
 export interface SelectedObjectRef {
@@ -261,6 +299,7 @@ export interface HistorySnapshot {
   texts: TextOverlay[];
   images: ImageOverlay[];
   actors: ActorOverlay[];
+  paths: MotionPath[];
   groups?: CanvasGroup[];
   videoBg?: VideoBackground;
 }

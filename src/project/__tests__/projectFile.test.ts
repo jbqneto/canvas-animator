@@ -16,6 +16,7 @@ const state = (): ProjectState => ({
     actors: [
       createActor({ id: 'a1', name: 'avião', src: 'data:image/png;base64,AA', width: 10, height: 5, x: 1, y: 2, startFrame: 1, durationFrames: 89 }),
     ],
+    paths: [],
     layers: [{ id: 'l1', name: 'avião', type: 'actor', visible: true, locked: false, color: '#f00', targetId: 'a1' }],
   },
 });

@@ -1,4 +1,5 @@
-import type { ActorOverlay, ActorTransform } from '../types';
+import type { ActorOverlay, ActorTransform, MotionPath } from '../types';
+import { pointAtProgress, polylineUpTo, samplePath } from './path';
 import { samplePosition, sampleTrack, setKeyframe, hasKeyframeAt, moveKeyframe, Track, Vec2 } from './keyframes';
 
 export type ActorProperty = keyof ActorOverlay['tracks'];
@@ -12,11 +13,30 @@ export function isActorOnScreen(actor: ActorOverlay, frame: number): boolean {
   return frame >= actor.startFrame && frame <= actor.startFrame + actor.durationFrames;
 }
 
-/** Evaluates every animated property of the actor at `frame`. */
-export function sampleActor(actor: ActorOverlay, frame: number): ActorState {
+/** The path the actor is following, if the link is valid. */
+export function followedPath(actor: ActorOverlay, paths: MotionPath[]): MotionPath | undefined {
+  if (!actor.follow) return undefined;
+  const path = paths.find((p) => p.id === actor.follow!.pathId);
+  return path && path.points.length >= 2 ? path : undefined;
+}
+
+/** Position (and travel direction) from the followed path, or from the position keys. */
+function samplePlacement(actor: ActorOverlay, frame: number, paths: MotionPath[]) {
+  const path = followedPath(actor, paths);
+  if (path && actor.follow) {
+    const p = pointAtProgress(samplePath(path), sampleTrack(actor.follow.progress, frame, 0));
+    return { x: p.x, y: p.y, angle: actor.follow.orient ? p.angle : 0 };
+  }
+  const pos = samplePosition(actor.tracks.position, frame, actor.base, actor.smoothPath);
+  const animated = (actor.tracks.position?.length ?? 0) >= 2;
+  return { x: pos.x, y: pos.y, angle: actor.orientToPath && animated ? pos.angle : 0 };
+}
+
+/** Evaluates every animated property of the actor at `frame` (`paths` resolves "follow path"). */
+export function sampleActor(actor: ActorOverlay, frame: number, paths: MotionPath[] = []): ActorState {
   const { base, tracks } = actor;
-  const pos = samplePosition(tracks.position, frame, base, actor.smoothPath);
-  const pathAngle = actor.orientToPath && (tracks.position?.length ?? 0) >= 2 ? pos.angle : 0;
+  const pos = samplePlacement(actor, frame, paths);
+  const pathAngle = pos.angle;
   return {
     x: pos.x,
     y: pos.y,
@@ -58,10 +78,11 @@ export function setActorProperty<P extends ActorProperty>(
 export function actorPropertyValue<P extends ActorProperty>(
   actor: ActorOverlay,
   prop: P,
-  frame: number
+  frame: number,
+  paths: MotionPath[] = []
 ): PropertyValue<P> {
   if (prop === 'position') {
-    const p = samplePosition(actor.tracks.position, frame, actor.base, actor.smoothPath);
+    const p = samplePlacement(actor, frame, paths);
     return { x: p.x, y: p.y } as PropertyValue<P>;
   }
   const track = actor.tracks[prop as Exclude<ActorProperty, 'position'>];
@@ -82,15 +103,20 @@ export function toggleAnimated(actor: ActorOverlay, prop: ActorProperty, frame: 
   return { ...actor, tracks: { ...actor.tracks, [prop]: track } };
 }
 
+/** All keyframe tracks of the actor, including the path progress when following a path. */
+function allTracks(actor: ActorOverlay): (Track<unknown> | undefined)[] {
+  return [...(Object.values(actor.tracks) as Track<unknown>[]), actor.follow?.progress];
+}
+
 /** Every frame that has a key on any property, sorted, for the timeline diamonds. */
 export function actorKeyframes(actor: ActorOverlay): number[] {
   const frames = new Set<number>();
-  (Object.values(actor.tracks) as Track<unknown>[]).forEach((track) => track?.forEach((k) => frames.add(k.frame)));
+  allTracks(actor).forEach((track) => track?.forEach((k) => frames.add(k.frame)));
   return [...frames].sort((a, b) => a - b);
 }
 
 export function actorHasKeyAt(actor: ActorOverlay, frame: number): boolean {
-  return (Object.values(actor.tracks) as Track<unknown>[]).some((track) => hasKeyframeAt(track, frame));
+  return allTracks(actor).some((track) => hasKeyframeAt(track, frame));
 }
 
 /** Converts a canvas point into the actor's local, unscaled/unrotated space (origin = anchor). */
@@ -105,8 +131,14 @@ export function toActorLocal(state: ActorTransform, point: Vec2): Vec2 {
   };
 }
 
-export function hitTestActor(actor: ActorOverlay, frame: number, point: Vec2, padding = 4): boolean {
-  const state = sampleActor(actor, frame);
+export function hitTestActor(
+  actor: ActorOverlay,
+  frame: number,
+  point: Vec2,
+  paths: MotionPath[] = [],
+  padding = 4
+): boolean {
+  const state = sampleActor(actor, frame, paths);
   if (!state.visible) return false;
   const local = toActorLocal(state, point);
   return Math.abs(local.x) <= actor.width / 2 + padding && Math.abs(local.y) <= actor.height / 2 + padding;
@@ -153,6 +185,7 @@ export function shiftActorTime(actor: ActorOverlay, delta: number): ActorOverlay
       rotation: shift(actor.tracks.rotation),
       opacity: shift(actor.tracks.opacity),
     },
+    follow: actor.follow && { ...actor.follow, progress: shift(actor.follow.progress) ?? [] },
   };
 }
 
@@ -167,14 +200,19 @@ export function moveActorKeys(actor: ActorOverlay, from: number, to: number): Ac
       to
     );
   });
-  return { ...actor, tracks };
+  const follow = actor.follow && { ...actor.follow, progress: moveKeyframe(actor.follow.progress, from, to) };
+  return { ...actor, tracks, follow };
 }
 
 /**
  * Points of the path already travelled at `frame` (one per frame from the first position key),
  * ending exactly at the current position. Empty when the actor isn't moving along keys.
  */
-export function trailPoints(actor: ActorOverlay, frame: number): Vec2[] {
+export function trailPoints(actor: ActorOverlay, frame: number, paths: MotionPath[] = []): Vec2[] {
+  const path = followedPath(actor, paths);
+  if (path && actor.follow) {
+    return polylineUpTo(samplePath(path), sampleTrack(actor.follow.progress, frame, 0));
+  }
   const track = actor.tracks.position;
   if (!track || track.length < 2) return [];
   const first = track[0].frame;

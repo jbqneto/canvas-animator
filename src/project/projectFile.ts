@@ -98,6 +98,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       texts: asArray(c.texts),
       images: asArray(c.images),
       actors: asArray(c.actors),
+      paths: asArray(c.paths),
       layers: asArray(c.layers),
       groups: asArray(c.groups),
     },

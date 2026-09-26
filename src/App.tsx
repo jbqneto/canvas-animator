@@ -229,6 +229,7 @@ export default function App() {
     texts: initialTexts,
     images: [],
     actors: [],
+    paths: [],
     layers: initialLayers,
   });
 
