@@ -15,6 +15,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { ChatMessage, ChatRole } from '../types';
+import { useI18n } from '../i18n';
 
 interface GeminiChatbotProps {
   isOpen: boolean;
@@ -27,15 +28,12 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
   onToggle,
   onApplyAction,
 }) => {
+  const { t, locale } = useI18n();
+  // The welcome text is translated when shown, so it follows a language change
   const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content:
-        'Olá! Sou o seu copiloto do FlashMotion Studio. Posso ajudar você a escrever roteiros educativos cena a cena, coreografar poses de boneco palito (com keyframing e curvas de aceleração) ou sugerir gráficos e textos animados para sobrepor no seu vídeo. Como posso ajudar agora?',
-      timestamp: Date.now(),
-    },
+    { id: 'welcome', role: 'assistant', content: '', timestamp: Date.now() },
   ]);
+  const messageText = (m: ChatMessage) => (m.id === 'welcome' ? t('chat.welcome') : m.content);
 
   const [input, setInput] = useState('');
   const [role, setRole] = useState<ChatRole>('general');
@@ -75,16 +73,17 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
         body: JSON.stringify({
           messages: newHistory.map((m) => ({
             role: m.role,
-            content: m.content,
+            content: messageText(m),
           })),
           role,
           model,
+          locale,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Erro na resposta do Gemini.');
+        throw new Error(data.error || t('chat.errorResponse'));
       }
 
       const botMsg: ChatMessage = {
@@ -101,7 +100,7 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: `Desculpe, ocorreu um erro ao consultar o Gemini: ${err.message}`,
+          content: t('chat.errorMessage', { error: err.message }),
           timestamp: Date.now(),
         },
       ]);
@@ -126,7 +125,7 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
           </div>
           <div>
             <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
-              Gemini Copilot
+              {t('chat.title')}
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             </h3>
             <span className="text-[10px] text-neutral-400 font-mono">
@@ -139,14 +138,14 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
           <button
             onClick={() => setIsMinimized((m) => !m)}
             className="p-1 rounded text-neutral-400 hover:text-white"
-            title={isMinimized ? 'Expandir' : 'Minimizar'}
+            title={isMinimized ? t('chat.expand') : t('chat.minimize')}
           >
             {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
           </button>
           <button
             onClick={onToggle}
             className="p-1 rounded text-neutral-400 hover:text-white"
-            title="Fechar"
+            title={t('chat.close')}
           >
             <X size={14} />
           </button>
@@ -158,29 +157,29 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
           {/* Role & Model Selector Bar */}
           <div className="p-2 border-b border-neutral-800 bg-neutral-900/90 flex items-center justify-between gap-2 text-[11px]">
             <div className="flex items-center gap-1">
-              <span className="text-neutral-400">Papel:</span>
+              <span className="text-neutral-400">{t('chat.role')}</span>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as ChatRole)}
                 className="bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-sky-300 font-medium outline-none"
               >
-                <option value="general">Geral / Diretor 2D</option>
-                <option value="choreographer">Coreógrafo Flash</option>
-                <option value="educator">Roteirista Educativo</option>
-                <option value="generator">Gerador de Cenas</option>
+                <option value="general">{t('chat.role.general')}</option>
+                <option value="choreographer">{t('chat.role.choreographer')}</option>
+                <option value="educator">{t('chat.role.educator')}</option>
+                <option value="generator">{t('chat.role.generator')}</option>
               </select>
             </div>
 
             <div className="flex items-center gap-1">
-              <span className="text-neutral-400">Modelo:</span>
+              <span className="text-neutral-400">{t('chat.model')}</span>
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-neutral-200 outline-none"
               >
-                <option value="gemini-3.5-flash">3.5 Flash (Geral)</option>
-                <option value="gemini-3.1-flash-lite">3.1 Flash Lite (Rápido)</option>
-                <option value="gemini-3.1-pro-preview">3.1 Pro (Complexo)</option>
+                <option value="gemini-3.5-flash">3.5 Flash ({t('chat.model.general')})</option>
+                <option value="gemini-3.1-flash-lite">3.1 Flash Lite ({t('chat.model.fast')})</option>
+                <option value="gemini-3.1-pro-preview">3.1 Pro ({t('chat.model.complex')})</option>
                 <option value="gemini-3.8-flash">3.8 Flash</option>
               </select>
             </div>
@@ -191,32 +190,32 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
             <button
               onClick={() =>
                 handleSendMessage(
-                  'Crie um roteiro educativo de 5 segundos com timing para um gráfico de barras crescendo ao lado do boneco palito.'
+                  t('chat.suggest.chartsPrompt')
                 )
               }
               className="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 whitespace-nowrap border border-neutral-700/60"
             >
-              💡 Roteiro c/ Gráficos
+              {t('chat.suggest.charts')}
             </button>
             <button
               onClick={() =>
                 handleSendMessage(
-                  'Como montar um ciclo de caminhada convincente em 12 ou 24 quadros no estilo Adobe Flash?'
+                  t('chat.suggest.walkPrompt')
                 )
               }
               className="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 whitespace-nowrap border border-neutral-700/60"
             >
-              🚶 Ciclo de Caminhada
+              {t('chat.suggest.walk')}
             </button>
             <button
               onClick={() =>
                 handleSendMessage(
-                  'Dê ideias de overlays de texto cinético e cores para uma aula dinâmica de matemática.'
+                  t('chat.suggest.overlaysPrompt')
                 )
               }
               className="px-2 py-0.5 rounded-full bg-neutral-800 hover:bg-neutral-700 whitespace-nowrap border border-neutral-700/60"
             >
-              ✍️ Overlays de Aula
+              {t('chat.suggest.overlays')}
             </button>
           </div>
 
@@ -242,7 +241,7 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
                       : 'bg-neutral-900 border border-neutral-800 text-neutral-200 rounded-tl-none shadow-sm'
                   }`}
                 >
-                  {m.content}
+                  {messageText(m)}
                 </div>
 
                 {m.role === 'user' && (
@@ -256,7 +255,7 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
             {isLoading && (
               <div className="flex items-center gap-2 text-neutral-400 text-xs">
                 <Loader2 size={14} className="animate-spin text-sky-400" />
-                Pensando na animação...
+                {t('chat.thinking')}
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -275,7 +274,7 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Pergunte sobre poses, roteiros, timing..."
+                placeholder={t('chat.placeholder')}
                 className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-sky-500 outline-none"
               />
               <button

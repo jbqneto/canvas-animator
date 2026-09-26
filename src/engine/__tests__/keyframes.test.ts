@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyEasing,
-  EASING_OPTIONS,
+  EASING_NAMES,
   hasKeyframeAt,
   moveKeyframe,
   pathPolyline,
@@ -14,7 +14,7 @@ import {
 } from '../keyframes';
 
 describe('applyEasing', () => {
-  it.each(EASING_OPTIONS.map((o) => o.id))('%s maps 0 -> 0 and 1 -> 1', (name) => {
+  it.each(EASING_NAMES)('%s maps 0 -> 0 and 1 -> 1', (name) => {
     expect(applyEasing(name, 0)).toBeCloseTo(0);
     expect(applyEasing(name, 1)).toBeCloseTo(1);
   });

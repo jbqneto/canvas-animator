@@ -21,15 +21,16 @@ export type EasingName =
   | 'bounceOut'
   | 'hold';
 
-export const EASING_OPTIONS: { id: EasingName; label: string }[] = [
-  { id: 'easeInOut', label: 'Suave (entrada e saída)' },
-  { id: 'linear', label: 'Linear' },
-  { id: 'easeIn', label: 'Acelerando' },
-  { id: 'easeOut', label: 'Desacelerando' },
-  { id: 'backOut', label: 'Passa e volta' },
-  { id: 'elasticOut', label: 'Elástico' },
-  { id: 'bounceOut', label: 'Quicando' },
-  { id: 'hold', label: 'Segurar (salto)' },
+/** Easings in the order they are offered in the UI (labels are translated as `easing.<name>`). */
+export const EASING_NAMES: EasingName[] = [
+  'easeInOut',
+  'linear',
+  'easeIn',
+  'easeOut',
+  'backOut',
+  'elasticOut',
+  'bounceOut',
+  'hold',
 ];
 
 export const DEFAULT_EASING: EasingName = 'easeInOut';
