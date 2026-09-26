@@ -10,7 +10,7 @@ Base: `docs/RESEARCH.md`.
 - [x] T0 — Correção de bugs (drag, undo da timeline, export, upload de vídeo, camadas, gráficos)
 - [x] T1 — Pesquisa + roadmap (este arquivo)
 - [x] T2 — Infra de testes (Vitest) + testes dos utilitários existentes
-- [ ] T3 — Motor de keyframes (puro, testado): easing por keyframe, interpolação, spline de caminho, orientação
+- [x] T3 — Motor de keyframes (puro, testado): easing por keyframe, interpolação, spline de caminho, orientação
 - [ ] T4 — Ator: importar imagem local (botão + arrastar para o palco), renderizar, selecionar, mover
 - [ ] T5 — Auto-keyframe + inspector do ator + losangos de keyframe na timeline
 - [ ] T6 — Caminho de movimento visível, caminho suave/reto, orientar ao caminho
@@ -29,3 +29,7 @@ Base: `docs/RESEARCH.md`.
   Listeners de janela devem ler `getCurrentSnapshot()`, nunca props capturadas.
 - Tempo: quadros começam em 1. `videoTimeForFrame(frame, fps, duration)`.
 - Export: WebCodecs via mediabunny (lazy import), timestamps explícitos.
+- Keyframes (`src/engine/keyframes.ts`): `Track<T> = Keyframe<T>[]` ordenado; easing do key vale para o
+  segmento que COMEÇA nele; clamp antes/depois. `sampleTrack(track, frame, fallback)`,
+  `samplePosition(track, frame, fallback, smooth)` → `{x, y, angle}` (Catmull-Rom centrípeta, velocidade
+  constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam `DEFAULT_EASING`.
