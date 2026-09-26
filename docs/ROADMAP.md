@@ -14,7 +14,7 @@ Base: `docs/RESEARCH.md`.
 - [x] T4 — Ator: importar imagem local (botão + arrastar para o palco), renderizar, selecionar, mover
 - [x] T5 — Auto-keyframe + inspector do ator + losangos de keyframe na timeline
 - [x] T6 — Caminho de movimento visível, caminho suave/reto, orientar ao caminho
-- [ ] T7 — Boneco palito: FK (girar osso em volta do pai) + interpolar pose entre dois quadros
+- [x] T7 — Boneco palito: FK (girar osso em volta do pai) + interpolar pose entre dois quadros
 - [ ] T8 — Salvar/abrir projeto (arquivo local) + autosave/recuperação
 - [ ] T9 — Diálogo de export: MP4, WebM transparente (VP9 alpha), trecho de quadros
 - [ ] T10 — PWA instalável (manifest, service worker, ícones, abrir .fmproj pelo sistema)
@@ -43,3 +43,7 @@ Base: `docs/RESEARCH.md`.
 - Caminho no palco (ator selecionado, ≥ 2 keys de posição): linha tracejada, um ponto por frame (espaçamento
   = velocidade), quadrados nos keys arrastáveis sem mudar o frame atual. Se o clique cai na posição atual
   do ator, arrastar o ator tem prioridade (grava key no frame atual).
+- Boneco (`src/engine/stickRig.ts`): hierarquia pelos ossos (`from` = pai; cabeça presa ao pescoço).
+  Arrastar junta = FK (gira em volta do pai, cadeia acompanha); Alt = livre. `interpolateStickPose`
+  interpola ângulo (arco curto) e comprimento por osso. `StickFigure.tweened` marca frames gerados
+  (ponto na timeline); editar à mão vira pose-chave. UI: `StickAnimationPanel.tsx`.

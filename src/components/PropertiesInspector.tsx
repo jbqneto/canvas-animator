@@ -40,6 +40,8 @@ import {
   ActorOverlay,
 } from '../types';
 import { ActorInspector } from './ActorInspector';
+import { StickAnimationPanel } from './StickAnimationPanel';
+import type { EasingName } from '../engine/keyframes';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
 interface PropertiesInspectorProps {
@@ -84,6 +86,10 @@ interface PropertiesInspectorProps {
   onDeleteActor: (id: string) => void;
   onImportImageFiles: (files: FileList) => void;
   onJumpToFrame: (frame: number) => void;
+  // Stick figure pose tween
+  frames: Record<number, FrameData>;
+  onCopyStickToFrame: (stickId: string, toFrame: number) => void;
+  onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -128,6 +134,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onDeleteActor,
   onImportImageFiles,
   onJumpToFrame,
+  frames,
+  onCopyStickToFrame,
+  onTweenStick,
   pastSteps,
   futureSteps,
   onJumpToHistory,
@@ -839,6 +848,17 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                 {/* Pose Library for Stick Figures */}
                 {activeStick && (
+                  <StickAnimationPanel
+                    stickId={activeStick.id}
+                    frames={frames}
+                    currentFrame={currentFrame}
+                    totalFrames={totalFrames}
+                    onCopyToFrame={onCopyStickToFrame}
+                    onTween={onTweenStick}
+                  />
+                )}
+
+                {activeStick && (
                   <div className="space-y-2 pt-2 border-t border-neutral-800">
                     <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
                       Poses Prontas da Biblioteca
@@ -848,7 +868,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         <button
                           key={key}
                           onClick={() => {
-                            const updated = applyPoseToStickFigure(activeStick, key as any);
+                            const updated = { ...applyPoseToStickFigure(activeStick, key as any), tweened: false };
                             const updatedSticks = currentFrameData.stickFigures.map((s) =>
                               s.id === activeStick.id ? updated : s
                             );

@@ -15,6 +15,8 @@ import {
   ActorOverlay,
 } from './types';
 import { createActor } from './engine/actor';
+import { tweenStickFrames } from './engine/stickRig';
+import type { EasingName } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
 import { loadImageFileAsActorSource } from './utils/importImage';
 import {
@@ -842,6 +844,62 @@ export default function App() {
     if (selectedObject?.id === textId) setSelectedObject(null);
   };
 
+  // ================= STICK FIGURE POSE ANIMATION (classic tween) =================
+  const emptyFrameData = (frameNumber: number): FrameData => ({
+    frameNumber,
+    stickFigures: [],
+    drawings: [],
+    groups: [],
+  });
+
+  /** Returns frames with `stick` placed (replacing the same id) in frame `f`. */
+  const withStickInFrame = (
+    allFrames: Record<number, FrameData>,
+    f: number,
+    stick: StickFigure
+  ): Record<number, FrameData> => {
+    const data = allFrames[f] ?? emptyFrameData(f);
+    const exists = data.stickFigures.some((s) => s.id === stick.id);
+    return {
+      ...allFrames,
+      [f]: {
+        ...data,
+        stickFigures: exists
+          ? data.stickFigures.map((s) => (s.id === stick.id ? stick : s))
+          : [...data.stickFigures, stick],
+      },
+    };
+  };
+
+  const handleCopyStickToFrame = (stickId: string, toFrame: number) => {
+    const stick = frames[currentFrame]?.stickFigures.find((s) => s.id === stickId);
+    if (!stick || toFrame === currentFrame) return;
+    history.pushSnapshot(`Copiar pose F${currentFrame} → F${toFrame}`, {
+      ...history.present,
+      frames: withStickInFrame(history.present.frames, toFrame, { ...stick, tweened: false }),
+    });
+    if (toFrame > totalFrames) setTotalFrames(toFrame);
+    setCurrentFrame(toFrame);
+  };
+
+  const handleTweenStick = (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => {
+    const a = frames[fromFrame]?.stickFigures.find((s) => s.id === stickId);
+    const b = frames[toFrame]?.stickFigures.find((s) => s.id === stickId);
+    if (!a || !b) {
+      alert(`O boneco precisa existir nos frames ${fromFrame} e ${toFrame}.`);
+      return;
+    }
+    const poses = tweenStickFrames(a, b, fromFrame, toFrame, easing);
+    let updated = history.present.frames;
+    Object.entries(poses).forEach(([f, pose]) => {
+      updated = withStickInFrame(updated, Number(f), pose);
+    });
+    history.pushSnapshot(`Interpolar pose F${fromFrame} → F${toFrame}`, {
+      ...history.present,
+      frames: updated,
+    });
+  };
+
   // ================= ACTORS (imported images animated by keyframes) =================
   const handleAddActor = (params: { src: string; name: string; width: number; height: number }) => {
     const id = `actor-${Date.now()}`;
@@ -1413,6 +1471,9 @@ export default function App() {
           onDeleteActor={handleDeleteActor}
           onImportImageFiles={handleImportImageFiles}
           onJumpToFrame={setCurrentFrame}
+          frames={frames}
+          onCopyStickToFrame={handleCopyStickToFrame}
+          onTweenStick={handleTweenStick}
         />
       </div>
 

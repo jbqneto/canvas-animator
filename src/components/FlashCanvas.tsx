@@ -16,6 +16,7 @@ import {
 } from '../types';
 import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue } from '../engine/actor';
 import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
+import { dragJointFK } from '../engine/stickRig';
 
 const PATH_KEY_HIT_RADIUS = 9;
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
@@ -580,20 +581,27 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       if (session.targetType === 'joint' && session.jointId) {
         const stick = currentFrameData.stickFigures.find((s) => s.id === session.targetId);
         if (stick) {
-          const localX = (pt.x - stick.x) / stick.scale;
-          const localY = (pt.y - stick.y) / stick.scale;
+          const local = { x: (pt.x - stick.x) / stick.scale, y: (pt.y - stick.y) / stick.scale };
 
-          const updatedJoints = {
-            ...stick.joints,
-            [session.jointId]: {
-              ...stick.joints[session.jointId],
-              x: Math.round(localX),
-              y: Math.round(localY),
-            },
-          };
+          // Default: rotate the bone around its parent and bring the sub-chain along (FK, keeps
+          // proportions like Pivot/Flash bones). Alt: move the joint freely (stretch the bone).
+          const posed = e.altKey
+            ? {
+                ...stick,
+                joints: {
+                  ...stick.joints,
+                  [session.jointId]: {
+                    ...stick.joints[session.jointId],
+                    x: Math.round(local.x),
+                    y: Math.round(local.y),
+                  },
+                },
+              }
+            : dragJointFK(stick, session.jointId, local);
 
+          // A hand-posed frame becomes a key pose (no longer an in-between)
           const updatedSticks = currentFrameData.stickFigures.map((s) =>
-            s.id === stick.id ? { ...s, joints: updatedJoints } : s
+            s.id === stick.id ? { ...posed, tweened: false } : s
           );
 
           onTransientUpdateFrameData(currentFrame, {
@@ -609,7 +617,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         const newY = Math.round(pt.y - session.offsetY);
 
         const updatedSticks = currentFrameData.stickFigures.map((s) =>
-          s.id === session.targetId ? { ...s, x: newX, y: newY } : s
+          s.id === session.targetId ? { ...s, x: newX, y: newY, tweened: false } : s
         );
 
         onTransientUpdateFrameData(currentFrame, {
