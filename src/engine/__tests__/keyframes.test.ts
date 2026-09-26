@@ -122,3 +122,37 @@ describe('samplePosition', () => {
     expect(line).toHaveLength(21);
   });
 });
+
+describe('samplePosition with pauses', () => {
+  // go down, pause, go right
+  const route: Track<Vec2> = [
+    { frame: 1, value: { x: 0, y: 0 }, easing: 'linear' },
+    { frame: 11, value: { x: 0, y: 100 }, easing: 'linear' },
+    { frame: 21, value: { x: 0, y: 100 }, easing: 'linear' },
+    { frame: 31, value: { x: 100, y: 100 } },
+  ];
+
+  it('keeps the arrival heading while paused', () => {
+    const paused = samplePosition(route, 15, { x: 0, y: 0 }, false);
+    expect(paused.x).toBeCloseTo(0);
+    expect(paused.y).toBeCloseTo(100);
+    expect(paused.angle).toBeCloseTo(90);
+  });
+
+  it('a pause before any movement uses the departure heading', () => {
+    const r: Track<Vec2> = [
+      { frame: 1, value: { x: 0, y: 0 }, easing: 'linear' },
+      { frame: 5, value: { x: 0, y: 0 }, easing: 'linear' },
+      { frame: 10, value: { x: 50, y: 0 } },
+    ];
+    expect(samplePosition(r, 3, { x: 0, y: 0 }, true).angle).toBeCloseTo(0);
+    expect(samplePosition(r, 3, { x: 0, y: 0 }, true).x).toBeCloseTo(0);
+  });
+
+  it('smooth paths through repeated keys stay finite', () => {
+    for (let f = 1; f <= 31; f++) {
+      const p = samplePosition(route, f, { x: 0, y: 0 }, true);
+      expect(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.angle)).toBe(true);
+    }
+  });
+});

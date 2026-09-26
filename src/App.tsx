@@ -41,6 +41,9 @@ import { AiImageModal } from './components/AiImageModal';
 import { GeminiChatbot } from './components/GeminiChatbot';
 import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
+import { RouteDialog, RouteRequest } from './components/RouteDialog';
+import { applyRouteToActor, buildRouteKeyframes, buildStopLabels } from './map/routeTemplate';
+import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 
 export default function App() {
   // Timeline playback state
@@ -1123,6 +1126,97 @@ export default function App() {
     [history]
   );
 
+  // ================= MAP ROUTE TEMPLATE =================
+  const [routeDialogOpen, setRouteDialogOpen] = useState(false);
+
+  const handleCreateRoute = async (req: RouteRequest) => {
+    // The map data (~750 KB) is only loaded when this template is used
+    const { loadWorld, makeProjection, renderMapImage, countryAnchor, DEFAULT_MAP_STYLE } = await import(
+      './map/worldMap'
+    );
+    const world = await loadWorld();
+    const W = canvasDimensions.width;
+    const H = canvasDimensions.height;
+    const ids = req.stops.map((c) => c.id);
+    const projection = makeProjection(world, W, H, req.framing, ids);
+    const mapSrc = renderMapImage(world, projection, W, H, DEFAULT_MAP_STYLE, req.highlight ? ids : []);
+    const stops = req.stops.map((c) => {
+      const [x, y] = projection(countryAnchor(c)) ?? [W / 2, H / 2];
+      return { name: c.name, x: Math.round(x), y: Math.round(y) };
+    });
+    const route = buildRouteKeyframes(stops, {
+      fps,
+      secondsPerLeg: req.secondsPerLeg,
+      pauseSeconds: req.pauseSeconds,
+      landedScale: 0.7,
+      arc: req.arc ? 0.18 : 0,
+    });
+    const newTotal = Math.max(totalFrames, route.endFrame);
+    const stamp = Date.now();
+    const present = history.presentRef.current;
+
+    const mapActor = createActor({
+      id: `actor-map-${stamp}`,
+      name: 'Mapa-múndi',
+      src: mapSrc,
+      width: W,
+      height: H,
+      x: W / 2,
+      y: H / 2,
+      startFrame: 1,
+      durationFrames: newTotal - 1,
+    });
+    const existingVehicle = present.actors.find((a) => a.id === req.vehicleActorId);
+    const vehicleWidth = Math.round(W * 0.07);
+    const vehicle = applyRouteToActor(
+      existingVehicle ??
+        createActor({
+          id: `actor-plane-${stamp}`,
+          name: 'Avião',
+          src: PLANE_ICON_SRC,
+          width: vehicleWidth,
+          height: Math.round(vehicleWidth * PLANE_ICON_ASPECT),
+          x: stops[0].x,
+          y: stops[0].y,
+          startFrame: 1,
+          durationFrames: route.endFrame - 1,
+        }),
+      route
+    );
+
+    const layerFor = (actor: ActorOverlay, locked = false): StudioLayer => ({
+      id: `layer-actor-${actor.id}`,
+      name: actor.name,
+      type: 'actor',
+      visible: true,
+      locked,
+      color: locked ? '#64748b' : '#f97316',
+      targetId: actor.id,
+    });
+    // Map at the back (just above the video/background layer), locked so clicks reach the plane
+    let layersNext = [...present.layers];
+    const videoIndex = layersNext.findIndex((l) => l.type === 'video');
+    layersNext.splice(videoIndex === -1 ? layersNext.length : videoIndex, 0, layerFor(mapActor, true));
+    if (!existingVehicle) layersNext = [layerFor(vehicle), ...layersNext];
+
+    history.pushSnapshot(`Rota no mapa: ${stops.map((s) => s.name).join(' → ')}`, {
+      ...present,
+      actors: [
+        mapActor,
+        ...present.actors.map((a) => (a.id === vehicle.id ? vehicle : a)),
+        ...(existingVehicle ? [] : [vehicle]),
+      ],
+      texts: req.labels
+        ? [...present.texts, ...buildStopLabels(stops, route.arrivals, route.endFrame, W, `route-${stamp}`)]
+        : present.texts,
+      layers: layersNext,
+    });
+    setTotalFrames(newTotal);
+    setCurrentFrame(1);
+    setSelectedObject({ type: 'actor', id: vehicle.id });
+    setRouteDialogOpen(false);
+  };
+
   const handleDeleteActor = (actorId: string) => {
     const actor = history.present.actors.find((a) => a.id === actorId);
     history.pushSnapshot(`Excluir "${actor?.name ?? 'ator'}"`, {
@@ -1665,6 +1759,7 @@ export default function App() {
           frames={frames}
           onCopyStickToFrame={handleCopyStickToFrame}
           onTweenStick={handleTweenStick}
+          onOpenRouteDialog={() => setRouteDialogOpen(true)}
         />
       </div>
 
@@ -1733,6 +1828,14 @@ export default function App() {
       />
 
       <PwaStatus hasUnsavedChanges={isDirty} />
+
+      <RouteDialog
+        isOpen={routeDialogOpen}
+        onClose={() => setRouteDialogOpen(false)}
+        onCreate={handleCreateRoute}
+        actors={actors}
+        fps={fps}
+      />
 
       {/* AI Image Generation & Editing Modal */}
       <AiImageModal

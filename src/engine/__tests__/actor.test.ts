@@ -72,3 +72,19 @@ describe('actor timing', () => {
     expect(a.startFrame).toBe(6);
   });
 });
+
+describe('trail', () => {
+  it('covers the travelled part of the path only', async () => {
+    const { trailPoints } = await import('../actor');
+    let a = toggleAnimated(plane(), 'position', 1);
+    a = setActorProperty(a, 'position', 11, { x: 100, y: 0 });
+    a = { ...a, smoothPath: false };
+    expect(trailPoints(a, 1)).toEqual([]);
+    const mid = trailPoints(a, 6);
+    expect(mid[0]).toEqual({ x: 0, y: 0 });
+    expect(mid[mid.length - 1].x).toBeGreaterThan(0);
+    expect(mid[mid.length - 1].x).toBeLessThan(100);
+    const done = trailPoints(a, 50);
+    expect(done[done.length - 1].x).toBeCloseTo(100);
+  });
+});

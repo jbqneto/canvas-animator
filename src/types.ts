@@ -206,6 +206,8 @@ export interface ActorOverlay {
   orientToPath: boolean;
   /** Mirror horizontally (e.g. a plane image drawn facing the other way). */
   flipX: boolean;
+  /** Draws the path already travelled behind the actor (e.g. a dashed flight line). */
+  trail?: { enabled: boolean; color: string; width: number; dashed: boolean };
 }
 
 export interface FrameData {

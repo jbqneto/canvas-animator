@@ -24,6 +24,7 @@ import {
   Upload,
   VideoOff,
   Image as ImageIcon,
+  Globe2,
 } from 'lucide-react';
 import {
   ChartOverlay,
@@ -90,6 +91,7 @@ interface PropertiesInspectorProps {
   frames: Record<number, FrameData>;
   onCopyStickToFrame: (stickId: string, toFrame: number) => void;
   onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
+  onOpenRouteDialog: () => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -137,6 +139,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   frames,
   onCopyStickToFrame,
   onTweenStick,
+  onOpenRouteDialog,
   pastSteps,
   futureSteps,
   onJumpToHistory,
@@ -1223,6 +1226,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
                     Inserir Elementos na Cena
                   </span>
+                  <button
+                    onClick={onOpenRouteDialog}
+                    className="w-full flex items-center gap-2 p-2 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40 text-left transition"
+                  >
+                    <Globe2 size={14} />
+                    <span className="text-xs">
+                      Rota no mapa
+                      <span className="block text-[10px] text-sky-200/60">avião pousando em vários países</span>
+                    </span>
+                  </button>
                   <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
                     <ImageIcon size={14} />
                     <span className="text-xs">

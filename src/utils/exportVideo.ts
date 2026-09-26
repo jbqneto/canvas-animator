@@ -10,7 +10,7 @@ import {
   LayerType,
   ActorOverlay,
 } from '../types';
-import { sampleActor } from '../engine/actor';
+import { sampleActor, trailPoints } from '../engine/actor';
 import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtils';
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
@@ -150,7 +150,7 @@ export function renderCompositeFrame(
   actors.forEach((actor) => {
     const state = sampleActor(actor, currentFrame);
     if (!state.visible || state.opacity <= 0) return;
-    add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state));
+    add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state, currentFrame));
   });
   frameData?.stickFigures?.forEach((stick) => {
     add(stick.id, 'drawing', FRONT, () => drawStickFigure(ctx, stick));
@@ -214,8 +214,27 @@ function drawImageOverlay(
 function drawActor(
   ctx: CanvasRenderingContext2D,
   actor: ActorOverlay,
-  state: ReturnType<typeof sampleActor>
+  state: ReturnType<typeof sampleActor>,
+  frame: number
 ) {
+  // Travelled path behind the actor
+  if (actor.trail?.enabled) {
+    const pts = trailPoints(actor, frame);
+    if (pts.length > 1) {
+      ctx.save();
+      ctx.globalAlpha = state.opacity;
+      ctx.strokeStyle = actor.trail.color;
+      ctx.lineWidth = actor.trail.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (actor.trail.dashed) ctx.setLineDash([actor.trail.width * 3, actor.trail.width * 2.5]);
+      ctx.beginPath();
+      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   const img = getCachedImage(actor.src);
   if (!isImageReady(img)) return;
   ctx.save();

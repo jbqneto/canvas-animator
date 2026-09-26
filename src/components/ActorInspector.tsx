@@ -304,6 +304,63 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
         ))}
       </div>
 
+      {/* Trail (travelled path) */}
+      <div className="space-y-1.5">
+        <label className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!actor.trail?.enabled}
+            onChange={(e) =>
+              onChange(
+                {
+                  ...actor,
+                  trail: {
+                    color: '#f8fafc',
+                    width: 4,
+                    dashed: true,
+                    ...actor.trail,
+                    enabled: e.target.checked,
+                  },
+                },
+                'Rastro do caminho'
+              )
+            }
+            className="accent-orange-500"
+          />
+          Mostrar rastro (linha do caminho já percorrido)
+        </label>
+        {actor.trail?.enabled && (
+          <div className="flex items-center gap-2 pl-5 text-[10px] text-neutral-400">
+            <input
+              type="color"
+              value={actor.trail.color}
+              onChange={(e) => onChange({ ...actor, trail: { ...actor.trail!, color: e.target.value } }, 'Cor do rastro')}
+              className="w-6 h-6 bg-transparent border-0 cursor-pointer"
+            />
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={actor.trail.width}
+              onChange={(e) =>
+                onChange({ ...actor, trail: { ...actor.trail!, width: Math.max(1, Number(e.target.value)) } }, 'Espessura do rastro')
+              }
+              className="w-12 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 font-mono text-white"
+            />
+            px
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={actor.trail.dashed}
+                onChange={(e) => onChange({ ...actor, trail: { ...actor.trail!, dashed: e.target.checked } }, 'Rastro tracejado')}
+                className="accent-orange-500"
+              />
+              tracejado
+            </label>
+          </div>
+        )}
+      </div>
+
       {/* Time span & base size */}
       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-800">
         <label className="text-[10px] text-neutral-400 space-y-1">

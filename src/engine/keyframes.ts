@@ -246,13 +246,33 @@ export function samplePosition(
 
   const u = arcLengthParam(points, i, fraction, smooth);
   const p = segmentPoint(points, i, u, smooth);
-  // Tangent by finite difference, looking ahead unless we're at the end of the segment
+  return { x: p.x, y: p.y, angle: travelAngle(points, i, u, smooth) };
+}
+
+const isStill = (a: Vec2, b: Vec2) => Math.hypot(b.x - a.x, b.y - a.y) < 1e-6;
+
+/** Direction of travel at parameter u of segment i (degrees), by finite difference. */
+function segmentAngle(points: Vec2[], i: number, u: number, smooth: boolean): number {
   const eps = 0.01;
   const ua = u + eps <= 1 ? u : u - eps;
   const pa = segmentPoint(points, i, ua, smooth);
   const pb = segmentPoint(points, i, ua + eps, smooth);
-  const angle = (Math.atan2(pb.y - pa.y, pb.x - pa.x) * 180) / Math.PI;
-  return { x: p.x, y: p.y, angle };
+  return (Math.atan2(pb.y - pa.y, pb.x - pa.x) * 180) / Math.PI;
+}
+
+/**
+ * Like segmentAngle, but a pause (two keys at the same place) keeps the heading it arrived with,
+ * or the one it will leave with when there is no previous movement, instead of snapping to 0°.
+ */
+function travelAngle(points: Vec2[], i: number, u: number, smooth: boolean): number {
+  if (!isStill(points[i], points[i + 1])) return segmentAngle(points, i, u, smooth);
+  for (let j = i - 1; j >= 0; j--) {
+    if (!isStill(points[j], points[j + 1])) return segmentAngle(points, j, 1, smooth);
+  }
+  for (let j = i + 1; j < points.length - 1; j++) {
+    if (!isStill(points[j], points[j + 1])) return segmentAngle(points, j, 0, smooth);
+  }
+  return 0;
 }
 
 /** Polyline approximating the whole path, for drawing the motion guide in the editor. */

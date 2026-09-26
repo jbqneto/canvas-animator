@@ -169,3 +169,23 @@ export function moveActorKeys(actor: ActorOverlay, from: number, to: number): Ac
   });
   return { ...actor, tracks };
 }
+
+/**
+ * Points of the path already travelled at `frame` (one per frame from the first position key),
+ * ending exactly at the current position. Empty when the actor isn't moving along keys.
+ */
+export function trailPoints(actor: ActorOverlay, frame: number): Vec2[] {
+  const track = actor.tracks.position;
+  if (!track || track.length < 2) return [];
+  const first = track[0].frame;
+  const end = Math.min(frame, track[track.length - 1].frame);
+  if (end <= first) return [];
+  const points: Vec2[] = [];
+  for (let f = first; f < end; f++) {
+    const p = samplePosition(track, f, actor.base, actor.smoothPath);
+    points.push({ x: p.x, y: p.y });
+  }
+  const last = samplePosition(track, frame, actor.base, actor.smoothPath);
+  points.push({ x: last.x, y: last.y });
+  return points;
+}

@@ -19,6 +19,7 @@ import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
 import { dragJointFK } from '../engine/stickRig';
 
 const PATH_KEY_HIT_RADIUS = 9;
+type Vec2Like = { x: number; y: number };
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
 import { onImageLoaded } from '../utils/imageCache';
 import {
@@ -474,9 +475,15 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2);
             ctx.fill();
           }
-          // Keyframe points (draggable)
-          posTrack.forEach((k) => {
-            const isCurrent = k.frame === currentFrame;
+          // Keyframe points (draggable). Keys at the same place (a pause) share one "F12–36" label.
+          const samePlace = (a: Vec2Like, b: Vec2Like) => Math.hypot(a.x - b.x, a.y - b.y) < 1;
+          posTrack.forEach((k, idx) => {
+            if (idx > 0 && samePlace(posTrack[idx - 1].value, k.value)) return;
+            let lastFrame = k.frame;
+            for (let j = idx + 1; j < posTrack.length && samePlace(posTrack[j].value, k.value); j++) {
+              lastFrame = posTrack[j].frame;
+            }
+            const isCurrent = currentFrame >= k.frame && currentFrame <= lastFrame;
             ctx.beginPath();
             ctx.rect(k.value.x - 5, k.value.y - 5, 10, 10);
             ctx.fillStyle = isCurrent ? '#ffffff' : '#f97316';
@@ -487,7 +494,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             ctx.fillStyle = '#fdba74';
             ctx.font = '10px JetBrains Mono, monospace';
             ctx.textAlign = 'left';
-            ctx.fillText(`F${k.frame}`, k.value.x + 8, k.value.y - 8);
+            const label = lastFrame === k.frame ? `F${k.frame}` : `F${k.frame}–${lastFrame}`;
+            ctx.fillText(label, k.value.x + 8, k.value.y - 8);
           });
           ctx.restore();
         }

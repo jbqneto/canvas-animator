@@ -18,7 +18,7 @@ Base: `docs/RESEARCH.md`.
 - [x] T8 — Salvar/abrir projeto (arquivo local) + autosave/recuperação
 - [x] T9 — Diálogo de export: MP4, WebM transparente (VP9 alpha), trecho de quadros
 - [x] T10 — PWA instalável (manifest, service worker, ícones, abrir .fmproj pelo sistema)
-- [ ] T11 — Template de mapa: mapa-múndi + rota por países gerando keyframes
+- [x] T11 — Template de mapa: mapa-múndi + rota por países gerando keyframes
 - [ ] T12 — PR
 
 ## Contratos / decisões (atualizar a cada tarefa)
@@ -57,3 +57,8 @@ Base: `docs/RESEARCH.md`.
 - PWA (`vite.config.ts` + `PwaStatus.tsx`): `registerType: 'prompt'` (faixa "Nova versão" em vez de recarregar
   sozinho), botão "Instalar app", `file_handlers` para `.fmproj` consumido por `window.launchQueue` no App.
   Testar PWA só no build de produção: `npm run build && NODE_ENV=production npm start`.
+- Mapa (`src/map/`): `worldMap.ts` carrega world-atlas 50m sob demanda (nomes pt via i18n-iso-countries),
+  projeção Natural Earth (mundo ou enquadrar a rota), âncora = centróide do maior polígono. O mapa é
+  rasterizado 1× (WebP) e vira ator numa camada travada no fundo. `routeTemplate.ts` gera keys de posição
+  (pausa = 2 keys no mesmo ponto; arco = key no meio com easeIn/easeOut), escala de "pouso" e rótulos.
+  Ator ganhou `trail` (rastro percorrido). Pausa mantém a direção de chegada (`travelAngle`).
