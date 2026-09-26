@@ -35,10 +35,12 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   botões de zoom/ajustar, a vista acompanha o cursor no play, rótulos dos clipes fixos à esquerda
 - [x] T18 — Gráficos e textos no mesmo modelo de keyframes dos atores (posição, escala, rotação, opacidade,
   easing por key, seguir caminho, losangos na timeline); projetos antigos migrados (P1→P2 vira 2 keys)
+- [x] T19 — Biblioteca de modelos (título, terço inferior, lista, número, gráfico, destaque com seta, rota no
+  mapa) sobre as peças genéricas + entradas/saídas prontas (fade, slide, pop) aplicáveis a qualquer objeto
 
 ## Próximos passos sugeridos
 
-1. Biblioteca de modelos montados sobre as peças genéricas.
+1. Formas (retângulo, círculo, seta) como objeto próprio com cor editável — hoje são imagens SVG geradas.
 2. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
 3. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
 4. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
@@ -116,6 +118,17 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   ~1 quadro com fade, `mixdown` renderiza o trecho exportado num OfflineAudioContext. Export: faixa de áudio
   opcional (AAC no MP4 quando o navegador codifica; senão Opus); WebM transparente começa sem áudio.
   Importar áudio estende a timeline para caber (nunca encolhe). UI: `components/AudioTracks.tsx`.
+- Modelos (`src/templates/`): um modelo é uma função pura `build(valores, contexto) → { actors, charts,
+  texts, paths, endFrame }`; nada na cena sabe que veio de um modelo. `params` descreve o formulário
+  (text, lines, number, color, select) que o diálogo gera sozinho; textos padrão são chaves i18n. Posições em
+  fração do canvas (funciona em 16:9, 9:16, quadrado). Ids com `idPrefix` único. Inserção no App: uma camada
+  por objeto (textos na frente, imagens atrás), a partir do quadro atual; a timeline cresce se precisar.
+  Prévia no diálogo = `renderCompositeFrame` em loop. Formas = SVG data URL (`templates/shapes.ts`). Rota no
+  mapa continua com diálogo próprio, aberto pela biblioteca.
+- Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance})`
+  gravam keys comuns nas bordas do clipe (fade = opacidade; slides = opacidade + posição; pop = escala com
+  `backOut`), a partir dos valores de repouso do objeto. Disponível no `MotionInspector` para qualquer objeto.
+  Texto com `effect: 'none'` não tem entrada própria (só keyframes) — usado pelos modelos.
 - Timeline: grade e régua por CSS (`frameGridStyle`), sem um elemento por quadro. Escala pura em
   `src/engine/timelineScale.ts`: `timelineScale(total, fps, pxPorQuadro, unidade)` escolhe passo das linhas
   fortes (rótulos ≥ 56 px) e fracas (≥ 6 px); em segundos usa tempos "redondos" (0,25 s, 1 s, 5 s, 1:00…) e,

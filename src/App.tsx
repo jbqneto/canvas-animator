@@ -48,6 +48,8 @@ import { GeminiChatbot } from './components/GeminiChatbot';
 import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
+import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
+import type { AnimationTemplate, TemplateValues } from './templates/types';
 import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
@@ -1333,6 +1335,55 @@ export default function App() {
     if (sounds.length) handleImportAudioFiles(sounds);
   };
 
+  // ================= TEMPLATE LIBRARY =================
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+
+  /**
+   * Inserts what a template built: ordinary objects, one layer each (texts in front, images behind),
+   * starting at the current frame. The timeline grows if the template runs past its end.
+   */
+  const handleInsertTemplate = (template: AnimationTemplate, values: TemplateValues) => {
+    const out = template.build(values, {
+      width: canvasDimensions.width,
+      height: canvasDimensions.height,
+      fps,
+      startFrame: currentFrame,
+      idPrefix: `tpl-${template.id}-${Date.now()}`,
+    });
+    const layer = (type: StudioLayer['type'], id: string, name: string, color: string): StudioLayer => ({
+      id: `layer-${type}-${id}`,
+      name: name.length > 28 ? `${name.slice(0, 27)}…` : name,
+      type,
+      visible: true,
+      locked: false,
+      color,
+      targetId: id,
+    });
+    const newLayers = [
+      ...out.texts.map((x) => layer('text', x.id, x.text, '#10b981')),
+      ...out.charts.map((c) => layer('chart', c.id, c.title, '#0ea5e9')),
+      ...out.actors.map((a) => layer('actor', a.id, a.name, '#f97316')),
+      ...out.paths.map((p) => layer('path', p.id, p.name, '#38bdf8')),
+    ];
+    const present = history.presentRef.current;
+    history.pushSnapshot(t('templates.history.insert', { name: t(template.nameKey) }), {
+      ...present,
+      actors: [...present.actors, ...out.actors],
+      charts: [...present.charts, ...out.charts],
+      texts: [...present.texts, ...out.texts],
+      paths: [...present.paths, ...out.paths],
+      layers: [...newLayers, ...present.layers],
+    });
+    if (out.endFrame > totalFrames) setTotalFrames(out.endFrame);
+    const first = out.texts[0] ?? out.charts[0] ?? out.actors[0];
+    if (first) {
+      const type = out.texts[0] ? 'text' : out.charts[0] ? 'chart' : 'actor';
+      setSelectedObject({ type, id: first.id });
+      setSelectedLayerId(`layer-${type}-${first.id}`);
+    }
+    setTemplatesOpen(false);
+  };
+
   // ================= MAP ROUTE TEMPLATE =================
   const [routeDialogOpen, setRouteDialogOpen] = useState(false);
 
@@ -1786,6 +1837,7 @@ export default function App() {
         exportProgress={exportProgress}
         onSnapshot={handleSnapshot}
         onOpenAiImage={handleOpenAiImage}
+        onOpenTemplates={() => setTemplatesOpen(true)}
         onToggleChatbot={() => setChatbotOpen((prev) => !prev)}
         chatbotOpen={chatbotOpen}
         onLoadPreset={handleLoadPreset}
@@ -1997,7 +2049,7 @@ export default function App() {
           frames={frames}
           onCopyStickToFrame={handleCopyStickToFrame}
           onTweenStick={handleTweenStick}
-          onOpenRouteDialog={() => setRouteDialogOpen(true)}
+          onOpenTemplates={() => setTemplatesOpen(true)}
           paths={paths}
           onUpdatePath={handleUpdatePath}
           onDeletePath={handleDeletePath}
@@ -2083,6 +2135,20 @@ export default function App() {
       />
 
       <PwaStatus hasUnsavedChanges={isDirty} />
+
+      <TemplateLibraryDialog
+        isOpen={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        onInsert={handleInsertTemplate}
+        onOpenMapRoute={() => {
+          setTemplatesOpen(false);
+          setRouteDialogOpen(true);
+        }}
+        width={canvasDimensions.width}
+        height={canvasDimensions.height}
+        fps={fps}
+        currentFrame={currentFrame}
+      />
 
       <RouteDialog
         isOpen={routeDialogOpen}

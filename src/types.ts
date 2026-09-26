@@ -127,7 +127,9 @@ export type TextEffect =
   | 'slideLeft'
   | 'glowPulse'
   | 'fadeRise'
-  | 'numberRoll';
+  | 'numberRoll'
+  /** No intro of its own: the text only moves with its keyframes. */
+  | 'none';
 
 /**
  * A title or number counter. Its transform is animated like any actor; the anchor (position) is the

@@ -24,7 +24,7 @@ import {
   Upload,
   VideoOff,
   Image as ImageIcon,
-  Globe2,
+  LayoutTemplate,
 } from 'lucide-react';
 import {
   ChartOverlay,
@@ -95,7 +95,7 @@ interface PropertiesInspectorProps {
   frames: Record<number, FrameData>;
   onCopyStickToFrame: (stickId: string, toFrame: number) => void;
   onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
-  onOpenRouteDialog: () => void;
+  onOpenTemplates: () => void;
   // Motion paths
   paths: MotionPath[];
   onUpdatePath: (path: MotionPath, description: string) => void;
@@ -150,7 +150,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   frames,
   onCopyStickToFrame,
   onTweenStick,
-  onOpenRouteDialog,
+  onOpenTemplates,
   paths,
   onUpdatePath,
   onDeletePath,
@@ -759,6 +759,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       { id: 'slideLeft', label: t('inspector.anim.slide') },
                       { id: 'glowPulse', label: t('inspector.text.effect.glowPulse') },
                       { id: 'fadeRise', label: t('inspector.text.effect.fadeRise') },
+                      { id: 'none', label: t('inspector.text.effect.none') },
                     ].map((eff) => (
                       <button
                         key={eff.id}
@@ -1298,13 +1299,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     {t('inspector.doc.insert')}
                   </span>
                   <button
-                    onClick={onOpenRouteDialog}
+                    onClick={onOpenTemplates}
                     className="w-full flex items-center gap-2 p-2 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40 text-left transition"
                   >
-                    <Globe2 size={14} />
+                    <LayoutTemplate size={14} />
                     <span className="text-xs">
-                      {t('route.title')}
-                      <span className="block text-[10px] text-sky-200/60">{t('inspector.doc.routeHint')}</span>
+                      {t('templates.button')}
+                      <span className="block text-[10px] text-sky-200/60">{t('templates.buttonHint')}</span>
                     </span>
                   </button>
                   <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">

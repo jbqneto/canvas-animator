@@ -3,7 +3,7 @@
  * scale, rotation and opacity with a stopwatch each, key navigation, easing of the key under the
  * playhead, curved path / orient options and "follow a drawn path".
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Timer } from 'lucide-react';
 import type { Animated, MotionPath } from '../types';
 import { ActorFollowPanel } from './ActorFollowPanel';
@@ -28,6 +28,7 @@ import {
   setKeyframeEasing,
   Track,
 } from '../engine/keyframes';
+import { applyEntrance, applyExit, MOTION_PRESETS, MotionPreset } from '../engine/motionPresets';
 
 type MotionObject = Animated & { id: string };
 
@@ -64,6 +65,7 @@ export const MotionInspector = <T extends MotionObject>({
 }: MotionInspectorProps<T>) => {
   const { t } = useI18n();
   const following = !!followedPath(obj, paths);
+  const [presetSeconds, setPresetSeconds] = useState(0.5);
   const track = (prop: ActorProperty) => obj.tracks[prop] as Track<unknown> | undefined;
   const keyFrames = actorKeyframes(obj);
   const prevKey = [...keyFrames].reverse().find((f) => f < currentFrame);
@@ -277,6 +279,53 @@ export const MotionInspector = <T extends MotionObject>({
           </select>
         </div>
       )}
+
+      {/* Ready-made entrance / exit: plain keys at the clip edges */}
+      <div className="space-y-1.5 pt-2 border-t border-neutral-800" data-motion-presets>
+        <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block" title={t('motionPreset.hint')}>
+          {t('motionPreset.title')}
+        </span>
+        {(['entrance', 'exit'] as const).map((which) => (
+          <label key={which} className="flex items-center gap-2 text-[10px] text-neutral-400">
+            <span className="w-14 shrink-0">{t(which === 'entrance' ? 'motionPreset.entrance' : 'motionPreset.exit')}</span>
+            <select
+              data-preset={which}
+              value=""
+              onChange={(e) => {
+                const preset = e.target.value as MotionPreset;
+                if (!preset) return;
+                const apply = which === 'entrance' ? applyEntrance : applyExit;
+                onChange(
+                  apply(obj, preset, { frames: Math.max(1, Math.round(presetSeconds * fps)) }),
+                  t(which === 'entrance' ? 'motionPreset.history.entrance' : 'motionPreset.history.exit', {
+                    preset: t(`motionPreset.${preset}`),
+                  })
+                );
+              }}
+              className={motionInputClass}
+            >
+              <option value="">—</option>
+              {MOTION_PRESETS.map((p) => (
+                <option key={p} value={p}>
+                  {t(`motionPreset.${p}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+          <span className="w-14 shrink-0">{t('motionPreset.seconds')}</span>
+          <input
+            type="number"
+            min={0.1}
+            max={10}
+            step={0.1}
+            value={presetSeconds}
+            onChange={(e) => setPresetSeconds(Math.max(0.1, Number(e.target.value) || 0.5))}
+            className={motionInputClass}
+          />
+        </label>
+      </div>
 
       {/* Keyframe-path options (they don't apply while following a drawn path) */}
       {!following && (
