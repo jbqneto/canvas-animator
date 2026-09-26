@@ -39,12 +39,53 @@ import {
   HistorySnapshot,
   ActorOverlay,
   MotionPath,
+  AudioClip,
 } from '../types';
+import { AudioLanes, AudioList } from './AudioTracks';
 import { actorKeyframes, moveActorKeys, shiftActorTime } from '../engine/actor';
 
 type ClipType = 'chart' | 'text' | 'actor' | 'path';
+
+const GRID_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+
+/** Frames between labelled ruler marks: about 30 labels at most. */
+function labelStep(totalFrames: number): number {
+  return GRID_STEPS.find((s) => s >= 5 && totalFrames / s <= 30) ?? 10000;
+}
+
+/**
+ * Frame grid drawn as CSS background tiles (cheap at any timeline length): a strong line at every
+ * labelled mark and faint lines in between, as dense as stays readable (every frame when zoomed in).
+ */
+function frameGridStyle(totalFrames: number, ruler: boolean): React.CSSProperties {
+  const major = labelStep(totalFrames);
+  const minor = GRID_STEPS.find((s) => s < major && totalFrames / s <= 300);
+  const line = (color: string) => `linear-gradient(to left, ${color} 1px, transparent 1px)`;
+  const layers = [line(ruler ? 'rgba(14, 165, 233, 0.45)' : 'rgba(38, 38, 38, 0.8)')];
+  const sizes = [`${(100 * major) / totalFrames}% 100%`];
+  if (minor) {
+    layers.push(line(ruler ? 'rgba(64, 64, 64, 0.6)' : 'rgba(23, 23, 23, 0.5)'));
+    sizes.push(`${(100 * minor) / totalFrames}% ${ruler ? '30%' : '100%'}`);
+  }
+  return {
+    backgroundImage: layers.join(', '),
+    backgroundSize: sizes.join(', '),
+    backgroundPosition: ruler ? 'left top, left bottom' : 'left top',
+    backgroundRepeat: ruler ? 'repeat-x' : 'repeat',
+  };
+}
+
+/** Frame numbers shown on the ruler: frame 1 plus every labelled mark. */
+function rulerLabels(totalFrames: number): number[] {
+  const step = labelStep(totalFrames);
+  const labels = [1];
+  for (let f = step; f <= totalFrames; f += step) labels.push(f);
+  return labels;
+}
 type ClipMode = 'move' | 'trim-start' | 'trim-end';
 const MIN_CLIP_FRAMES = 5;
+/** 10 minutes at 60 fps: long narrations fit; the grid is CSS so length doesn't cost rendering. */
+const MAX_TIMELINE_FRAMES = 36000;
 
 interface TimelineProps {
   currentFrame: number;
@@ -89,6 +130,14 @@ interface TimelineProps {
   paths: MotionPath[];
   onUpdatePath: (path: MotionPath) => void;
   onCommitPath: (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => void;
+  audioClips: AudioClip[];
+  onImportAudioFiles: (files: FileList) => void;
+  onUpdateAudioClip: (clip: AudioClip, description?: string) => void;
+  onTransientUpdateAudioClip: (clip: AudioClip) => void;
+  onCommitAudioClip: (clip: AudioClip, description: string, baseSnapshot: HistorySnapshot) => void;
+  onDeleteAudioClip: (clipId: string) => void;
+  audioScrub: boolean;
+  setAudioScrub: (on: boolean) => void;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -131,11 +180,35 @@ export const Timeline: React.FC<TimelineProps> = ({
   paths,
   onUpdatePath,
   onCommitPath,
+  audioClips,
+  onImportAudioFiles,
+  onUpdateAudioClip,
+  onTransientUpdateAudioClip,
+  onCommitAudioClip,
+  onDeleteAudioClip,
+  audioScrub,
+  setAudioScrub,
 }) => {
   const { t } = useI18n();
   const rulerRef = useRef<HTMLDivElement>(null);
   const tracksContainerRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
+  // The layer list and the tracks scroll separately: keep their rows aligned
+  const layerListRef = useRef<HTMLDivElement>(null);
+  const trackListRef = useRef<HTMLDivElement>(null);
+  const syncScroll = (from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (from && to && to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
+  };
+  const [rulerScrubbing, setRulerScrubbing] = useState(false);
+
+  // A newly added sound lives at the bottom of the list: bring it into view
+  const audioCountRef = useRef(audioClips.length);
+  useEffect(() => {
+    const added = audioClips.length > audioCountRef.current;
+    audioCountRef.current = audioClips.length;
+    const list = trackListRef.current;
+    if (added && list) list.scrollTop = list.scrollHeight;
+  }, [audioClips.length]);
 
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
@@ -252,16 +325,36 @@ export const Timeline: React.FC<TimelineProps> = ({
   )}:${String(remainingFrames).padStart(2, '0')}`;
 
   // Handle scrub click/drag on the timeline ruler
+  const frameAtClientX = (clientX: number) => {
+    const rect = rulerRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.max(1, Math.min(totalFrames, Math.round(pct * totalFrames) || 1));
+  };
+
   const handleTimelineScrub = (e: React.MouseEvent<HTMLDivElement>) => {
     // If a clip is being dragged, don't scrub
     if (activeClipDrag) return;
-    const rect = rulerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const clickX = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, clickX / rect.width));
-    const targetFrame = Math.max(1, Math.min(totalFrames, Math.round(pct * totalFrames) || 1));
-    setCurrentFrame(targetFrame);
+    const frame = frameAtClientX(e.clientX);
+    if (frame !== null) setCurrentFrame(frame);
   };
+
+  // Dragging on the ruler scrubs continuously (with audio scrubbing, words can be found by ear)
+  useEffect(() => {
+    if (!rulerScrubbing) return;
+    const onMove = (e: MouseEvent) => {
+      const frame = frameAtClientX(e.clientX);
+      if (frame !== null) setCurrentFrame(frame);
+    };
+    const onUp = () => setRulerScrubbing(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rulerScrubbing, totalFrames]);
 
   // ================= DRAG & RESIZE TIMELINE CLIP HANDLERS =================
   const startClipDrag = (
@@ -522,13 +615,13 @@ export const Timeline: React.FC<TimelineProps> = ({
             <input
               type="number"
               min="24"
-              max="240"
+              max={MAX_TIMELINE_FRAMES}
               step="12"
               value={totalFrames}
               onChange={(e) =>
-                setTotalFrames(Math.max(24, Math.min(240, Number(e.target.value))))
+                setTotalFrames(Math.max(24, Math.min(MAX_TIMELINE_FRAMES, Number(e.target.value))))
               }
-              className="w-14 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-center font-mono text-neutral-200 focus:border-sky-500 outline-none text-[11px]"
+              className="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-center font-mono text-neutral-200 focus:border-sky-500 outline-none text-[11px]"
             />
           </div>
         </div>
@@ -668,7 +761,11 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Layer Rows List */}
-          <div className="flex-1 overflow-y-auto">
+          <div
+            ref={layerListRef}
+            onScroll={() => syncScroll(layerListRef.current, trackListRef.current)}
+            className="flex-1 overflow-y-auto"
+          >
             {layers.map((layer, index) => {
               const isSelected = selectedLayerId === layer.id;
 
@@ -813,6 +910,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                 </div>
               );
             })}
+            <AudioList
+              clips={audioClips}
+              onImport={onImportAudioFiles}
+              onUpdate={onUpdateAudioClip}
+              onTransientUpdate={onTransientUpdateAudioClip}
+              onCommit={onCommitAudioClip}
+              onDelete={onDeleteAudioClip}
+              getCurrentSnapshot={getCurrentSnapshot}
+              scrub={audioScrub}
+              setScrub={setAudioScrub}
+            />
           </div>
         </div>
 
@@ -823,54 +931,28 @@ export const Timeline: React.FC<TimelineProps> = ({
         >
           {/* Frame Number Ruler */}
           <div
+            id="timeline-ruler"
             ref={rulerRef}
             onClick={handleTimelineScrub}
+            onMouseDown={(e) => {
+              handleTimelineScrub(e);
+              setRulerScrubbing(true);
+            }}
             className="h-8 border-b border-neutral-800 bg-neutral-900/70 relative cursor-pointer select-none shrink-0"
           >
-            {/* Number Ticks */}
-            <div className="absolute inset-0 flex">
-              {Array.from({ length: totalFrames }).map((_, i) => {
-                const fNum = i + 1;
-                const isFifth = fNum % 5 === 0;
-                const isTenth = fNum % 10 === 0;
-                const isFirst = fNum === 1;
-
-                return (
-                  <div
-                    key={fNum}
-                    style={{ width: `${100 / totalFrames}%` }}
-                    className={`h-full border-r flex flex-col justify-between shrink-0 relative ${
-                      isTenth
-                        ? 'border-neutral-700'
-                        : isFifth
-                        ? 'border-neutral-800'
-                        : 'border-neutral-900/60'
-                    }`}
-                  >
-                    {(isFifth || isFirst) && (
-                      <span
-                        className={`text-[9px] font-mono pl-1 pt-0.5 select-none leading-none ${
-                          isTenth ? 'text-sky-400 font-bold' : 'text-neutral-400'
-                        }`}
-                      >
-                        {fNum}
-                      </span>
-                    )}
-                    <div
-                      className={`w-full ${
-                        isTenth
-                          ? 'h-2.5 bg-sky-500/60'
-                          : isFifth
-                          ? 'h-2 bg-neutral-600'
-                          : fNum % 2 === 0
-                          ? 'h-1 bg-neutral-800'
-                          : 'h-0.5 bg-neutral-800/40'
-                      }`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            {/* Frame lines (CSS, not one element per frame) and labels spaced to stay readable */}
+            <div className="absolute inset-0 pointer-events-none" style={frameGridStyle(totalFrames, true)} />
+            {rulerLabels(totalFrames).map((fNum) => (
+              <span
+                key={fNum}
+                style={{ left: `${((fNum - 1) / totalFrames) * 100}%` }}
+                className={`absolute top-0.5 pl-1 text-[9px] font-mono select-none leading-none pointer-events-none ${
+                  fNum > 1 ? 'text-sky-400 font-bold' : 'text-neutral-400'
+                }`}
+              >
+                {fNum}
+              </span>
+            ))}
 
             {/* Red Playhead Scrubber in Ruler */}
             <div
@@ -888,6 +970,8 @@ export const Timeline: React.FC<TimelineProps> = ({
 
           {/* Keyframe Tracks Corresponding to Each Layer */}
           <div
+            ref={trackListRef}
+            onScroll={() => syncScroll(trackListRef.current, layerListRef.current)}
             onClick={handleTimelineScrub}
             className="flex-1 overflow-y-auto relative cursor-pointer"
           >
@@ -929,23 +1013,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   }`}
                 >
                   {/* 1. Underlying grid columns */}
-                  <div className="absolute inset-0 flex pointer-events-none">
-                    {Array.from({ length: totalFrames }).map((_, i) => {
-                      const fNum = i + 1;
-                      const isTenth = fNum % 10 === 0;
-                      return (
-                        <div
-                          key={fNum}
-                          style={{ width: `${100 / totalFrames}%` }}
-                          className={`h-full border-r ${
-                            isTenth
-                              ? 'border-neutral-800/80 bg-neutral-900/20'
-                              : 'border-neutral-900/50'
-                          }`}
-                        />
-                      );
-                    })}
-                  </div>
+                  <div className="absolute inset-0 pointer-events-none" style={frameGridStyle(totalFrames, false)} />
 
                   {/* 2A. VISIBLE INTERACTIVE CLIP SPAN FOR CHART OVERLAYS */}
                   {chart && (
@@ -1312,6 +1380,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                 </div>
               );
             })}
+            <AudioLanes
+              clips={audioClips}
+              totalFrames={totalFrames}
+              fps={fps}
+              onTransientUpdate={onTransientUpdateAudioClip}
+              onCommit={onCommitAudioClip}
+              getCurrentSnapshot={getCurrentSnapshot}
+              getTrackWidth={() => rulerRef.current?.getBoundingClientRect().width ?? 0}
+            />
           </div>
         </div>
       </div>

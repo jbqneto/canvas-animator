@@ -1,4 +1,4 @@
-import type { CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
+import type { AudioClip, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
 import { t } from '../i18n';
 
 export const PROJECT_FORMAT = 'flashmotion-project';
@@ -44,6 +44,27 @@ export class ProjectFileError extends Error {}
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asNumber = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/** Audio clips with the timing fields repaired; clips without data are dropped. */
+function parseAudio(value: unknown): AudioClip[] {
+  return asArray<any>(value)
+    .filter((c) => c && typeof c.src === 'string' && c.src.startsWith('data:'))
+    .map((c, i) => {
+      const sourceDuration = Math.max(0, asNumber(c.sourceDuration, 0));
+      const offset = Math.min(sourceDuration, Math.max(0, asNumber(c.offset, 0)));
+      return {
+        id: typeof c.id === 'string' ? c.id : `audio-${i}`,
+        name: typeof c.name === 'string' ? c.name : `audio-${i + 1}`,
+        src: c.src,
+        sourceDuration,
+        startFrame: Math.max(1, Math.round(asNumber(c.startFrame, 1))),
+        offset,
+        duration: Math.min(sourceDuration - offset, Math.max(0, asNumber(c.duration, sourceDuration - offset))),
+        volume: Math.min(2, Math.max(0, asNumber(c.volume, 1))),
+        muted: c.muted === true,
+      };
+    });
+}
 
 /**
  * Parses and validates a project file, filling fields added in later versions with defaults
@@ -100,6 +121,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       images: asArray(c.images),
       actors: asArray(c.actors),
       paths: asArray(c.paths),
+      audio: parseAudio(c.audio),
       layers: asArray(c.layers),
       groups: asArray(c.groups),
     },

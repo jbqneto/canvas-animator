@@ -15,6 +15,7 @@ import {
   ActorOverlay,
   MotionPath,
   StageTool,
+  AudioClip,
 } from './types';
 import { createActor } from './engine/actor';
 import { tweenStickFrames } from './engine/stickRig';
@@ -48,6 +49,10 @@ import { RouteDialog, RouteRequest } from './components/RouteDialog';
 import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
+import { framesToFitAudio, frameTime } from './engine/audio';
+import { loadAudioFile, mixdown, playClips, prepareClips, resumeAudio, scrubClips } from './audio/audioRuntime';
+
+const EMPTY_AUDIO: AudioClip[] = [];
 
 export default function App() {
   const { t, locale } = useI18n();
@@ -237,6 +242,7 @@ export default function App() {
   });
 
   const { frames, charts, texts, images, actors, paths, layers } = history.present;
+  const audio = history.present.audio ?? EMPTY_AUDIO;
 
   // UI Modals & Export state
   const [exportProgress, setExportProgress] = useState<number>(0);
@@ -422,6 +428,7 @@ export default function App() {
       v.currentTime = videoTimeForFrame(baseFrame, fps, v.duration);
       v.play().catch(() => undefined);
     }
+    let stopAudio = playClips(audio, fps, frameTime(baseFrame, fps));
 
     const tick = (now: number) => {
       let frame = baseFrame + Math.floor(((now - baseTime) / 1000) * fps);
@@ -434,6 +441,8 @@ export default function App() {
         baseFrame = 1;
         baseTime = now;
         frame = 1;
+        stopAudio();
+        stopAudio = playClips(audio, fps, 0);
       }
       if (v && v.duration) {
         const expected = videoTimeForFrame(frame, fps, v.duration);
@@ -448,8 +457,23 @@ export default function App() {
     return () => {
       cancelAnimationFrame(raf);
       v?.pause();
+      stopAudio();
     };
-  }, [isPlaying, fps, totalFrames, isLooping, videoEl, videoBg.type]);
+  }, [isPlaying, fps, totalFrames, isLooping, videoEl, videoBg.type, audio]);
+
+  // Decode audio ahead of time (import, open, undo) so playback and scrubbing start instantly
+  useEffect(() => prepareClips(audio), [audio]);
+
+  // Audio scrubbing: stepping or dragging the playhead plays a snippet of the sound under it
+  const [audioScrub, setAudioScrub] = useState(true);
+  const lastScrubFrameRef = useRef(currentFrame);
+  useEffect(() => {
+    if (lastScrubFrameRef.current === currentFrame) return;
+    lastScrubFrameRef.current = currentFrame;
+    if (isPlaying || isExporting || !audioScrub || audio.length === 0) return;
+    resumeAudio();
+    scrubClips(audio, fps, currentFrame);
+  }, [currentFrame, isPlaying, isExporting, audioScrub, audio, fps]);
 
   // Frame update handler
   const handleUpdateFrameData = useCallback(
@@ -1248,6 +1272,77 @@ export default function App() {
     if (selectedObject?.id === pathId) setSelectedObject(null);
   };
 
+  // ================= AUDIO CLIPS =================
+  const replaceClip = (snapshot: HistorySnapshot, clip: AudioClip): HistorySnapshot => ({
+    ...snapshot,
+    audio: (snapshot.audio ?? []).map((c) => (c.id === clip.id ? clip : c)),
+  });
+
+  const handleImportAudioFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => f.type.startsWith('audio/') || f.type.startsWith('video/'));
+    for (const file of list) {
+      try {
+        const { src, sourceDuration } = await loadAudioFile(file);
+        const clip: AudioClip = {
+          id: `audio-${Date.now()}-${Math.round(Math.random() * 1e4)}`,
+          name: file.name.replace(/\.[^.]+$/, ''),
+          src,
+          sourceDuration,
+          startFrame: 1,
+          offset: 0,
+          duration: sourceDuration,
+          volume: 1,
+          muted: false,
+        };
+        const present = history.presentRef.current;
+        history.pushSnapshot(t('history.addAudio', { name: clip.name }), {
+          ...present,
+          audio: [...(present.audio ?? []), clip],
+        });
+        // The animation is timed to the sound: make sure the timeline covers it (never shrinks)
+        setTotalFrames((total) => Math.max(total, framesToFitAudio([clip], fps)));
+      } catch (err) {
+        alert(t('app.error.import', { name: file.name, error: err instanceof Error ? err.message : String(err) }));
+      }
+    }
+  };
+
+  const handleUpdateAudioClip = (clip: AudioClip, description = t('history.edit', { name: clip.name })) => {
+    history.pushSnapshot(description, replaceClip(history.present, clip));
+  };
+
+  const handleTransientUpdateAudioClip = useCallback(
+    (clip: AudioClip) => history.updatePresent((prev) => replaceClip(prev, clip)),
+    [history]
+  );
+
+  const handleCommitAudioClip = useCallback(
+    (clip: AudioClip, description: string, baseSnapshot: HistorySnapshot) => {
+      history.commitAction(description, baseSnapshot, replaceClip(history.presentRef.current, clip));
+    },
+    [history]
+  );
+
+  const handleDeleteAudioClip = (clipId: string) => {
+    const clip = audio.find((c) => c.id === clipId);
+    history.pushSnapshot(t('history.delete', { name: clip?.name ?? '' }), {
+      ...history.present,
+      audio: audio.filter((c) => c.id !== clipId),
+    });
+  };
+
+  /**
+   * Files dropped on the stage: images become actors and sounds become audio clips. A dropped video is
+   * ambiguous (background or its sound?), so only the explicit "+ Audio" button takes videos.
+   */
+  const handleImportFiles = (files: FileList | File[]) => {
+    const list = Array.from(files);
+    const imageFiles = list.filter((f) => f.type.startsWith('image/'));
+    const sounds = list.filter((f) => f.type.startsWith('audio/'));
+    if (imageFiles.length) handleImportImageFiles(imageFiles);
+    if (sounds.length) handleImportAudioFiles(sounds);
+  };
+
   // ================= MAP ROUTE TEMPLATE =================
   const [routeDialogOpen, setRouteDialogOpen] = useState(false);
 
@@ -1579,6 +1674,7 @@ export default function App() {
       images: [],
       actors: [],
       paths: [],
+      audio: [],
       layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path'),
     });
     setCurrentFrame(1);
@@ -1607,7 +1703,10 @@ export default function App() {
     setIsPlaying(false);
 
     try {
-      const { blob, extension } = await exportVideoSequence(sceneContent(), {
+      const sound = request.includeAudio
+        ? await mixdown(audio, fps, request.startFrame, request.endFrame)
+        : null;
+      const { blob, extension, audioDropped } = await exportVideoSequence(sceneContent(), {
         totalFrames,
         fps,
         width: canvasDimensions.width,
@@ -1616,7 +1715,9 @@ export default function App() {
         format: request.format,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
+        audio: sound,
       });
+      if (audioDropped) alert(t('app.audioDropped'));
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1784,7 +1885,7 @@ export default function App() {
             actors={actors}
             onTransientUpdateActor={handleTransientUpdateActor}
             onCommitActor={handleCommitActor}
-            onImportImageFiles={handleImportImageFiles}
+            onImportImageFiles={handleImportFiles}
             paths={paths}
             onCreatePath={handleCreatePath}
             onTransientUpdatePath={handleTransientUpdatePath}
@@ -1969,6 +2070,14 @@ export default function App() {
           paths={paths}
           onUpdatePath={handleTransientUpdatePath}
           onCommitPath={handleCommitPath}
+          audioClips={audio}
+          onImportAudioFiles={handleImportAudioFiles}
+          onUpdateAudioClip={handleUpdateAudioClip}
+          onTransientUpdateAudioClip={handleTransientUpdateAudioClip}
+          onCommitAudioClip={handleCommitAudioClip}
+          onDeleteAudioClip={handleDeleteAudioClip}
+          audioScrub={audioScrub}
+          setAudioScrub={setAudioScrub}
         />
       </div>
 
@@ -1983,6 +2092,7 @@ export default function App() {
         width={canvasDimensions.width}
         height={canvasDimensions.height}
         hasBackgroundVideo={videoBg.type !== 'color' && !!videoBg.url}
+        audibleClips={audio.filter((c) => !c.muted && c.volume > 0).length}
       />
 
       <PwaStatus hasUnsavedChanges={isDirty} />
