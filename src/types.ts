@@ -96,16 +96,16 @@ export interface ChartDataPoint {
 
 export type ChartType = 'bar' | 'donut' | 'line' | 'stat';
 
-export interface ChartOverlay {
+/**
+ * A chart card. Its transform (position = card center, scale, rotation, opacity) is animated like any
+ * actor; `animationType`/`easing`/`animDurationFrames` drive the intro of the content (bars growing…).
+ */
+export interface ChartOverlay extends Animated {
   id: string;
   title: string;
   type: ChartType;
-  x: number; // canvas pixels 0..1280
-  y: number; // canvas pixels 0..720
   width: number;
   height: number;
-  startFrame: number;
-  durationFrames: number;
   data: ChartDataPoint[];
   statMetric?: {
     value: string;
@@ -114,13 +114,12 @@ export interface ChartOverlay {
   };
   animationType: 'grow' | 'fade' | 'bounce' | 'slideUp' | 'elastic';
   visible: boolean;
-  // Motion Tween / Interpolação de Posição (Posição 1 -> Posição 2)
-  endX?: number;
-  endY?: number;
-  hasMotionTween?: boolean;
-  easing?: 'easeOut' | 'easeInOut' | 'linear' | 'bounce';
+  /** Easing and length of the content intro (not of the movement, which uses keyframes). */
+  easing?: IntroEasing;
   animDurationFrames?: number;
 }
+
+export type IntroEasing = 'easeOut' | 'easeInOut' | 'linear' | 'bounce';
 
 export type TextEffect =
   | 'typewriter'
@@ -130,18 +129,18 @@ export type TextEffect =
   | 'fadeRise'
   | 'numberRoll';
 
-export interface TextOverlay {
+/**
+ * A title or number counter. Its transform is animated like any actor; the anchor (position) is the
+ * start of the text baseline. `effect` is the intro of the text itself (typewriter, counter…).
+ */
+export interface TextOverlay extends Animated {
   id: string;
   text: string;
   subtitle?: string;
-  x: number; // canvas pixels 0..1280
-  y: number; // canvas pixels 0..720
   fontSize: number;
   color: string;
   bgColor?: string;
   effect: TextEffect;
-  startFrame: number;
-  durationFrames: number;
   badge?: string;
   visible: boolean;
   // Number counter capabilities
@@ -151,11 +150,8 @@ export interface TextOverlay {
   counterPrefix?: string;
   counterSuffix?: string;
   counterDecimals?: number;
-  // Motion Tween / Interpolação de Posição (Posição 1 -> Posição 2)
-  endX?: number;
-  endY?: number;
-  hasMotionTween?: boolean;
-  easing?: 'easeOut' | 'easeInOut' | 'linear' | 'bounce';
+  /** Easing and length of the intro effect / counter. */
+  easing?: IntroEasing;
   animDurationFrames?: number;
 }
 
@@ -180,12 +176,40 @@ export interface ActorTransform {
   opacity: number;
 }
 
+export interface MotionTracks {
+  position?: Track<Vec2>;
+  scale?: Track<number>;
+  rotation?: Track<number>;
+  opacity?: Track<number>;
+}
+
+/**
+ * Anything on the stage that moves the After Effects way: a time span plus a transform whose
+ * properties are static (`base`, stopwatch off) or keyframed (`tracks`, stopwatch on), optionally
+ * travelling a drawn path. Actors, charts and texts all share it (logic in `engine/actor.ts`).
+ */
+export interface Animated {
+  startFrame: number;
+  durationFrames: number;
+  base: ActorTransform;
+  tracks: MotionTracks;
+  /** Curved path through position keys (AE Auto Bezier) instead of straight lines. */
+  smoothPath: boolean;
+  /** Rotate to follow the direction of travel (Flash "Orient to path"). */
+  orientToPath: boolean;
+  /**
+   * Follow a motion path (Flash "motion guide"): while set, the position comes from the path and
+   * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
+   */
+  follow?: ActorFollow;
+}
+
 /**
  * Actor ("símbolo" in Flash, "layer" in After Effects): an imported image animated by keyframe tracks.
  * A property without keys uses its `base` value (AE stopwatch off); once it has keys, edits at the
  * current frame create/update keys (stopwatch on).
  */
-export interface ActorOverlay {
+export interface ActorOverlay extends Animated {
   id: string;
   name: string;
   kind: 'image';
@@ -194,28 +218,10 @@ export interface ActorOverlay {
   /** Size at scale 1, in canvas pixels. The anchor point is the image center. */
   width: number;
   height: number;
-  startFrame: number;
-  durationFrames: number;
-  base: ActorTransform;
-  tracks: {
-    position?: Track<Vec2>;
-    scale?: Track<number>;
-    rotation?: Track<number>;
-    opacity?: Track<number>;
-  };
-  /** Curved path through position keys (AE Auto Bezier) instead of straight lines. */
-  smoothPath: boolean;
-  /** Rotate to follow the direction of travel (Flash "Orient to path"). */
-  orientToPath: boolean;
   /** Mirror horizontally (e.g. a plane image drawn facing the other way). */
   flipX: boolean;
   /** Draws the path already travelled behind the actor (e.g. a dashed flight line). */
   trail?: { enabled: boolean; color: string; width: number; dashed: boolean };
-  /**
-   * Follow a motion path (Flash "motion guide"): while set, the position comes from the path and
-   * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
-   */
-  follow?: ActorFollow;
 }
 
 export interface ActorFollow {

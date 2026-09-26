@@ -1,5 +1,6 @@
 import {
   FrameData,
+  Animated,
   ChartOverlay,
   TextOverlay,
   VideoBackground,
@@ -155,7 +156,7 @@ export function renderCompositeFrame(
   paths.forEach((path) => {
     if (!path.style.visible || path.points.length < 2) return;
     if (currentFrame < path.startFrame || currentFrame > path.startFrame + path.durationFrames) return;
-    add(path.id, 'path', FRONT, () => drawMotionPath(ctx, path, actors, currentFrame));
+    add(path.id, 'path', FRONT, () => drawMotionPath(ctx, path, [...actors, ...charts, ...texts], currentFrame));
   });
   actors.forEach((actor) => {
     const state = sampleActor(actor, currentFrame, paths);
@@ -169,15 +170,29 @@ export function renderCompositeFrame(
     if (!stroke.points || stroke.points.length === 0) return;
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
   });
+  // Charts and texts: the same keyframed transform as actors, then their own intro inside it
+  const withTransform = (obj: Animated, draw: () => void) => {
+    const state = sampleActor(obj, currentFrame, paths);
+    if (!state.visible || state.opacity <= 0) return null;
+    return () => {
+      ctx.save();
+      ctx.translate(state.x, state.y);
+      ctx.rotate((state.rotation * Math.PI) / 180);
+      ctx.scale(state.scale, state.scale);
+      ctx.globalAlpha *= state.opacity;
+      draw();
+      ctx.restore();
+    };
+  };
   charts.forEach((chart) => {
     if (!chart.visible) return;
-    if (currentFrame < chart.startFrame || currentFrame > chart.startFrame + chart.durationFrames) return;
-    add(chart.id, 'chart', FRONT, () => drawChart(ctx, chart, currentFrame));
+    const draw = withTransform(chart, () => drawChart(ctx, chart, currentFrame));
+    if (draw) add(chart.id, 'chart', FRONT, draw);
   });
   texts.forEach((txt) => {
     if (!txt.visible) return;
-    if (currentFrame < txt.startFrame || currentFrame > txt.startFrame + txt.durationFrames) return;
-    add(txt.id, 'text', FRONT, () => drawText(ctx, txt, currentFrame));
+    const draw = withTransform(txt, () => drawText(ctx, txt, currentFrame));
+    if (draw) add(txt.id, 'text', FRONT, draw);
   });
 
   drawables
@@ -264,13 +279,13 @@ export function strokeDash(stroke: MotionPath['style']['stroke'], width: number)
   return [];
 }
 
-function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, actors: ActorOverlay[], frame: number) {
+function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, followers: Animated[], frame: number) {
   const sampler = samplePath(path);
   let points: Vec2[] = sampler.samples;
   if (path.style.reveal === 'follow') {
-    // Only the part already travelled by the furthest actor following this path
-    const followers = actors.filter((a) => a.follow?.pathId === path.id);
-    const progress = Math.max(0, ...followers.map((a) => sampleTrack(a.follow!.progress, frame, 0)));
+    // Only the part already travelled by the furthest object following this path
+    const onPath = followers.filter((a) => a.follow?.pathId === path.id);
+    const progress = Math.max(0, ...onPath.map((a) => sampleTrack(a.follow!.progress, frame, 0)));
     points = polylineUpTo(sampler, progress);
   }
   if (points.length < 2) return;
@@ -440,19 +455,10 @@ function drawChart(ctx: CanvasRenderingContext2D, chart: ChartOverlay, currentFr
     easeProgress = elasticOut(progress);
   }
 
-  // Motion Tween: interpolate between Posição 1 (x, y) and Posição 2 (endX, endY)
-  let cx = chart.x;
-  let cy = chart.y;
-  if (chart.hasMotionTween && chart.endX !== undefined && chart.endY !== undefined) {
-    const motionProgress = Math.min(1, Math.max(0, elapsed / Math.max(1, chart.durationFrames)));
-    const motionEase = calculateEasing(motionProgress, chart.easing || 'easeOut');
-    cx = chart.x + (chart.endX - chart.x) * motionEase;
-    cy = chart.y + (chart.endY - chart.y) * motionEase;
-  }
-
+  // Already translated to the card's center (its anchor) by the caller
   ctx.save();
-  ctx.translate(cx, cy + cardOffsetY);
-  ctx.globalAlpha = Math.max(0, Math.min(1, cardAlpha));
+  ctx.translate(-chart.width / 2, -chart.height / 2 + cardOffsetY);
+  ctx.globalAlpha *= Math.max(0, Math.min(1, cardAlpha));
   ctx.scale(cardScale, cardScale);
 
   // Card container background with modern glass aesthetics
@@ -589,17 +595,9 @@ function drawChart(ctx: CanvasRenderingContext2D, chart: ChartOverlay, currentFr
 
 function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame: number) {
   const elapsed = currentFrame - txt.startFrame;
-  let cx = txt.x;
-  let cy = txt.y;
-  if (txt.hasMotionTween && txt.endX !== undefined && txt.endY !== undefined) {
-    const motionProgress = Math.min(1, Math.max(0, elapsed / Math.max(1, txt.durationFrames)));
-    const motionEase = calculateEasing(motionProgress, txt.easing || 'easeOut');
-    cx = txt.x + (txt.endX - txt.x) * motionEase;
-    cy = txt.y + (txt.endY - txt.y) * motionEase;
-  }
-
+  // Already translated to the text anchor by the caller; effects work relative to it
   ctx.save();
-  ctx.translate(cx, cy);
+  const parentAlpha = ctx.globalAlpha;
 
   let displayedText = txt.text;
   let alpha = 1;
@@ -641,7 +639,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
     scale = pulse;
   }
 
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = parentAlpha * alpha;
   ctx.scale(scale, scale);
 
   // Badge if present
@@ -674,7 +672,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   // Subtitle if provided
   if (txt.subtitle && elapsed > 6) {
     const subAlpha = Math.min(1, (elapsed - 6) / 8);
-    ctx.globalAlpha = subAlpha * alpha;
+    ctx.globalAlpha = parentAlpha * subAlpha * alpha;
     ctx.fillStyle = '#94a3b8';
     ctx.font = `500 ${Math.max(12, Math.round(txt.fontSize * 0.45))}px Plus Jakarta Sans, sans-serif`;
     ctx.fillText(txt.subtitle, 0, offsetY + txt.fontSize * 0.7);

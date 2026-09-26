@@ -1,5 +1,6 @@
 import type { AudioClip, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
 import { t } from '../i18n';
+import { migrateChart, migrateText } from '../engine/overlays';
 
 export const PROJECT_FORMAT = 'flashmotion-project';
 export const PROJECT_VERSION = 1;
@@ -116,8 +117,9 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
     missingVideo: typeof videoBg.fileName === 'string' ? videoBg.fileName : undefined,
     content: {
       frames,
-      charts: asArray(c.charts),
-      texts: asArray(c.texts),
+      // Older files stored charts/texts with x/y and a P1→P2 tween: converted to the keyframe model
+      charts: asArray(c.charts).map(migrateChart),
+      texts: asArray(c.texts).map(migrateText),
       images: asArray(c.images),
       actors: asArray(c.actors),
       paths: asArray(c.paths),

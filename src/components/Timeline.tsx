@@ -43,7 +43,10 @@ import {
   ActorOverlay,
   MotionPath,
   AudioClip,
+  Animated,
 } from '../types';
+
+type AnimKind = 'actor' | 'chart' | 'text';
 import { AudioLanes, AudioList } from './AudioTracks';
 import {
   clampZoom,
@@ -206,6 +209,47 @@ export const Timeline: React.FC<TimelineProps> = ({
   /** Width of the whole timeline content in pixels (the frame area, zoomed). */
   const trackWidth = () => rulerRef.current?.getBoundingClientRect().width || 800;
 
+  // Actors, charts and texts share the keyframed transform: same timeline editing for all
+  const updateAnimated = (kind: AnimKind, obj: Animated) => {
+    if (kind === 'actor') onUpdateActor(obj as ActorOverlay);
+    else if (kind === 'chart') onUpdateChart?.(obj as ChartOverlay);
+    else onUpdateText?.(obj as TextOverlay);
+  };
+  const commitAnimated = (kind: AnimKind, obj: Animated, description: string, base: HistorySnapshot) => {
+    if (kind === 'actor') onCommitActor(obj as ActorOverlay, description, base);
+    else if (kind === 'chart') onCommitChart?.(obj as ChartOverlay, description, base);
+    else onCommitText?.(obj as TextOverlay, description, base);
+  };
+
+  /** Keyframe diamonds of an object's clip (drag to retime, click to jump). */
+  const renderKeyDiamonds = (kind: AnimKind, obj: Animated & { id: string }, layerId: string) =>
+    actorKeyframes(obj).map((f) => (
+      <button
+        key={f}
+        style={{ left: `${((f - 1) / totalFrames) * 100}%` }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onSelectLayer(layerId);
+          onSelectObject({ type: kind, id: obj.id });
+          setKeyDrag({
+            kind,
+            obj,
+            fromFrame: f,
+            toFrame: f,
+            startClientX: e.clientX,
+            trackWidth: trackWidth(),
+            baseSnapshot: getCurrentSnapshot?.(),
+          });
+        }}
+        onClick={(e) => e.stopPropagation()}
+        title={t('timeline.keyframeHint', { frame: f })}
+        className={`absolute z-20 -translate-x-1/2 w-2.5 h-2.5 rotate-45 border border-neutral-950 ${
+          f === currentFrame ? 'bg-white' : 'bg-amber-400 hover:bg-amber-200'
+        }`}
+      />
+    ));
+
   // ================= ZOOM & TIME UNIT =================
   const [timeUnit, setTimeUnitState] = useState<TimeUnit>(readTimeUnit);
   const setTimeUnit = (unit: TimeUnit) => {
@@ -302,8 +346,8 @@ export const Timeline: React.FC<TimelineProps> = ({
     startClientX: number;
     initialStartFrame: number;
     initialDuration: number;
-    /** Actor as it was when the drag started: keys are shifted from it, not cumulatively. */
-    initialActor?: ActorOverlay;
+    /** Object as it was when the drag started: keys are shifted from it, not cumulatively. */
+    initialObj?: Animated;
     trackWidth: number;
     baseSnapshot?: HistorySnapshot;
     hasMoved: boolean;
@@ -311,7 +355,8 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   // Keyframe diamond drag (retime keys); a click without movement just jumps to the frame
   const [keyDrag, setKeyDrag] = useState<{
-    actor: ActorOverlay;
+    kind: AnimKind;
+    obj: Animated;
     fromFrame: number;
     startClientX: number;
     trackWidth: number;
@@ -327,13 +372,14 @@ export const Timeline: React.FC<TimelineProps> = ({
       const to = Math.max(1, Math.min(totalFrames, drag.fromFrame + delta));
       if (to === drag.toFrame) return;
       drag.toFrame = to;
-      onUpdateActor(moveActorKeys(drag.actor, drag.fromFrame, to));
+      updateAnimated(drag.kind, moveActorKeys(drag.obj, drag.fromFrame, to));
       setCurrentFrame(to);
     };
     const onUp = () => {
       if (drag.toFrame !== drag.fromFrame && drag.baseSnapshot) {
-        onCommitActor(
-          moveActorKeys(drag.actor, drag.fromFrame, drag.toFrame),
+        commitAnimated(
+          drag.kind,
+          moveActorKeys(drag.obj, drag.fromFrame, drag.toFrame),
           t('timeline.history.moveKey', { from: drag.fromFrame, to: drag.toFrame }),
           drag.baseSnapshot
         );
@@ -348,7 +394,8 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [keyDrag, totalFrames, onUpdateActor, onCommitActor, setCurrentFrame, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyDrag, totalFrames, setCurrentFrame, t]);
 
   // Close "+ Camada" dropdown on outside click
   useEffect(() => {
@@ -457,7 +504,14 @@ export const Timeline: React.FC<TimelineProps> = ({
       startClientX: e.clientX,
       initialStartFrame: startFrame,
       initialDuration: durationFrames,
-      initialActor: type === 'actor' ? actors.find((a) => a.id === id) : undefined,
+      initialObj:
+        type === 'actor'
+          ? actors.find((a) => a.id === id)
+          : type === 'chart'
+            ? charts.find((c) => c.id === id)
+            : type === 'text'
+              ? texts.find((x) => x.id === id)
+              : undefined,
       trackWidth: trackWidth(),
       baseSnapshot,
       hasMoved: false,
@@ -491,22 +545,16 @@ export const Timeline: React.FC<TimelineProps> = ({
       if (Math.abs(deltaFrames) > 0) drag.hasMoved = true;
       const span = computeSpan(deltaFrames);
 
-      if (drag.type === 'chart') {
-        const chart = charts.find((c) => c.id === drag.id);
-        if (chart && onUpdateChart) onUpdateChart({ ...chart, ...span });
-      } else if (drag.type === 'text') {
-        const txt = texts.find((t) => t.id === drag.id);
-        if (txt && onUpdateText) onUpdateText({ ...txt, ...span });
-      } else if (drag.type === 'path') {
+      if (drag.type === 'path') {
         const path = paths.find((p) => p.id === drag.id);
         if (path) onUpdatePath({ ...path, ...span });
-      } else if (drag.type === 'actor' && drag.initialActor) {
-        // Moving the clip moves its keys too; trimming only changes the visible span
+      } else if (drag.initialObj) {
+        // Actor, chart or text: moving the clip moves its keys too; trimming only changes the span
         const moved =
           drag.mode === 'move'
-            ? shiftActorTime(drag.initialActor, span.startFrame - drag.initialStartFrame)
-            : { ...drag.initialActor, ...span };
-        onUpdateActor(moved);
+            ? shiftActorTime(drag.initialObj, span.startFrame - drag.initialStartFrame)
+            : { ...drag.initialObj, ...span };
+        updateAnimated(drag.type, moved);
       }
     };
 
@@ -1209,12 +1257,6 @@ export const Timeline: React.FC<TimelineProps> = ({
                           F{chart.startFrame} ➔ F{chart.startFrame + chart.durationFrames} (
                           {chart.durationFrames}f)
                         </span>
-
-                        {chart.hasMotionTween && (
-                          <span className="text-[9px] font-mono px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0 flex items-center gap-0.5">
-                            ◆ ➔ ◆ P1➔P2
-                          </span>
-                        )}
                       </div>
 
                       {/* Right Trim Handle (End Frame / Duration) */}
@@ -1236,6 +1278,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       </div>
                     </div>
                   )}
+                  {chart && renderKeyDiamonds('chart', chart, layer.id)}
 
                   {/* 2B. VISIBLE INTERACTIVE CLIP SPAN FOR TEXT OVERLAYS */}
                   {text && (
@@ -1305,12 +1348,6 @@ export const Timeline: React.FC<TimelineProps> = ({
                           F{text.startFrame} ➔ F{text.startFrame + text.durationFrames} (
                           {text.durationFrames}f)
                         </span>
-
-                        {text.hasMotionTween && (
-                          <span className="text-[9px] font-mono px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0 flex items-center gap-0.5">
-                            ◆ ➔ ◆ P1➔P2
-                          </span>
-                        )}
                       </div>
 
                       {/* Right Trim Handle */}
@@ -1332,6 +1369,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       </div>
                     </div>
                   )}
+                  {text && renderKeyDiamonds('text', text, layer.id)}
 
                   {/* 2C''. PATH CLIP SPAN (when the line is visible) */}
                   {path && (
@@ -1407,31 +1445,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                           className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-r"
                         />
                       </div>
-                      {actorKeyframes(actor).map((f) => (
-                        <button
-                          key={f}
-                          style={{ left: `${((f - 1) / totalFrames) * 100}%` }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onSelectLayer(layer.id);
-                            onSelectObject({ type: 'actor', id: actor.id });
-                            setKeyDrag({
-                              actor,
-                              fromFrame: f,
-                              toFrame: f,
-                              startClientX: e.clientX,
-                              trackWidth: trackWidth(),
-                              baseSnapshot: getCurrentSnapshot?.(),
-                            });
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          title={t('timeline.keyframeHint', { frame: f })}
-                          className={`absolute z-20 -translate-x-1/2 w-2.5 h-2.5 rotate-45 border border-neutral-950 ${
-                            f === currentFrame ? 'bg-white' : 'bg-amber-400 hover:bg-amber-200'
-                          }`}
-                        />
-                      ))}
+                      {renderKeyDiamonds('actor', actor, layer.id)}
                     </>
                   )}
 

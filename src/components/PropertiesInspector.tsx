@@ -42,6 +42,7 @@ import {
   MotionPath,
 } from '../types';
 import { ActorInspector } from './ActorInspector';
+import { MotionInspector } from './MotionInspector';
 import { PathInspector } from './PathInspector';
 import { StickAnimationPanel } from './StickAnimationPanel';
 import { MessageKey, shortMonth, useI18n } from '../i18n';
@@ -53,12 +54,12 @@ interface PropertiesInspectorProps {
   onSelectObject: (ref: SelectedObjectRef | null) => void;
   // Charts
   charts: ChartOverlay[];
-  onUpdateChart: (chart: ChartOverlay) => void;
+  onUpdateChart: (chart: ChartOverlay, description?: string) => void;
   onDeleteChart: (id: string) => void;
   onAddChart: (type?: ChartType) => void;
   // Texts
   texts: TextOverlay[];
-  onUpdateText: (text: TextOverlay) => void;
+  onUpdateText: (text: TextOverlay, description?: string) => void;
   onDeleteText: (id: string) => void;
   onAddText: (isNumber?: boolean) => void;
   // Stick Figures & Groups
@@ -100,6 +101,8 @@ interface PropertiesInspectorProps {
   onUpdatePath: (path: MotionPath, description: string) => void;
   onDeletePath: (id: string) => void;
   onAttachActorToPath: (actorId: string, pathId: string) => void;
+  /** Charts and texts can follow a drawn path too. */
+  onAttachToPath: (kind: 'chart' | 'text', id: string, pathId: string) => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -152,6 +155,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUpdatePath,
   onDeletePath,
   onAttachActorToPath,
+  onAttachToPath,
   pastSteps,
   futureSteps,
   onJumpToHistory,
@@ -555,6 +559,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Movement: same keyframed transform as actors */}
+                <div className="space-y-2 pt-2 border-t border-neutral-800">
+                  <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
+                    {t('inspector.motion')}
+                  </label>
+                  <MotionInspector
+                    obj={activeChart}
+                    currentFrame={currentFrame}
+                    fps={fps}
+                    onChange={onUpdateChart}
+                    onJumpToFrame={onJumpToFrame}
+                    paths={paths}
+                    onAttachToPath={(id, pathId) => onAttachToPath('chart', id, pathId)}
+                    onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                  />
+                </div>
               </div>
             )}
 
@@ -779,7 +800,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-neutral-400 block mb-1">Cor:</span>
+                      <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.text.color')}</span>
                       <input
                         type="color"
                         value={activeText.color || '#ffffff'}
@@ -788,6 +809,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Movement: same keyframed transform as actors */}
+                <div className="space-y-2 pt-2 border-t border-neutral-800">
+                  <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
+                    {t('inspector.motion')}
+                  </label>
+                  <MotionInspector
+                    obj={activeText}
+                    currentFrame={currentFrame}
+                    fps={fps}
+                    onChange={onUpdateText}
+                    onJumpToFrame={onJumpToFrame}
+                    paths={paths}
+                    onAttachToPath={(id, pathId) => onAttachToPath('text', id, pathId)}
+                    onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                  />
                 </div>
               </div>
             )}

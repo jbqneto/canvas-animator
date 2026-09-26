@@ -22,7 +22,8 @@ qualquer editor.
   avião que o segue e pousa em cada um. Tudo o que o modelo cria continua editável.
 - **Boneco palito**: poses com cinemática direta (girar o osso leva o resto do membro), poses prontas e
   interpolação de pose entre dois frames (tween clássico), onion skin.
-- **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto.
+- **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto. Eles se movem
+  como os atores: posição, escala, rotação e opacidade com keyframes, easing por key e "seguir caminho".
 - **Áudio de referência**: narração, música ou efeitos (ou o som de um vídeo) na timeline com forma de onda.
   Mova e corte as faixas, ajuste volume/mudo e ouça o trecho ao arrastar o cursor (scrub) para acertar a
   animação na palavra ou na batida. O áudio vai junto no export (opcional) e fica salvo dentro do projeto.

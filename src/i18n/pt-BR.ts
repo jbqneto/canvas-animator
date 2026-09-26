@@ -610,4 +610,8 @@ export const ptBR = {
   'timeline.zoomIn': 'Aproximar (Ctrl + roda do mouse)',
   'timeline.zoomOut': 'Afastar (Ctrl + roda do mouse)',
   'timeline.zoomFit': 'Mostrar a timeline inteira',
+
+  // Charts and texts: keyframed movement
+  'inspector.motion': 'Movimento (keyframes)',
+  'inspector.text.color': 'Cor:',
 };

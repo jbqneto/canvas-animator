@@ -609,4 +609,8 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'timeline.zoomIn': 'Zoom in (Ctrl + mouse wheel)',
   'timeline.zoomOut': 'Zoom out (Ctrl + mouse wheel)',
   'timeline.zoomFit': 'Show the whole timeline',
+
+  // Charts and texts: keyframed movement
+  'inspector.motion': 'Movement (keyframes)',
+  'inspector.text.color': 'Color:',
 };

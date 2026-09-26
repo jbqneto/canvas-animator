@@ -3,6 +3,7 @@
  * (optionally bending each leg into a flight arc) and an actor that follows it, stopping at each stop.
  * The template only adds what is specific to it: the "landing" scale and the stop labels.
  */
+import { createText } from '../engine/overlays';
 import type { ActorFollow, MotionPath, TextOverlay } from '../types';
 import type { Track, Vec2 } from '../engine/keyframes';
 import { buildFollowProgress, samplePath } from '../engine/path';
@@ -137,17 +138,20 @@ export function buildStopLabels(
   idPrefix: string
 ): TextOverlay[] {
   const fontSize = Math.round(canvasWidth / 48);
-  return stops.map((stop, i) => ({
-    id: `${idPrefix}-label-${i}`,
-    text: stop.name,
-    // Text is drawn left-aligned from x: center it approximately over the stop
-    x: Math.round(stop.x - (stop.name.length * fontSize * 0.55) / 2),
-    y: Math.round(stop.y - fontSize * 1.6),
-    fontSize,
-    color: '#ffffff',
-    effect: 'bouncePop',
-    startFrame: arrivals[i],
-    durationFrames: Math.max(1, endFrame - arrivals[i]),
-    visible: true,
-  }));
+  return stops.map((stop, i) =>
+    createText(
+      {
+        id: `${idPrefix}-label-${i}`,
+        text: stop.name,
+        fontSize,
+        color: '#ffffff',
+        effect: 'bouncePop',
+        startFrame: arrivals[i],
+        durationFrames: Math.max(1, endFrame - arrivals[i]),
+        visible: true,
+      },
+      // Text is drawn left-aligned from its anchor: center it approximately over the stop
+      { x: Math.round(stop.x - (stop.name.length * fontSize * 0.55) / 2), y: Math.round(stop.y - fontSize * 1.6) }
+    )
+  );
 }

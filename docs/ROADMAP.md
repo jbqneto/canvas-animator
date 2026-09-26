@@ -33,15 +33,16 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   onda na timeline, mover/cortar, volume/mudo, ouvir ao arrastar (scrub), mixadas no export
 - [x] T17 — Timeline em segundos (ou quadros) com zoom: régua adaptativa, Ctrl+roda ancorado no cursor,
   botões de zoom/ajustar, a vista acompanha o cursor no play, rótulos dos clipes fixos à esquerda
+- [x] T18 — Gráficos e textos no mesmo modelo de keyframes dos atores (posição, escala, rotação, opacidade,
+  easing por key, seguir caminho, losangos na timeline); projetos antigos migrados (P1→P2 vira 2 keys)
 
 ## Próximos passos sugeridos
 
-1. Migrar gráficos e textos para o mesmo modelo de keyframes dos atores (hoje usam "motion tween P1→P2").
-2. Biblioteca de modelos montados sobre as peças genéricas.
-3. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-4. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
-5. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
-6. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+1. Biblioteca de modelos montados sobre as peças genéricas.
+2. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+3. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
+4. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
+5. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -55,6 +56,16 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   segmento que COMEÇA nele; clamp antes/depois. `sampleTrack(track, frame, fallback)`,
   `samplePosition(track, frame, fallback, smooth)` → `{x, y, angle}` (Catmull-Rom centrípeta, velocidade
   constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam `DEFAULT_EASING`.
+- Objetos animados: `Animated` (`types.ts`) = intervalo + `base` + `tracks` + `smoothPath`/`orientToPath` +
+  `follow`. `ActorOverlay`, `ChartOverlay` e `TextOverlay` estendem `Animated`; as funções de
+  `engine/actor.ts` são genéricas (`<T extends Animated>`, devolvem o mesmo tipo). Âncora: centro da imagem
+  (ator), centro do cartão (gráfico), início da linha de base (texto). O renderer aplica
+  translate→rotate→scale→opacity e depois desenha o conteúdo; a "entrada" do gráfico/texto (crescer,
+  máquina de escrever, contador) continua em `animationType`/`effect` + `easing`/`animDurationFrames`.
+  Caixas locais para seleção/hit test: `chartBox`/`textBox` (`engine/overlays.ts`), `hitTestBox`.
+  Criação: `createChart(conteúdo, centro)`, `createText(conteúdo, âncora)`. Arquivos antigos
+  (`x`/`y`/`endX`/`endY`/`hasMotionTween`) passam por `migrateChart`/`migrateText` no `parseProject`.
+  Inspector: `MotionInspector.tsx` (usado por atores, gráficos e textos); `attachToPath` liga qualquer um.
 - Ator (`ActorOverlay` em `types.ts`, lógica em `src/engine/actor.ts`): imagem como data URL, `base` + `tracks`
   (position/scale/rotation/opacity). Regra do cronômetro (AE): propriedade sem keys edita `base`; com keys,
   editar grava key no frame atual (`setActorProperty`). Cada ator tem camada própria (`type: 'actor'`,
