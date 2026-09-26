@@ -227,7 +227,7 @@ export const AiImageModal: React.FC<AiImageModalProps> = ({
               <div className="rounded-lg overflow-hidden border border-neutral-700 max-h-52 flex items-center justify-center bg-black">
                 <img
                   src={generatedImage}
-                  alt="IA Resultado"
+                  alt={t('aiImage.resultAlt')}
                   referrerPolicy="no-referrer"
                   className="max-h-52 w-auto object-contain"
                 />

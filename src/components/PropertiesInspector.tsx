@@ -44,6 +44,7 @@ import {
 import { ActorInspector } from './ActorInspector';
 import { PathInspector } from './PathInspector';
 import { StickAnimationPanel } from './StickAnimationPanel';
+import { useI18n } from '../i18n';
 import type { EasingName } from '../engine/keyframes';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
@@ -159,6 +160,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUndo,
   onRedo,
 }) => {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'properties' | 'library' | 'history'>('properties');
 
   // Find active items
@@ -208,7 +210,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     const colors = ['#38bdf8', '#0ea5e9', '#0284c7', '#22c55e', '#eab308', '#f97316', '#ec4899'];
     const nextColor = colors[activeChart.data.length % colors.length];
     const newPoint: ChartDataPoint = {
-      label: `Item ${activeChart.data.length + 1}`,
+      label: t('inspector.chart.newItem', { n: activeChart.data.length + 1 }),
       value: 50 + Math.round(Math.random() * 50),
       color: nextColor,
     };
@@ -226,7 +228,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     if (presetKey === 'sales') {
       onUpdateChart({
         ...activeChart,
-        title: 'Crescimento de Vendas 2026',
+        title: t('inspector.sample.salesTitle'),
         type: 'bar',
         data: [
           { label: 'Jan', value: 45, color: '#38bdf8' },
@@ -238,23 +240,23 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     } else if (presetKey === 'retention') {
       onUpdateChart({
         ...activeChart,
-        title: 'Retenção dos Alunos (%)',
+        title: t('inspector.sample.retentionTitle'),
         type: 'line',
         data: [
-          { label: 'Sem 1', value: 100, color: '#38bdf8' },
-          { label: 'Sem 2', value: 88, color: '#38bdf8' },
-          { label: 'Sem 3', value: 79, color: '#38bdf8' },
-          { label: 'Sem 4', value: 74, color: '#38bdf8' },
+          { label: t('inspector.sample.week1'), value: 100, color: '#38bdf8' },
+          { label: t('inspector.sample.week2'), value: 88, color: '#38bdf8' },
+          { label: t('inspector.sample.week3'), value: 79, color: '#38bdf8' },
+          { label: t('inspector.sample.week4'), value: 74, color: '#38bdf8' },
         ],
       });
     } else if (presetKey === 'share') {
       onUpdateChart({
         ...activeChart,
-        title: 'Engajamento por Conteúdo',
+        title: t('inspector.sample.engagementTitle'),
         type: 'donut',
         data: [
-          { label: 'Vídeo Interativo', value: 68, color: '#38bdf8' },
-          { label: 'Leitura Estática', value: 32, color: '#334155' },
+          { label: t('inspector.sample.interactiveVideo'), value: 68, color: '#38bdf8' },
+          { label: t('inspector.sample.staticReading'), value: 32, color: '#334155' },
         ],
       });
     }
@@ -275,7 +277,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             }`}
           >
             <Sliders size={13} />
-            Propriedades
+            {t('inspector.tab.properties')}
           </button>
 
           <button
@@ -288,7 +290,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             }`}
           >
             <FolderOpen size={13} />
-            Biblioteca
+            {t('inspector.tab.library')}
           </button>
 
           <button
@@ -301,7 +303,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             }`}
           >
             <History size={13} />
-            Histórico
+            {t('inspector.tab.history')}
             {pastSteps.length > 0 && (
               <span className="ml-0.5 px-1 py-0.2 rounded-full bg-sky-950 text-sky-400 text-[10px] font-mono">
                 {pastSteps.length}
@@ -352,13 +354,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <BarChart3 size={16} />
                     </div>
                     <div>
-                      <h4 className="font-bold text-white text-xs">Gráfico Dinâmico</h4>
-                      <p className="text-[10px] text-neutral-400">Edite valores e animações em tempo real</p>
+                      <h4 className="font-bold text-white text-xs">{t('inspector.chart.title')}</h4>
+                      <p className="text-[10px] text-neutral-400">{t('inspector.chart.subtitle')}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => onDeleteChart(activeChart.id)}
-                    title="Excluir Gráfico"
+                    title={t('inspector.chart.delete')}
                     className="p-1.5 rounded hover:bg-rose-950/40 text-neutral-400 hover:text-rose-400 transition"
                   >
                     <Trash2 size={14} />
@@ -369,7 +371,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <div className="space-y-2">
                   <div>
                     <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block mb-1">
-                      Título do Gráfico
+                      {t('inspector.chart.chartTitle')}
                     </label>
                     <input
                       type="text"
@@ -381,26 +383,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                   <div>
                     <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block mb-1">
-                      Tipo de Visualização
+                      {t('inspector.chart.type')}
                     </label>
                     <div className="grid grid-cols-4 gap-1">
-                      {(['bar', 'donut', 'line', 'stat'] as ChartType[]).map((t) => (
+                      {(['bar', 'donut', 'line', 'stat'] as ChartType[]).map((chartType) => (
                         <button
-                          key={t}
-                          onClick={() => onUpdateChart({ ...activeChart, type: t })}
+                          key={chartType}
+                          onClick={() => onUpdateChart({ ...activeChart, type: chartType })}
                           className={`py-1.5 px-2 rounded text-[11px] font-medium uppercase transition ${
-                            activeChart.type === t
+                            activeChart.type === chartType
                               ? 'bg-sky-500 text-neutral-950 font-bold shadow-sm'
                               : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800'
                           }`}
                         >
-                          {t === 'bar'
-                            ? 'Barras'
-                            : t === 'donut'
-                            ? 'Rosca'
-                            : t === 'line'
-                            ? 'Linha'
-                            : 'Métrica'}
+                          {chartType === 'bar'
+                            ? t('inspector.chart.type.bar')
+                            : chartType === 'donut'
+                            ? t('inspector.chart.type.donut')
+                            : chartType === 'line'
+                            ? t('inspector.chart.type.line')
+                            : t('inspector.chart.type.stat')}
                         </button>
                       ))}
                     </div>
@@ -410,26 +412,26 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Presets */}
                 <div>
                   <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block mb-1">
-                    Exemplos Rápidos
+                    {t('inspector.chart.examples')}
                   </label>
                   <div className="flex gap-1.5 flex-wrap">
                     <button
                       onClick={() => handleApplyChartPreset('sales')}
                       className="px-2 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[10px] transition"
                     >
-                      📈 Vendas
+                      {t('inspector.chart.example.sales')}
                     </button>
                     <button
                       onClick={() => handleApplyChartPreset('retention')}
                       className="px-2 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[10px] transition"
                     >
-                      🎓 Retenção
+                      {t('inspector.chart.example.retention')}
                     </button>
                     <button
                       onClick={() => handleApplyChartPreset('share')}
                       className="px-2 py-1 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-[10px] transition"
                     >
-                      🍩 Distribuição
+                      {t('inspector.chart.example.distribution')}
                     </button>
                   </div>
                 </div>
@@ -438,14 +440,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider">
-                      Dados do Gráfico ({activeChart.data.length} itens)
+                      {t('inspector.chart.data', { count: activeChart.data.length })}
                     </label>
                     <button
                       onClick={handleAddChartPoint}
                       className="flex items-center gap-1 px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 text-[10px] font-medium transition"
                     >
                       <Plus size={11} />
-                      Adicionar Ponto
+                      {t('inspector.chart.addPoint')}
                     </button>
                   </div>
 
@@ -457,20 +459,20 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           value={point.color || '#38bdf8'}
                           onChange={(e) => handleChartDataChange(idx, 'color', e.target.value)}
                           className="w-6 h-6 rounded bg-transparent border-0 cursor-pointer shrink-0"
-                          title="Cor do item"
+                          title={t('inspector.chart.itemColor')}
                         />
                         <input
                           type="text"
                           value={point.label}
                           onChange={(e) => handleChartDataChange(idx, 'label', e.target.value)}
-                          placeholder="Rótulo"
+                          placeholder={t('inspector.chart.label')}
                           className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-white text-xs outline-none focus:border-sky-500"
                         />
                         <input
                           type="number"
                           value={point.value}
                           onChange={(e) => handleChartDataChange(idx, 'value', e.target.value)}
-                          placeholder="Valor"
+                          placeholder={t('inspector.chart.value')}
                           className="w-16 bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-right text-sky-400 font-mono text-xs outline-none focus:border-sky-500"
                         />
                         {activeChart.data.length > 1 && (
@@ -489,15 +491,15 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Animation Type & Timing */}
                 <div className="space-y-2 pt-2 border-t border-neutral-800">
                   <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
-                    Curva de Animação (Motion / Flash)
+                    {t('inspector.chart.animation')}
                   </label>
                   <div className="grid grid-cols-3 gap-1">
                     {[
-                      { id: 'grow', label: 'Crescimento' },
-                      { id: 'bounce', label: 'Salto Pop' },
-                      { id: 'slideUp', label: 'Deslize' },
-                      { id: 'fade', label: 'Fade Suave' },
-                      { id: 'elastic', label: 'Elástico' },
+                      { id: 'grow', label: t('inspector.chart.anim.grow') },
+                      { id: 'bounce', label: t('inspector.chart.anim.bounce') },
+                      { id: 'slideUp', label: t('inspector.anim.slide') },
+                      { id: 'fade', label: t('inspector.chart.anim.fade') },
+                      { id: 'elastic', label: t('inspector.chart.anim.elastic') },
                     ].map((anim) => (
                       <button
                         key={anim.id}
@@ -520,7 +522,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <div>
-                      <span className="text-[10px] text-neutral-400">Frame Inicial:</span>
+                      <span className="text-[10px] text-neutral-400">{t('inspector.startFrame')}</span>
                       <input
                         type="number"
                         min="1"
@@ -536,7 +538,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-neutral-400">Duração (Frames):</span>
+                      <span className="text-[10px] text-neutral-400">{t('inspector.durationFrames')}</span>
                       <input
                         type="number"
                         min="10"
@@ -566,14 +568,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     </div>
                     <div>
                       <h4 className="font-bold text-white text-xs">
-                        {activeText.isNumberCounter ? 'Contador Numérico' : 'Texto Cinético'}
+                        {activeText.isNumberCounter ? t('inspector.text.counter') : t('inspector.text.kinetic')}
                       </h4>
-                      <p className="text-[10px] text-neutral-400">Tipografia e contadores dinâmicos</p>
+                      <p className="text-[10px] text-neutral-400">{t('inspector.text.subtitle')}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => onDeleteText(activeText.id)}
-                    title="Excluir Texto"
+                    title={t('inspector.text.delete')}
                     className="p-1.5 rounded hover:bg-rose-950/40 text-neutral-400 hover:text-rose-400 transition"
                   >
                     <Trash2 size={14} />
@@ -590,7 +592,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         : 'text-neutral-400 hover:text-white'
                     }`}
                   >
-                    Texto Normal
+                    {t('inspector.text.normal')}
                   </button>
                   <button
                     onClick={() =>
@@ -609,7 +611,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         : 'text-neutral-400 hover:text-white'
                     }`}
                   >
-                    Contador Numérico
+                    {t('inspector.text.counter')}
                   </button>
                 </div>
 
@@ -618,7 +620,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <div className="space-y-2">
                     <div>
                       <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block mb-1">
-                        Texto Principal
+                        {t('inspector.text.main')}
                       </label>
                       <input
                         type="text"
@@ -630,7 +632,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                     <div>
                       <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block mb-1">
-                        Subtítulo / Descrição
+                        {t('inspector.text.subtitleField')}
                       </label>
                       <input
                         type="text"
@@ -644,7 +646,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                     <div>
                       <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block mb-1">
-                        Badge / Tag Superior
+                        {t('inspector.text.badge')}
                       </label>
                       <input
                         type="text"
@@ -659,7 +661,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <div className="space-y-2 bg-neutral-900/60 p-2.5 rounded-lg border border-neutral-800">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <span className="text-[10px] text-neutral-400 block mb-1">Valor Inicial:</span>
+                        <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.text.startValue')}</span>
                         <input
                           type="number"
                           value={activeText.counterStart ?? 0}
@@ -673,7 +675,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         />
                       </div>
                       <div>
-                        <span className="text-[10px] text-neutral-400 block mb-1">Valor Final:</span>
+                        <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.text.endValue')}</span>
                         <input
                           type="number"
                           value={activeText.counterEnd ?? 1000}
@@ -690,10 +692,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <span className="text-[10px] text-neutral-400 block mb-1">Prefixo:</span>
+                        <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.text.prefix')}</span>
                         <input
                           type="text"
-                          placeholder="ex: R$ "
+                          placeholder={t('inspector.text.prefixExample')}
                           value={activeText.counterPrefix || ''}
                           onChange={(e) =>
                             onUpdateText({
@@ -705,10 +707,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         />
                       </div>
                       <div>
-                        <span className="text-[10px] text-neutral-400 block mb-1">Sufixo:</span>
+                        <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.text.suffix')}</span>
                         <input
                           type="text"
-                          placeholder="ex: % ou k"
+                          placeholder={t('inspector.text.suffixExample')}
                           value={activeText.counterSuffix || ''}
                           onChange={(e) =>
                             onUpdateText({
@@ -726,16 +728,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Text Animation Effect */}
                 <div className="space-y-2 pt-2 border-t border-neutral-800">
                   <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
-                    Efeito de Animação
+                    {t('inspector.text.effect')}
                   </label>
                   <div className="grid grid-cols-3 gap-1">
                     {[
-                      { id: 'typewriter', label: 'Typewriter' },
-                      { id: 'bouncePop', label: 'Bounce Pop' },
-                      { id: 'numberRoll', label: 'Ticker Giro' },
-                      { id: 'slideLeft', label: 'Deslize' },
-                      { id: 'glowPulse', label: 'Pulso Glow' },
-                      { id: 'fadeRise', label: 'Fade Rise' },
+                      { id: 'typewriter', label: t('inspector.text.effect.typewriter') },
+                      { id: 'bouncePop', label: t('inspector.text.effect.bouncePop') },
+                      { id: 'numberRoll', label: t('inspector.text.effect.numberRoll') },
+                      { id: 'slideLeft', label: t('inspector.anim.slide') },
+                      { id: 'glowPulse', label: t('inspector.text.effect.glowPulse') },
+                      { id: 'fadeRise', label: t('inspector.text.effect.fadeRise') },
                     ].map((eff) => (
                       <button
                         key={eff.id}
@@ -760,7 +762,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   <div className="flex items-center gap-3 pt-2">
                     <div className="flex-1">
                       <span className="text-[10px] text-neutral-400 block mb-1">
-                        Tamanho da Fonte: {activeText.fontSize}px
+                        {t('inspector.text.fontSize')} {activeText.fontSize}px
                       </span>
                       <input
                         type="range"
@@ -800,12 +802,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     </div>
                     <div>
                       <h4 className="font-bold text-white text-xs">
-                        {activeStick ? 'Boneco Palito (Símbolo)' : 'Objeto Agrupado'}
+                        {activeStick ? t('inspector.stick.title') : t('inspector.group.title')}
                       </h4>
                       <p className="text-[10px] text-neutral-400">
                         {activeStick
-                          ? 'Composto por círculos e palitos articulados'
-                          : 'Grupo unificado de traços e formas'}
+                          ? t('inspector.stick.subtitle')
+                          : t('inspector.group.subtitle')}
                       </p>
                     </div>
                   </div>
@@ -827,11 +829,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         }
                         onSelectObject(null);
                       }}
-                      title="Excluir este boneco do frame atual (Delete)"
+                      title={t('inspector.stick.deleteHere')}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-[10px] font-semibold transition"
                     >
                       <Trash2 size={11} />
-                      <span>Excluir</span>
+                      <span>{t('inspector.delete')}</span>
                     </button>
                     {activeStick && onDeleteStickFigure && (
                       <button
@@ -839,10 +841,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           onDeleteStickFigure(activeStick.id, true);
                           onSelectObject(null);
                         }}
-                        title="Excluir este boneco de toda a linha do tempo (todos os frames)"
+                        title={t('inspector.stick.deleteAll')}
                         className="flex items-center gap-1 px-1.5 py-1 rounded bg-neutral-900 hover:bg-rose-950/60 text-neutral-400 hover:text-rose-300 border border-neutral-800 text-[9px] transition"
                       >
-                        <span>Limpar Todos</span>
+                        <span>{t('inspector.stick.clearAll')}</span>
                       </button>
                     )}
                   </div>
@@ -851,30 +853,30 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Grouping / Ungrouping Actions (Flash Flashback!) */}
                 <div className="space-y-2 bg-neutral-900/60 p-2.5 rounded-lg border border-neutral-800">
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    Agrupamento Flash (Ctrl+G / Ctrl+B)
+                    {t('inspector.grouping')}
                   </span>
 
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
                       onClick={onGroupSelected}
-                      title="Agrupar objetos selecionados (Ctrl+G)"
+                      title={t('inspector.groupHint')}
                       className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium transition"
                     >
                       <Group size={13} className="text-sky-400" />
-                      Agrupar
+                      {t('selection.groupShort')}
                     </button>
 
                     <button
                       onClick={onUngroupSelected}
-                      title="Desagrupar em traços individuais como no Flash (Ctrl+B)"
+                      title={t('selection.ungroup')}
                       className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-medium transition"
                     >
                       <Ungroup size={13} />
-                      Desagrupar
+                      {t('selection.ungroupShort')}
                     </button>
                   </div>
                   <p className="text-[10px] text-neutral-400 leading-tight">
-                    Desagrupar divide o boneco em 1 círculo (cabeça) e vários palitos (linhas) independentes.
+                    {t('inspector.ungroupHelp')}
                   </p>
                 </div>
 
@@ -893,7 +895,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {activeStick && (
                   <div className="space-y-2 pt-2 border-t border-neutral-800">
                     <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
-                      Poses Prontas da Biblioteca
+                      {t('inspector.stick.poses')}
                     </span>
                     <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
                       {Object.entries(STICK_POSE_PRESETS).map(([key, preset]) => (
@@ -921,7 +923,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     <div className="space-y-2 pt-2 border-t border-neutral-800">
                       <div>
                         <span className="text-[10px] text-neutral-400 block mb-1">
-                          Escala do Boneco: {activeStick.scale.toFixed(2)}x
+                          {t('inspector.stick.scale')} {activeStick.scale.toFixed(2)}x
                         </span>
                         <input
                           type="range"
@@ -944,7 +946,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       </div>
 
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400">Cor do Traço:</span>
+                        <span className="text-[10px] text-neutral-400">{t('inspector.stick.color')}</span>
                         <input
                           type="color"
                           value={activeStick.color}
@@ -975,8 +977,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     <Sliders size={15} />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white text-xs">Propriedades do Documento</h4>
-                    <p className="text-[10px] text-neutral-400">Flash Stage & Configurações Globais</p>
+                    <h4 className="font-bold text-white text-xs">{t('inspector.doc.title')}</h4>
+                    <p className="text-[10px] text-neutral-400">{t('inspector.doc.subtitle')}</p>
                   </div>
                 </div>
 
@@ -984,7 +986,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <div className="space-y-3 bg-neutral-900/60 p-3 rounded-lg border border-neutral-800">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                      Dimensões do Palco (Canvas)
+                      {t('inspector.doc.size')}
                     </span>
                     <span className="text-[9px] font-mono text-sky-400 bg-sky-950/80 px-1.5 py-0.5 rounded border border-sky-800/60">
                       {canvasDimensions.width} × {canvasDimensions.height} px
@@ -993,7 +995,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
                   {/* YouTube & Social Presets */}
                   <div className="space-y-1">
-                    <span className="text-[9px] text-neutral-400 font-medium">Padrões de Vídeo:</span>
+                    <span className="text-[9px] text-neutral-400 font-medium">{t('inspector.doc.presets')}</span>
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() =>
@@ -1009,7 +1011,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                             : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
-                        <span className="block text-[11px]">YouTube 1080p</span>
+                        <span className="block text-[11px]">{t('inspector.doc.preset.1080p')}</span>
                         <span className="text-[9px] text-neutral-400 font-mono">1920 × 1080 (16:9)</span>
                       </button>
 
@@ -1027,7 +1029,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                             : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
-                        <span className="block text-[11px]">YouTube 720p</span>
+                        <span className="block text-[11px]">{t('inspector.doc.preset.720p')}</span>
                         <span className="text-[9px] text-neutral-400 font-mono">1280 × 720 (16:9)</span>
                       </button>
 
@@ -1045,7 +1047,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                             : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
-                        <span className="block text-[11px]">Shorts / Reels</span>
+                        <span className="block text-[11px]">{t('inspector.doc.preset.shorts')}</span>
                         <span className="text-[9px] text-neutral-400 font-mono">1080 × 1920 (9:16)</span>
                       </button>
 
@@ -1063,7 +1065,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                             : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
-                        <span className="block text-[11px]">Instagram 1:1</span>
+                        <span className="block text-[11px]">{t('inspector.doc.preset.square')}</span>
                         <span className="text-[9px] text-neutral-400 font-mono">1080 × 1080 (1:1)</span>
                       </button>
                     </div>
@@ -1072,7 +1074,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   {/* Manual Editable Width and Height */}
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <div>
-                      <span className="text-[10px] text-neutral-400 block mb-1">Largura (px):</span>
+                      <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.doc.width')}</span>
                       <input
                         type="number"
                         min="320"
@@ -1091,7 +1093,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] text-neutral-400 block mb-1">Altura (px):</span>
+                      <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.doc.height')}</span>
                       <input
                         type="number"
                         min="240"
@@ -1116,7 +1118,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <div className="space-y-2 bg-neutral-900/60 p-3 rounded-lg border border-neutral-800">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                      Espaço da Linha do Tempo
+                      {t('inspector.doc.timelineSize')}
                     </span>
                     <span className="text-[9px] font-mono text-cyan-400">
                       {timelineHeight}px
@@ -1132,7 +1134,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
                       }`}
                     >
-                      Compacta
+                      {t('inspector.doc.timeline.compact')}
                     </button>
                     <button
                       onClick={() => setTimelineHeight(200)}
@@ -1142,7 +1144,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
                       }`}
                     >
-                      Padrão
+                      {t('inspector.doc.timeline.default')}
                     </button>
                     <button
                       onClick={() => setTimelineHeight(320)}
@@ -1152,7 +1154,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                           : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
                       }`}
                     >
-                      Ampla (320px)
+                      {t('inspector.doc.timeline.wide')}
                     </button>
                   </div>
 
@@ -1169,7 +1171,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Stage Background Color */}
                 <div className="space-y-2">
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    Cor de Fundo do Palco
+                    {t('inspector.doc.bgColor')}
                   </span>
                   <div className="flex items-center gap-2">
                     <input
@@ -1202,12 +1204,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Background Video (the footage the overlays enrich) */}
                 <div className="space-y-2">
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    Vídeo de Fundo
+                    {t('inspector.doc.video')}
                   </span>
                   <label className="flex items-center gap-2 p-2 rounded border border-dashed border-neutral-700 hover:border-purple-500 bg-neutral-900 cursor-pointer transition text-xs text-neutral-300">
                     <Upload size={14} className="text-purple-400" />
                     <span>
-                      {videoBg.type === 'upload' ? 'Trocar vídeo (MP4/WebM)' : 'Carregar vídeo (MP4/WebM)'}
+                      {videoBg.type === 'upload' ? t('inspector.doc.replaceVideo') : t('inspector.doc.loadVideo')}
                     </span>
                     <input
                       type="file"
@@ -1223,7 +1225,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   {videoBg.type !== 'color' && videoBg.url && (
                     <>
                       <div className="flex items-center justify-between text-[11px] text-neutral-400">
-                        <span>Opacidade do vídeo</span>
+                        <span>{t('inspector.doc.videoOpacity')}</span>
                         <span className="font-mono text-neutral-200">
                           {Math.round(videoBg.opacity * 100)}%
                         </span>
@@ -1244,7 +1246,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white text-xs transition"
                       >
                         <VideoOff size={13} />
-                        Remover vídeo
+                        {t('inspector.doc.removeVideo')}
                       </button>
                     </>
                   )}
@@ -1253,7 +1255,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 {/* Quick Add Elements onto Stage */}
                 <div className="space-y-2 pt-2 border-t border-neutral-800">
                   <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    Inserir Elementos na Cena
+                    {t('inspector.doc.insert')}
                   </span>
                   <button
                     onClick={onOpenRouteDialog}
@@ -1261,16 +1263,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   >
                     <Globe2 size={14} />
                     <span className="text-xs">
-                      Rota no mapa
-                      <span className="block text-[10px] text-sky-200/60">avião pousando em vários países</span>
+                      {t('route.title')}
+                      <span className="block text-[10px] text-sky-200/60">{t('inspector.doc.routeHint')}</span>
                     </span>
                   </button>
                   <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
                     <ImageIcon size={14} />
                     <span className="text-xs">
-                      Importar imagem (PNG, SVG, WebP…)
+                      {t('inspector.doc.importImage')}
                       <span className="block text-[10px] text-orange-200/60">
-                        ou arraste o arquivo para o palco
+                        {t('inspector.doc.importHint')}
                       </span>
                     </span>
                     <input
@@ -1290,28 +1292,28 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-neutral-800 text-left transition"
                     >
                       <BarChart3 size={14} className="text-sky-400" />
-                      <span>+ Gráfico</span>
+                      <span>{t('timeline.addChart')}</span>
                     </button>
                     <button
                       onClick={() => onAddText(false)}
                       className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-neutral-800 text-left transition"
                     >
                       <Type size={14} className="text-emerald-400" />
-                      <span>+ Texto</span>
+                      <span>{t('timeline.addText')}</span>
                     </button>
                     <button
                       onClick={() => onAddText(true)}
                       className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-indigo-300 border border-neutral-800 text-left transition"
                     >
                       <Hash size={14} className="text-indigo-400" />
-                      <span>+ Contador</span>
+                      <span>{t('inspector.doc.addCounter')}</span>
                     </button>
                     <button
                       onClick={onAddStickFigure}
                       className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-amber-300 border border-neutral-800 text-left transition"
                     >
                       <User size={14} className="text-amber-400" />
-                      <span>+ Boneco Palito</span>
+                      <span>{t('inspector.doc.addStick')}</span>
                     </button>
                   </div>
                 </div>
@@ -1324,16 +1326,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {activeTab === 'library' && (
           <div className="space-y-4">
             <div>
-              <h4 className="font-bold text-white text-xs">Biblioteca de Símbolos</h4>
+              <h4 className="font-bold text-white text-xs">{t('inspector.library.title')}</h4>
               <p className="text-[10px] text-neutral-400">
-                Arraste ou clique para adicionar componentes prontos ao palco
+                {t('inspector.library.subtitle')}
               </p>
             </div>
 
             {/* Stick Figures Section */}
             <div className="space-y-2">
               <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                Bonecos & Personagens
+                {t('inspector.library.characters')}
               </span>
               <div className="space-y-1">
                 <button
@@ -1342,7 +1344,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <User size={14} className="text-amber-400" />
-                    <span className="text-neutral-200">Boneco Professor / Apresentador</span>
+                    <span className="text-neutral-200">{t('inspector.library.presenter')}</span>
                   </div>
                   <Plus size={13} className="text-neutral-400" />
                 </button>
@@ -1352,7 +1354,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             {/* Charts Section */}
             <div className="space-y-2">
               <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                Modelos de Gráficos
+                {t('inspector.library.charts')}
               </span>
               <div className="space-y-1">
                 <button
@@ -1361,7 +1363,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <BarChart3 size={14} className="text-sky-400" />
-                    <span className="text-neutral-200">Gráfico de Barras Animado</span>
+                    <span className="text-neutral-200">{t('inspector.library.barChart')}</span>
                   </div>
                   <Plus size={13} className="text-neutral-400" />
                 </button>
@@ -1372,7 +1374,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <PieChart size={14} className="text-emerald-400" />
-                    <span className="text-neutral-200">Gráfico Rosca / Percentual</span>
+                    <span className="text-neutral-200">{t('inspector.library.donutChart')}</span>
                   </div>
                   <Plus size={13} className="text-neutral-400" />
                 </button>
@@ -1383,7 +1385,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <TrendingUp size={14} className="text-indigo-400" />
-                    <span className="text-neutral-200">Gráfico de Linha / Tendência</span>
+                    <span className="text-neutral-200">{t('inspector.library.lineChart')}</span>
                   </div>
                   <Plus size={13} className="text-neutral-400" />
                 </button>
@@ -1393,7 +1395,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             {/* Kinetic Text & Tickers */}
             <div className="space-y-2">
               <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                Textos Cinéticos & Tickers
+                {t('inspector.library.texts')}
               </span>
               <div className="space-y-1">
                 <button
@@ -1402,7 +1404,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Type size={14} className="text-fuchsia-400" />
-                    <span className="text-neutral-200">Título Typewriter com Badge</span>
+                    <span className="text-neutral-200">{t('inspector.library.typewriter')}</span>
                   </div>
                   <Plus size={13} className="text-neutral-400" />
                 </button>
@@ -1413,7 +1415,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Hash size={14} className="text-teal-400" />
-                    <span className="text-neutral-200">Contador de R$ 0 a R$ 1.500.000</span>
+                    <span className="text-neutral-200">{t('inspector.library.counter')}</span>
                   </div>
                   <Plus size={13} className="text-neutral-400" />
                 </button>
@@ -1427,14 +1429,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           <div className="space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
               <div>
-                <h4 className="font-bold text-white text-xs">Histórico Flash</h4>
-                <p className="text-[10px] text-neutral-400">Pilha de ações (Ctrl+Z / Ctrl+Y)</p>
+                <h4 className="font-bold text-white text-xs">{t('inspector.history.title')}</h4>
+                <p className="text-[10px] text-neutral-400">{t('inspector.history.subtitle')}</p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={onUndo}
                   disabled={!canUndo}
-                  title="Desfazer (Ctrl+Z)"
+                  title={t('header.undo')}
                   className="p-1.5 rounded bg-neutral-900 hover:bg-neutral-800 disabled:opacity-30 text-neutral-200 transition"
                 >
                   <RotateCcw size={13} />
@@ -1442,7 +1444,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 <button
                   onClick={onRedo}
                   disabled={!canRedo}
-                  title="Refazer (Ctrl+Y)"
+                  title={t('inspector.history.redo')}
                   className="p-1.5 rounded bg-neutral-900 hover:bg-neutral-800 disabled:opacity-30 text-neutral-200 transition"
                 >
                   <RotateCcw size={13} className="scale-x-[-1]" />
@@ -1452,9 +1454,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
             {pastSteps.length === 0 ? (
               <div className="text-center py-8 text-neutral-500 text-xs">
-                Nenhuma ação no histórico ainda.
+                {t('inspector.history.empty')}
                 <br />
-                Mova objetos ou desenhe para registrar.
+                {t('inspector.history.emptyHint')}
               </div>
             ) : (
               <div className="space-y-1">
@@ -1469,11 +1471,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         #{String(idx + 1).padStart(2, '0')}
                       </span>
                       <span className="font-medium text-xs text-neutral-200 group-hover:text-sky-300">
-                        {step.description || 'Modificação'}
+                        {step.description || t('inspector.history.change')}
                       </span>
                     </div>
                     <span className="text-[10px] text-neutral-500 group-hover:text-sky-400">
-                      Reverter ↩
+                      {t('inspector.history.revert')}
                     </span>
                   </button>
                 ))}

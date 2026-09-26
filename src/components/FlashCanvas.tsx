@@ -21,6 +21,7 @@ import { strokeDash } from '../utils/exportVideo';
 import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue, followedPath } from '../engine/actor';
 import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
 import { dragJointFK } from '../engine/stickRig';
+import { useI18n } from '../i18n';
 
 const PATH_KEY_HIT_RADIUS = 9;
 type Vec2Like = { x: number; y: number };
@@ -178,6 +179,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   onTransientUpdatePath,
   onCommitPath,
 }) => {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -560,7 +562,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.fillStyle = '#e0f2fe';
         ctx.font = '11px Plus Jakarta Sans, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText('Enter ou duplo clique: concluir · Esc: cancelar · Backspace: desfazer ponto', 12, canvasHeight - 12);
+        ctx.fillText(t('stage.pathHint'), 12, canvasHeight - 12);
         ctx.restore();
       }
 
@@ -679,6 +681,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     draftPath,
     cursorPt,
     activeTool,
+    t,
   ]);
 
   // ================= GLOBAL WINDOW DRAG LISTENERS =================
@@ -858,14 +861,14 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           onCommitFrameData(
             currentFrame,
             currentFrameData,
-            `Mover Articulação do Boneco`,
+            t('stage.history.moveJoint'),
             session.baseSnapshot
           );
         } else if (session.targetType === 'stick') {
           onCommitFrameData(
             currentFrame,
             currentFrameData,
-            `Mover Boneco Palito`,
+            t('stage.history.moveStick'),
             session.baseSnapshot
           );
         } else if (session.targetType === 'chart' || session.targetType === 'chart-resize') {
@@ -874,34 +877,36 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             onCommitChart(
               chart,
               session.targetType === 'chart-resize'
-                ? `Redimensionar Gráfico`
-                : `Mover Gráfico "${chart.title}"`,
+                ? t('stage.history.resizeChart')
+                : t('stage.history.moveChart', { name: chart.title }),
               session.baseSnapshot
             );
           }
         } else if (session.targetType === 'text') {
           const txt = texts.find((t) => t.id === session.targetId);
           if (txt) {
-            onCommitText(txt, `Mover Texto "${txt.text}"`, session.baseSnapshot);
+            onCommitText(txt, t('stage.history.moveText', { name: txt.text }), session.baseSnapshot);
           }
         } else if (session.targetType === 'path-anchor' || session.targetType === 'path-move') {
           const path = latest.paths.find((p) => p.id === session.targetId);
           if (path) {
             onCommitPath(
               path,
-              session.targetType === 'path-move' ? `Mover caminho "${path.name}"` : `Editar ponto do caminho "${path.name}"`,
+              session.targetType === 'path-move'
+                ? t('stage.history.movePath', { name: path.name })
+                : t('stage.history.editPathPoint', { name: path.name }),
               session.baseSnapshot
             );
           }
         } else if (session.targetType === 'path-key') {
           const actor = actors.find((a) => a.id === session.targetId);
           if (actor) {
-            onCommitActor(actor, `Editar ponto do caminho (F${session.keyFrame})`, session.baseSnapshot);
+            onCommitActor(actor, t('stage.history.editKeyPoint', { frame: session.keyFrame ?? 0 }), session.baseSnapshot);
           }
         } else if (session.targetType === 'actor') {
           const actor = actors.find((a) => a.id === session.targetId);
           if (actor) {
-            onCommitActor(actor, `Mover "${actor.name}" (frame ${currentFrame})`, session.baseSnapshot);
+            onCommitActor(actor, t('stage.history.moveActor', { name: actor.name, frame: currentFrame }), session.baseSnapshot);
           }
         }
       }
@@ -915,6 +920,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       onCommitText,
       onCommitActor,
       onCommitPath,
+      t,
     ]
   );
 
@@ -964,7 +970,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           onCommitFrameData(
             currentFrame,
             { ...currentFrameData, drawings: remaining },
-            'Borracha no Canvas',
+            t('stage.history.erase'),
             strokeBaseSnapshotRef.current
           );
         }
@@ -1276,7 +1282,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             ...currentFrameData,
             drawings: [...currentFrameData.drawings, currentStroke],
           },
-          'Desenho no Canvas',
+          t('stage.history.draw'),
           strokeBaseSnapshotRef.current
         );
       }
@@ -1304,7 +1310,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       <aside className="w-12 bg-neutral-950 border-r border-neutral-800 flex flex-col items-center py-2 gap-1.5 shrink-0 z-10">
         <button
           onClick={() => setActiveTool('pointer')}
-          title="Ferramenta de Seleção (V)"
+          title={t('tool.pointer')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'pointer'
               ? 'bg-sky-500 text-neutral-950 shadow-md font-bold'
@@ -1316,7 +1322,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('transform')}
-          title="Transformação Livre / Mover Objetos (Q)"
+          title={t('tool.transform')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'transform'
               ? 'bg-sky-500 text-neutral-950 shadow-md font-bold'
@@ -1330,7 +1336,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('pen')}
-          title="Pincel / Desenho Livre (B)"
+          title={t('tool.pen')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'pen'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1342,7 +1348,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('line')}
-          title="Linha / Palito Reto (N)"
+          title={t('tool.line')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'line'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1354,7 +1360,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('arrow')}
-          title="Seta Indicadora (A)"
+          title={t('tool.arrow')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'arrow'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1366,7 +1372,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('rect')}
-          title="Retângulo (R)"
+          title={t('tool.rect')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'rect'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1378,7 +1384,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('circle')}
-          title="Círculo / Oval (O)"
+          title={t('tool.circle')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'circle'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1390,7 +1396,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('eraser')}
-          title="Borracha (E)"
+          title={t('tool.eraser')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'eraser'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1402,7 +1408,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
         <button
           onClick={() => setActiveTool('path')}
-          title="Caminho (rota): clique para adicionar pontos; Enter ou duplo clique conclui. Depois, faça uma imagem seguir o caminho."
+          title={t('tool.path')}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             activeTool === 'path'
               ? 'bg-sky-500 text-neutral-950 shadow-md'
@@ -1420,7 +1426,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             type="color"
             value={strokeColor}
             onChange={(e) => setStrokeColor(e.target.value)}
-            title="Cor do Traço"
+            title={t('tool.strokeColor')}
             className="w-6 h-6 rounded bg-transparent border-0 cursor-pointer"
           />
           <div className="flex flex-col gap-0.5">
@@ -1441,9 +1447,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         {/* Onion Skin toggle */}
         <button
           onClick={() => setOnionSkinEnabled((prev) => !prev)}
-          title={`Papel Vegetal (Onion Skin): ${
-            onionSkinEnabled ? 'Ativo (Mostrando quadro anterior)' : 'Desativado'
-          }`}
+          title={t('tool.onionSkin', { state: onionSkinEnabled ? t('tool.onionOn') : t('tool.onionOff') })}
           className={`w-8 h-8 rounded flex items-center justify-center transition ${
             onionSkinEnabled
               ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-500/50 shadow-sm'
@@ -1461,12 +1465,16 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           <div className="absolute top-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900/95 border border-sky-500/40 shadow-2xl backdrop-blur-md text-xs text-white">
             <span className="font-semibold text-sky-400 font-mono text-[11px] uppercase tracking-wider pr-1">
               {selectedObject?.type === 'stick'
-                ? 'Boneco Palito'
+                ? t('selection.stick')
                 : selectedObject?.type === 'chart'
-                ? 'Gráfico'
+                ? t('selection.chart')
                 : selectedObject?.type === 'text'
-                ? 'Texto'
-                : 'Objeto'}
+                ? t('selection.text')
+                : selectedObject?.type === 'actor'
+                ? t('selection.actor')
+                : selectedObject?.type === 'path'
+                ? t('selection.path')
+                : t('selection.object')}
             </span>
 
             <div className="w-[1px] h-3.5 bg-neutral-700 mx-1" />
@@ -1474,20 +1482,20 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             {/* Flash Group / Ungroup Buttons */}
             <button
               onClick={onGroupSelected}
-              title="Agrupar objetos (Ctrl+G)"
+              title={t('selection.group')}
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
             >
               <Group size={12} className="text-sky-400" />
-              <span>Agrupar</span>
+              <span>{t('selection.groupShort')}</span>
             </button>
 
             <button
               onClick={onUngroupSelected}
-              title="Desagrupar em traços individuais (Ctrl+B)"
+              title={t('selection.ungroup')}
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-800 text-amber-400 transition"
             >
               <Ungroup size={12} />
-              <span>Desagrupar</span>
+              <span>{t('selection.ungroupShort')}</span>
             </button>
 
             <div className="w-[1px] h-3.5 bg-neutral-700 mx-1" />
@@ -1512,7 +1520,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
                 }
                 onSelectObject(null);
               }}
-              title="Excluir Objeto (Delete)"
+              title={t('selection.delete')}
               className="p-1 rounded hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition"
             >
               <Trash2 size={13} />
@@ -1567,13 +1575,13 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           {/* Onion Skin Banner with Dismiss Button */}
           {onionSkinEnabled && (
             <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded bg-cyan-950/90 text-cyan-300 border border-cyan-800 text-[11px] font-medium backdrop-blur-sm shadow-lg">
-              <span>Papel Vegetal Ativo (Mostrando quadro anterior)</span>
+              <span>{t('stage.onionBanner')}</span>
               <button
                 onClick={() => setOnionSkinEnabled(false)}
                 className="px-1.5 py-0.5 rounded bg-cyan-900 hover:bg-cyan-800 text-cyan-100 text-[10px]"
-                title="Desativar Onion Skin"
+                title={t('stage.onionDisableHint')}
               >
-                Desativar
+                {t('stage.onionDisable')}
               </button>
             </div>
           )}
