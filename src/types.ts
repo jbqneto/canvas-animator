@@ -127,7 +127,9 @@ export type TextEffect =
   | 'slideLeft'
   | 'glowPulse'
   | 'fadeRise'
-  | 'numberRoll';
+  | 'numberRoll'
+  /** No intro of its own: the text only moves with its keyframes. */
+  | 'none';
 
 /**
  * A title or number counter. Its transform is animated like any actor; the anchor (position) is the
@@ -209,12 +211,27 @@ export interface Animated {
  * A property without keys uses its `base` value (AE stopwatch off); once it has keys, edits at the
  * current frame create/update keys (stopwatch on).
  */
+export type ShapeType = 'rect' | 'ellipse' | 'arrow' | 'line';
+
+/** Vector shape drawn inside the actor's box (colors stay editable, unlike an imported image). */
+export interface ShapeStyle {
+  type: ShapeType;
+  fill: string;
+  stroke: string;
+  /** 0 = no outline. For lines it is the line thickness. */
+  strokeWidth: number;
+  /** Corner radius of rectangles, in pixels. */
+  radius: number;
+}
+
 export interface ActorOverlay extends Animated {
   id: string;
   name: string;
-  kind: 'image';
-  /** Image as data URL so projects can be saved to a single file. */
+  /** 'image': imported picture in `src`; 'shape': vector shape described by `shape`. */
+  kind: 'image' | 'shape';
+  /** Image as data URL so projects can be saved to a single file (empty for shapes). */
   src: string;
+  shape?: ShapeStyle;
   /** Size at scale 1, in canvas pixels. The anchor point is the image center. */
   width: number;
   height: number;

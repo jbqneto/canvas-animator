@@ -18,8 +18,14 @@ qualquer editor.
   tracejada, contínua ou guia invisível, que pode ir aparecendo conforme é percorrida) e faça qualquer imagem
   (PNG, SVG, JPG) percorrê-la, com tempo, suavização, paradas em cada ponto e orientação na direção do
   movimento. Editar o caminho atualiza o movimento.
-- **Modelos** montados com essas peças, por exemplo "Rota no mapa": mapa-múndi + caminho pelos países +
-  avião que o segue e pousa em cada um. Tudo o que o modelo cria continua editável.
+- **Biblioteca de modelos** (botão "Modelos"): título de abertura, terço inferior (nome e cargo), lista em
+  tópicos, número em destaque, gráfico que entra, destaque com seta e rota no mapa (mapa-múndi + caminho pelos
+  países + avião que pousa em cada um). Prévia animada e parâmetros no diálogo; tudo o que o modelo cria são
+  objetos normais, editáveis.
+- **Formas editáveis**: retângulo (com cantos arredondados), elipse, seta e linha, com preenchimento, contorno e
+  tamanho editáveis a qualquer momento, animadas como qualquer ator.
+- **Entradas e saídas prontas** (surgir, subir, descer, deslizar, pop) para qualquer objeto, gravadas como
+  keyframes comuns.
 - **Boneco palito**: poses com cinemática direta (girar o osso leva o resto do membro), poses prontas e
   interpolação de pose entre dois frames (tween clássico), onion skin.
 - **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto. Eles se movem

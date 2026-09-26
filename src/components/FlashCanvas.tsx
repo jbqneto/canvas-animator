@@ -1422,7 +1422,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
                 : selectedObject?.type === 'text'
                 ? t('selection.text')
                 : selectedObject?.type === 'actor'
-                ? t('selection.actor')
+                ? actors.find((a) => a.id === selectedObject.id)?.kind === 'shape'
+                  ? t('selection.shape')
+                  : t('selection.actor')
                 : selectedObject?.type === 'path'
                 ? t('selection.path')
                 : t('selection.object')}
