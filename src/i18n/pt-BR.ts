@@ -600,4 +600,14 @@ export const ptBR = {
   'history.addAudio': 'Adicionar áudio "{name}',
   'app.audioDropped': 'O vídeo foi exportado sem som: este navegador não consegue codificar áudio para esse formato. Tente o outro formato ou o Chrome/Edge atualizado.',
   'export.includeAudio': 'Incluir áudio ({count} faixa(s) com som)',
+
+  // Timeline zoom and time unit
+  'timeline.unit': 'Unidade da régua',
+  'timeline.unitSeconds': 's',
+  'timeline.unitFrames': 'quadros',
+  'timeline.unitSecondsHint': 'Régua em segundos',
+  'timeline.unitFramesHint': 'Régua em quadros (como no Flash)',
+  'timeline.zoomIn': 'Aproximar (Ctrl + roda do mouse)',
+  'timeline.zoomOut': 'Afastar (Ctrl + roda do mouse)',
+  'timeline.zoomFit': 'Mostrar a timeline inteira',
 };

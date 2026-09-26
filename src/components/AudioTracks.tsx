@@ -306,7 +306,7 @@ export const AudioLanes: React.FC<AudioLanesProps> = ({
               }`}
             >
               <Waveform clip={clip} />
-              <span className="absolute left-2.5 top-0 text-[9px] font-semibold text-violet-100/90 truncate max-w-[60%] pointer-events-none drop-shadow">
+              <span className="sticky left-2.5 inline-block pl-2.5 text-[9px] font-semibold text-violet-100/90 truncate max-w-[60%] pointer-events-none drop-shadow">
                 {clip.name}
               </span>
               <div

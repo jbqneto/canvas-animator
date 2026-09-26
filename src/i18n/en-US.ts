@@ -599,4 +599,14 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'history.addAudio': 'Add audio "{name}',
   'app.audioDropped': 'The video was exported without sound: this browser can\'t encode audio for that format. Try the other format or an up-to-date Chrome/Edge.',
   'export.includeAudio': 'Include audio ({count} audible track(s))',
+
+  // Timeline zoom and time unit
+  'timeline.unit': 'Ruler unit',
+  'timeline.unitSeconds': 's',
+  'timeline.unitFrames': 'frames',
+  'timeline.unitSecondsHint': 'Ruler in seconds',
+  'timeline.unitFramesHint': 'Ruler in frames (like Flash)',
+  'timeline.zoomIn': 'Zoom in (Ctrl + mouse wheel)',
+  'timeline.zoomOut': 'Zoom out (Ctrl + mouse wheel)',
+  'timeline.zoomFit': 'Show the whole timeline',
 };
