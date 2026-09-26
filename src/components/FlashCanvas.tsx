@@ -13,8 +13,12 @@ import {
   CanvasGroup,
   HistorySnapshot,
   ActorOverlay,
+  MotionPath,
+  StageTool,
 } from '../types';
-import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue } from '../engine/actor';
+import { distanceToPath, samplePath } from '../engine/path';
+import { strokeDash } from '../utils/exportVideo';
+import { hitTestActor, sampleActor, setActorProperty, actorPropertyValue, followedPath } from '../engine/actor';
 import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
 import { dragJointFK } from '../engine/stickRig';
 
@@ -39,6 +43,7 @@ import {
   ZoomIn,
   ZoomOut,
   Sparkles,
+  Route as RouteIcon,
 } from 'lucide-react';
 
 interface FlashCanvasProps {
@@ -56,7 +61,7 @@ interface FlashCanvasProps {
   ) => void;
   selectedObject: SelectedObjectRef | null;
   onSelectObject: (ref: SelectedObjectRef | null) => void;
-  activeTool: 'pointer' | 'transform' | 'pen' | 'line' | 'arrow' | 'rect' | 'circle' | 'eraser';
+  activeTool: StageTool;
   setActiveTool: (tool: any) => void;
   strokeColor: string;
   setStrokeColor: (color: string) => void;
@@ -98,6 +103,10 @@ interface FlashCanvasProps {
   onTransientUpdateActor: (actor: ActorOverlay) => void;
   onCommitActor: (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => void;
   onImportImageFiles: (files: FileList) => void;
+  paths: MotionPath[];
+  onCreatePath: (points: { x: number; y: number }[]) => void;
+  onTransientUpdatePath: (path: MotionPath) => void;
+  onCommitPath: (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => void;
 }
 
 const emptyFrame = (frameNumber: number): FrameData => ({
@@ -164,6 +173,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   onTransientUpdateActor,
   onCommitActor,
   onImportImageFiles,
+  paths,
+  onCreatePath,
+  onTransientUpdatePath,
+  onCommitPath,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -177,13 +190,59 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     jointId: string;
   } | null>(null);
 
+  // Motion path being drawn with the "Caminho" tool (click adds points)
+  const [draftPath, setDraftPath] = useState<Point[] | null>(null);
+  const [cursorPt, setCursorPt] = useState<Point | null>(null);
+
+  const finishDraftPath = useCallback(() => {
+    setDraftPath((draft) => {
+      if (draft && draft.length >= 2) onCreatePath(draft);
+      return null;
+    });
+  }, [onCreatePath]);
+
+  useEffect(() => {
+    if (activeTool !== 'path') setDraftPath(null);
+  }, [activeTool]);
+
+  useEffect(() => {
+    if (!draftPath) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishDraftPath();
+      } else if (e.key === 'Escape') {
+        setDraftPath(null);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setDraftPath((d) => (d && d.length > 1 ? d.slice(0, -1) : null));
+      }
+    };
+    // Capture phase so Backspace removes a point instead of deleting the selected object
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [draftPath, finishDraftPath]);
+
   // Active freehand drawing stroke in progress
   const [currentStroke, setCurrentStroke] = useState<DrawingStroke | null>(null);
   const strokeBaseSnapshotRef = useRef<HistorySnapshot | null>(null);
 
   // Drag Session tracking for mouse interaction
   const dragSessionRef = useRef<{
-    targetType: 'stick' | 'joint' | 'chart' | 'chart-resize' | 'text' | 'actor' | 'path-key';
+    targetType:
+      | 'stick'
+      | 'joint'
+      | 'chart'
+      | 'chart-resize'
+      | 'text'
+      | 'actor'
+      | 'path-key'
+      | 'path-anchor'
+      | 'path-move';
+    /** For 'path-anchor': index of the dragged point. */
+    anchorIndex?: number;
+    initialPath?: MotionPath;
     /** For 'path-key': frame of the position key being dragged. */
     keyFrame?: number;
     targetId: string;
@@ -248,7 +307,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       canvasWidth,
       canvasHeight,
       currentFrame,
-      { frames, charts, texts, images, actors, videoBg, videoElement, layers },
+      { frames, charts, texts, images, actors, paths, videoBg, videoElement, layers },
       { showGrid: true }
     );
 
@@ -452,6 +511,59 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.restore();
       });
 
+      // 3E. Motion paths (editor only): hidden guides drawn faintly; selected path shows its points
+      paths.forEach((path) => {
+        const selected = selectedObject?.type === 'path' && selectedObject.id === path.id;
+        if (path.points.length < 2 || (!selected && path.style.visible)) return;
+        const pts = samplePath(path).samples;
+        ctx.save();
+        ctx.strokeStyle = selected ? 'rgba(56, 189, 248, 0.9)' : 'rgba(148, 163, 184, 0.45)';
+        ctx.lineWidth = selected ? 1.5 : 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (selected) {
+          path.points.forEach((p, i) => {
+            ctx.fillStyle = i === 0 ? '#22c55e' : '#38bdf8';
+            ctx.strokeStyle = '#09090b';
+            ctx.beginPath();
+            ctx.rect(p.x - 5, p.y - 5, 10, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#e0f2fe';
+            ctx.font = '10px JetBrains Mono, monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(String(i + 1), p.x + 8, p.y - 8);
+          });
+        }
+        ctx.restore();
+      });
+
+      // 3F. Path being drawn: placed points + preview to the cursor
+      if (draftPath && draftPath.length > 0) {
+        const pts = cursorPt ? [...draftPath, cursorPt] : draftPath;
+        ctx.save();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.setLineDash(strokeDash('dotted', 3));
+        ctx.beginPath();
+        pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        draftPath.forEach((p) => {
+          ctx.fillStyle = '#38bdf8';
+          ctx.fillRect(p.x - 4, p.y - 4, 8, 8);
+        });
+        ctx.fillStyle = '#e0f2fe';
+        ctx.font = '11px Plus Jakarta Sans, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('Enter ou duplo clique: concluir · Esc: cancelar · Backspace: desfazer ponto', 12, canvasHeight - 12);
+        ctx.restore();
+      }
+
       // 3D. Actor selection: motion path + rotated box around the image at its animated position
       if (selectedObject?.type === 'actor') {
         const actor = actors.find((a) => a.id === selectedObject.id);
@@ -500,7 +612,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           ctx.restore();
         }
         if (actor) {
-          const st = sampleActor(actor, currentFrame);
+          const st = sampleActor(actor, currentFrame, paths);
           const w = actor.width * st.scale;
           const h = actor.height * st.scale;
           ctx.save();
@@ -563,6 +675,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     frames,
     assetTick,
     actors,
+    paths,
+    draftPath,
+    cursorPt,
+    activeTool,
   ]);
 
   // ================= GLOBAL WINDOW DRAG LISTENERS =================
@@ -660,6 +776,25 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         });
       }
 
+      // Drag one point of a drawn motion path
+      else if (session.targetType === 'path-anchor' && session.initialPath && session.anchorIndex !== undefined) {
+        const init = session.initialPath;
+        const points = init.points.map((p, i) =>
+          i === session.anchorIndex
+            ? { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) }
+            : p
+        );
+        onTransientUpdatePath({ ...init, points });
+      }
+
+      // Move a whole motion path
+      else if (session.targetType === 'path-move' && session.initialPath) {
+        const dx = Math.round(pt.x - session.startCanvasPt.x);
+        const dy = Math.round(pt.y - session.startCanvasPt.y);
+        const init = session.initialPath;
+        onTransientUpdatePath({ ...init, points: init.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) });
+      }
+
       // Handle motion path point drag: edits the key's position without changing the current frame
       else if (session.targetType === 'path-key' && session.keyFrame !== undefined) {
         const actor = actors.find((a) => a.id === session.targetId);
@@ -695,6 +830,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       currentFrame,
       onTransientUpdateFrameData,
       onTransientUpdateActor,
+      onTransientUpdatePath,
       onTransientUpdateChart,
       onTransientUpdateText,
     ]
@@ -748,6 +884,15 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           if (txt) {
             onCommitText(txt, `Mover Texto "${txt.text}"`, session.baseSnapshot);
           }
+        } else if (session.targetType === 'path-anchor' || session.targetType === 'path-move') {
+          const path = latest.paths.find((p) => p.id === session.targetId);
+          if (path) {
+            onCommitPath(
+              path,
+              session.targetType === 'path-move' ? `Mover caminho "${path.name}"` : `Editar ponto do caminho "${path.name}"`,
+              session.baseSnapshot
+            );
+          }
         } else if (session.targetType === 'path-key') {
           const actor = actors.find((a) => a.id === session.targetId);
           if (actor) {
@@ -769,11 +914,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       onCommitChart,
       onCommitText,
       onCommitActor,
+      onCommitPath,
     ]
   );
 
   // Hidden or locked layers can't be picked or edited on the stage
-  const isEditable = (targetId: string | undefined, type: 'drawing' | 'chart' | 'text' | 'actor') => {
+  const isEditable = (targetId: string | undefined, type: 'drawing' | 'chart' | 'text' | 'actor' | 'path') => {
     const resolved = resolveObjectLayer(layers, targetId, type);
     return !resolved || (resolved.layer.visible && !resolved.layer.locked);
   };
@@ -783,6 +929,17 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   // ================= MOUSE DOWN: HIT TESTING & DRAG INITIATION =================
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const pt = getCanvasCoordinates(e);
+
+    // 0. "Caminho" tool: each click adds a point; double click finishes
+    if (activeTool === 'path') {
+      if (e.detail >= 2) {
+        finishDraftPath();
+        return;
+      }
+      onSelectObject(null);
+      setDraftPath((d) => [...(d ?? []), { x: Math.round(pt.x), y: Math.round(pt.y) }]);
+      return;
+    }
 
     // 1. Drawing Tool Mode (Pen, Line, Arrow, Rect, Circle, Eraser)
     if (
@@ -852,12 +1009,34 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       }
     }
 
+    // 2A'. Points of the selected drawn path (drag to reshape it)
+    if (selectedObject?.type === 'path') {
+      const path = paths.find((p) => p.id === selectedObject.id);
+      const index = path?.points.findIndex((p) => Math.hypot(pt.x - p.x, pt.y - p.y) <= PATH_KEY_HIT_RADIUS) ?? -1;
+      if (path && index !== -1 && isEditable(path.id, 'path')) {
+        dragSessionRef.current = {
+          targetType: 'path-anchor',
+          targetId: path.id,
+          anchorIndex: index,
+          initialPath: path,
+          startCanvasPt: pt,
+          baseSnapshot,
+          hasMoved: false,
+          offsetX: pt.x - path.points[index].x,
+          offsetY: pt.y - path.points[index].y,
+        };
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
+      }
+    }
+
     // 2C''. Hit Test: key points of the selected actor's motion path (edited in place, like AE)
     if (selectedObject?.type === 'actor') {
       const actor = actors.find((a) => a.id === selectedObject.id);
       // A key point under the actor's current position (e.g. holding after the last key) means
       // "drag the object": that must animate at the current frame, not edit an older key.
-      const current = actor ? actorPropertyValue(actor, 'position', currentFrame) : null;
+      const current = actor ? actorPropertyValue(actor, 'position', currentFrame, paths) : null;
       const onActorAnchor = !!current && Math.hypot(pt.x - current.x, pt.y - current.y) <= PATH_KEY_HIT_RADIUS;
       const key = onActorAnchor
         ? undefined
@@ -959,9 +1138,11 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     };
     const actorsFrontFirst = [...actors].sort((a, b) => actorDepth(a) - actorDepth(b));
     for (const actor of actorsFrontFirst) {
-      if (!isEditable(actor.id, 'actor') || !hitTestActor(actor, currentFrame, pt)) continue;
-      const pos = actorPropertyValue(actor, 'position', currentFrame);
+      if (!isEditable(actor.id, 'actor') || !hitTestActor(actor, currentFrame, pt, paths)) continue;
+      const pos = actorPropertyValue(actor, 'position', currentFrame, paths);
       onSelectObject({ type: 'actor', id: actor.id });
+      // Following a path: the position comes from the path (edit the path or the timing instead)
+      if (followedPath(actor, paths)) return;
       dragSessionRef.current = {
         targetType: 'actor',
         targetId: actor.id,
@@ -970,6 +1151,26 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         hasMoved: false,
         offsetX: pt.x - pos.x,
         offsetY: pt.y - pos.y,
+      };
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
+      return;
+    }
+
+    // 2C'''. Hit Test: drawn paths (click near the line selects it; dragging moves the whole path)
+    for (const path of paths) {
+      if (path.points.length < 2 || !isEditable(path.id, 'path')) continue;
+      if (distanceToPath(samplePath(path), pt) > Math.max(8, path.style.width)) continue;
+      onSelectObject({ type: 'path', id: path.id });
+      dragSessionRef.current = {
+        targetType: 'path-move',
+        targetId: path.id,
+        initialPath: path,
+        startCanvasPt: pt,
+        baseSnapshot,
+        hasMoved: false,
+        offsetX: 0,
+        offsetY: 0,
       };
       window.addEventListener('mousemove', onWindowMouseMove);
       window.addEventListener('mouseup', onWindowMouseUp);
@@ -1039,6 +1240,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // Update active freehand drawing stroke
     if (currentStroke) {
       setCurrentStroke((prev) => (prev ? { ...prev, points: [...prev.points, pt] } : null));
+      return;
+    }
+    if (draftPath) {
+      setCursorPt(pt);
       return;
     }
 
@@ -1193,6 +1398,18 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           }`}
         >
           <Eraser size={15} />
+        </button>
+
+        <button
+          onClick={() => setActiveTool('path')}
+          title="Caminho (rota): clique para adicionar pontos; Enter ou duplo clique conclui. Depois, faça uma imagem seguir o caminho."
+          className={`w-8 h-8 rounded flex items-center justify-center transition ${
+            activeTool === 'path'
+              ? 'bg-sky-500 text-neutral-950 shadow-md'
+              : 'text-neutral-400 hover:text-white hover:bg-neutral-900'
+          }`}
+        >
+          <RouteIcon size={15} />
         </button>
 
         <div className="w-6 h-[1px] bg-neutral-800 my-0.5" />

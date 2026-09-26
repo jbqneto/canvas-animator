@@ -9,8 +9,11 @@ import {
   DrawingStroke,
   LayerType,
   ActorOverlay,
+  MotionPath,
 } from '../types';
 import { sampleActor, trailPoints } from '../engine/actor';
+import { polylineUpTo, samplePath } from '../engine/path';
+import { sampleTrack, Vec2 } from '../engine/keyframes';
 import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtils';
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
@@ -23,6 +26,7 @@ export interface SceneContent {
   texts: TextOverlay[];
   images: ImageOverlay[];
   actors: ActorOverlay[];
+  paths: MotionPath[];
   layers?: StudioLayer[];
   videoBg: VideoBackground;
   videoElement?: HTMLVideoElement | null;
@@ -64,7 +68,7 @@ export function renderCompositeFrame(
   scene: SceneContent,
   options: RenderOptions = {}
 ) {
-  const { charts, texts, images, actors, videoBg, videoElement, layers } = scene;
+  const { charts, texts, images, actors, paths, videoBg, videoElement, layers } = scene;
   const frameData = scene.frames[currentFrame];
   ctx.save();
   ctx.clearRect(0, 0, width, height);
@@ -147,10 +151,15 @@ export function renderCompositeFrame(
     if (currentFrame < img.startFrame || currentFrame > img.startFrame + img.durationFrames) return;
     add(img.id, 'image', BACK, () => drawImageOverlay(ctx, img, currentFrame, width, height));
   });
+  paths.forEach((path) => {
+    if (!path.style.visible || path.points.length < 2) return;
+    if (currentFrame < path.startFrame || currentFrame > path.startFrame + path.durationFrames) return;
+    add(path.id, 'path', FRONT, () => drawMotionPath(ctx, path, actors, currentFrame));
+  });
   actors.forEach((actor) => {
-    const state = sampleActor(actor, currentFrame);
+    const state = sampleActor(actor, currentFrame, paths);
     if (!state.visible || state.opacity <= 0) return;
-    add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state, currentFrame));
+    add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state, currentFrame, paths));
   });
   frameData?.stickFigures?.forEach((stick) => {
     add(stick.id, 'drawing', FRONT, () => drawStickFigure(ctx, stick));
@@ -215,11 +224,12 @@ function drawActor(
   ctx: CanvasRenderingContext2D,
   actor: ActorOverlay,
   state: ReturnType<typeof sampleActor>,
-  frame: number
+  frame: number,
+  paths: MotionPath[]
 ) {
   // Travelled path behind the actor
   if (actor.trail?.enabled) {
-    const pts = trailPoints(actor, frame);
+    const pts = trailPoints(actor, frame, paths);
     if (pts.length > 1) {
       ctx.save();
       ctx.globalAlpha = state.opacity;
@@ -243,6 +253,35 @@ function drawActor(
   ctx.rotate((state.rotation * Math.PI) / 180);
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
   ctx.drawImage(img, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
+  ctx.restore();
+}
+
+/** Canvas dash pattern for a stroke style (dotted = round dots spaced by ~2× the width). */
+export function strokeDash(stroke: MotionPath['style']['stroke'], width: number): number[] {
+  if (stroke === 'dashed') return [width * 3, width * 2.5];
+  if (stroke === 'dotted') return [0.001, width * 2.2];
+  return [];
+}
+
+function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, actors: ActorOverlay[], frame: number) {
+  const sampler = samplePath(path);
+  let points: Vec2[] = sampler.samples;
+  if (path.style.reveal === 'follow') {
+    // Only the part already travelled by the furthest actor following this path
+    const followers = actors.filter((a) => a.follow?.pathId === path.id);
+    const progress = Math.max(0, ...followers.map((a) => sampleTrack(a.follow!.progress, frame, 0)));
+    points = polylineUpTo(sampler, progress);
+  }
+  if (points.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = path.style.color;
+  ctx.lineWidth = path.style.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.setLineDash(strokeDash(path.style.stroke, path.style.width));
+  ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
   ctx.restore();
 }
 

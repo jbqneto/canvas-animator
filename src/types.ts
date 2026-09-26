@@ -4,6 +4,9 @@ import type { Track, Vec2 } from './engine/keyframes';
  * Types for FlashMotion Studio - Adobe Flash & Remotion Hybrid Studio
  */
 
+/** Stage tools (left toolbar). */
+export type StageTool = 'pointer' | 'transform' | 'pen' | 'line' | 'arrow' | 'rect' | 'circle' | 'eraser' | 'path';
+
 export interface CanvasDimensions {
   width: number;
   height: number;

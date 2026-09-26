@@ -25,6 +25,7 @@ import {
   Sparkles,
   MoveHorizontal,
   Image as ImageIcon,
+  Route as RouteIcon,
 } from 'lucide-react';
 import { isTypingTarget } from '../utils/keyboard';
 import {
@@ -36,10 +37,11 @@ import {
   SelectedObjectRef,
   HistorySnapshot,
   ActorOverlay,
+  MotionPath,
 } from '../types';
 import { actorKeyframes, moveActorKeys, shiftActorTime } from '../engine/actor';
 
-type ClipType = 'chart' | 'text' | 'actor';
+type ClipType = 'chart' | 'text' | 'actor' | 'path';
 type ClipMode = 'move' | 'trim-start' | 'trim-end';
 const MIN_CLIP_FRAMES = 5;
 
@@ -83,6 +85,9 @@ interface TimelineProps {
   actors: ActorOverlay[];
   onUpdateActor: (actor: ActorOverlay) => void;
   onCommitActor: (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => void;
+  paths: MotionPath[];
+  onUpdatePath: (path: MotionPath) => void;
+  onCommitPath: (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => void;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -122,6 +127,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   actors,
   onUpdateActor,
   onCommitActor,
+  paths,
+  onUpdatePath,
+  onCommitPath,
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
   const tracksContainerRef = useRef<HTMLDivElement>(null);
@@ -315,6 +323,9 @@ export const Timeline: React.FC<TimelineProps> = ({
       } else if (drag.type === 'text') {
         const txt = texts.find((t) => t.id === drag.id);
         if (txt && onUpdateText) onUpdateText({ ...txt, ...span });
+      } else if (drag.type === 'path') {
+        const path = paths.find((p) => p.id === drag.id);
+        if (path) onUpdatePath({ ...path, ...span });
       } else if (drag.type === 'actor' && drag.initialActor) {
         // Moving the clip moves its keys too; trimming only changes the visible span
         const moved =
@@ -334,6 +345,9 @@ export const Timeline: React.FC<TimelineProps> = ({
         } else if (drag.type === 'text' && onCommitText) {
           const txt = texts.find((t) => t.id === drag.id);
           if (txt) onCommitText(txt, `${verb} Texto na Linha do Tempo`, drag.baseSnapshot);
+        } else if (drag.type === 'path') {
+          const path = paths.find((p) => p.id === drag.id);
+          if (path) onCommitPath(path, `${verb} caminho na Linha do Tempo`, drag.baseSnapshot);
         } else if (drag.type === 'actor') {
           const actor = actors.find((a) => a.id === drag.id);
           if (actor) onCommitActor(actor, `${verb} "${actor.name}" na Linha do Tempo`, drag.baseSnapshot);
@@ -354,6 +368,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     charts,
     texts,
     actors,
+    paths,
     totalFrames,
     onUpdateChart,
     onUpdateText,
@@ -361,6 +376,8 @@ export const Timeline: React.FC<TimelineProps> = ({
     onCommitChart,
     onCommitText,
     onCommitActor,
+    onUpdatePath,
+    onCommitPath,
   ]);
 
   const getLayerIcon = (type: string) => {
@@ -375,6 +392,8 @@ export const Timeline: React.FC<TimelineProps> = ({
         return <Group size={13} className="text-amber-400" />;
       case 'actor':
         return <ImageIcon size={13} className="text-orange-400" />;
+      case 'path':
+        return <RouteIcon size={13} className="text-sky-400" />;
       case 'drawing':
       default:
         return <PenTool size={13} className="text-pink-400" />;
@@ -658,6 +677,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                         onSelectObject({ type: 'stick', id: layer.targetId });
                       } else if (layer.type === 'actor') {
                         onSelectObject({ type: 'actor', id: layer.targetId });
+                      } else if (layer.type === 'path') {
+                        onSelectObject({ type: 'path', id: layer.targetId });
                       }
                     }
                   }}
@@ -885,6 +906,10 @@ export const Timeline: React.FC<TimelineProps> = ({
               const actor =
                 layer.type === 'actor'
                   ? actors.find((a) => a.id === layer.targetId)
+                  : null;
+              const path =
+                layer.type === 'path'
+                  ? paths.find((p) => p.id === layer.targetId)
                   : null;
 
               return (
@@ -1116,6 +1141,41 @@ export const Timeline: React.FC<TimelineProps> = ({
                       >
                         ▐
                       </div>
+                    </div>
+                  )}
+
+                  {/* 2C''. PATH CLIP SPAN (when the line is visible) */}
+                  {path && (
+                    <div
+                      style={{
+                        left: `${((path.startFrame - 1) / totalFrames) * 100}%`,
+                        width: `${Math.max(1, (path.durationFrames / totalFrames) * 100)}%`,
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectLayer(layer.id);
+                        onSelectObject({ type: 'path', id: path.id });
+                      }}
+                      onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'move', path.startFrame, path.durationFrames)}
+                      title={`${path.name} | visível F${path.startFrame} ➔ F${path.startFrame + path.durationFrames}`}
+                      className={`absolute top-2 bottom-2 rounded z-10 flex items-center justify-between select-none border border-dashed cursor-grab active:cursor-grabbing ${
+                        selectedObject?.type === 'path' && selectedObject.id === path.id
+                          ? 'bg-sky-600/30 border-sky-300'
+                          : 'bg-sky-950/50 border-sky-500/50 hover:border-sky-400'
+                      }`}
+                    >
+                      <div
+                        onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'trim-start', path.startFrame, path.durationFrames)}
+                        className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-l"
+                      />
+                      <span className="text-[10px] font-semibold text-sky-200 truncate px-1 pointer-events-none">
+                        {path.name}
+                        {!path.style.visible && ' (guia invisível)'}
+                      </span>
+                      <div
+                        onMouseDown={(e) => startClipDrag(e, 'path', path.id, 'trim-end', path.startFrame, path.durationFrames)}
+                        className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-r"
+                      />
                     </div>
                   )}
 

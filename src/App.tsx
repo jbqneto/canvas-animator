@@ -13,6 +13,8 @@ import {
   CanvasDimensions,
   HistorySnapshot,
   ActorOverlay,
+  MotionPath,
+  StageTool,
 } from './types';
 import { createActor } from './engine/actor';
 import { tweenStickFrames } from './engine/stickRig';
@@ -43,6 +45,7 @@ import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
 import { applyRouteToActor, buildRouteKeyframes, buildStopLabels } from './map/routeTemplate';
+import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 
 export default function App() {
@@ -64,9 +67,7 @@ export default function App() {
   const [timelineHeight, setTimelineHeight] = useState<number>(200);
 
   // Active Flash Canvas Tool
-  const [activeTool, setActiveTool] = useState<
-    'pointer' | 'transform' | 'pen' | 'line' | 'arrow' | 'rect' | 'circle' | 'eraser'
-  >('pointer');
+  const [activeTool, setActiveTool] = useState<StageTool>('pointer');
   const [strokeColor, setStrokeColor] = useState<string>('#38bdf8');
   const [strokeThickness, setStrokeThickness] = useState<number>(4);
   // Default to FALSE to eliminate unwanted onion skin shadows when deleting objects!
@@ -233,7 +234,7 @@ export default function App() {
     layers: initialLayers,
   });
 
-  const { frames, charts, texts, images, actors, layers } = history.present;
+  const { frames, charts, texts, images, actors, paths, layers } = history.present;
 
   // UI Modals & Export state
   const [exportProgress, setExportProgress] = useState<number>(0);
@@ -901,6 +902,11 @@ export default function App() {
       }
     }
 
+    if (layer.type === 'path' && layer.targetId) {
+      handleDeletePath(layer.targetId);
+      return;
+    }
+
     history.pushSnapshot(`Excluir Camada ${layer.name}`, {
       ...history.present,
       layers: layers.filter((l) => l.id !== layerId),
@@ -1127,6 +1133,110 @@ export default function App() {
     [history]
   );
 
+  // ================= MOTION PATHS (drawn routes that actors can follow) =================
+  const handleCreatePath = useCallback(
+    (points: { x: number; y: number }[]) => {
+      const present = history.presentRef.current;
+      const id = `path-${Date.now()}`;
+      const path: MotionPath = {
+        id,
+        name: `Caminho ${present.paths.length + 1}`,
+        points,
+        smooth: true,
+        closed: false,
+        style: { visible: true, color: '#f8fafc', width: 4, stroke: 'dotted', reveal: 'full' },
+        startFrame: 1,
+        durationFrames: Math.max(1, totalFrames - 1),
+      };
+      const layer: StudioLayer = {
+        id: `layer-path-${id}`,
+        name: path.name,
+        type: 'path',
+        visible: true,
+        locked: false,
+        color: '#38bdf8',
+        targetId: id,
+      };
+      history.pushSnapshot(`Desenhar ${path.name}`, {
+        ...present,
+        paths: [...present.paths, path],
+        layers: [layer, ...present.layers],
+      });
+      setActiveTool('pointer');
+      setSelectedObject({ type: 'path', id });
+      setSelectedLayerId(layer.id);
+    },
+    [history, totalFrames]
+  );
+
+  const handleUpdatePath = (path: MotionPath, description = `Editar "${path.name}"`) => {
+    history.pushSnapshot(description, {
+      ...history.present,
+      paths: history.present.paths.map((p) => (p.id === path.id ? path : p)),
+    });
+  };
+
+  const handleTransientUpdatePath = useCallback(
+    (path: MotionPath) => {
+      history.updatePresent((prev) => ({ ...prev, paths: prev.paths.map((p) => (p.id === path.id ? path : p)) }));
+    },
+    [history]
+  );
+
+  const handleCommitPath = useCallback(
+    (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => {
+      const current = history.presentRef.current;
+      history.commitAction(description, baseSnapshot, {
+        ...current,
+        paths: current.paths.map((p) => (p.id === path.id ? path : p)),
+      });
+    },
+    [history]
+  );
+
+  /**
+   * Links an actor to a path: it travels the whole path, eased, during the part of the timeline where
+   * both are visible (the timing can be edited afterwards like any keyframes).
+   */
+  const handleAttachActorToPath = (actorId: string, pathId: string) => {
+    const present = history.present;
+    const path = present.paths.find((p) => p.id === pathId);
+    const actor = present.actors.find((a) => a.id === actorId);
+    if (!path || !actor) return;
+    let start = Math.max(actor.startFrame, path.startFrame);
+    let end = Math.min(actor.startFrame + actor.durationFrames, path.startFrame + path.durationFrames);
+    if (end - start < 2) {
+      start = actor.startFrame;
+      end = actor.startFrame + actor.durationFrames;
+    }
+    const progress = buildFollowProgress({
+      anchorProgress: samplePath(path).anchorProgress,
+      startFrame: start,
+      endFrame: end,
+      easing: 'easeInOut',
+      holdFrames: 0,
+    });
+    history.pushSnapshot(`"${actor.name}" segue "${path.name}"`, {
+      ...present,
+      actors: present.actors.map((a) => (a.id === actorId ? { ...a, follow: { pathId, orient: true, progress } } : a)),
+    });
+    setSelectedObject({ type: 'actor', id: actorId });
+  };
+
+  /** Removes the path and unlinks actors that followed it (they keep their own position). */
+  const withoutPath = (snapshot: HistorySnapshot, pathId: string): HistorySnapshot => ({
+    ...snapshot,
+    paths: snapshot.paths.filter((p) => p.id !== pathId),
+    actors: snapshot.actors.map((a) => (a.follow?.pathId === pathId ? { ...a, follow: undefined } : a)),
+    layers: snapshot.layers.filter((l) => l.targetId !== pathId),
+  });
+
+  const handleDeletePath = (pathId: string) => {
+    const path = history.present.paths.find((p) => p.id === pathId);
+    history.pushSnapshot(`Excluir "${path?.name ?? 'caminho'}"`, withoutPath(history.present, pathId));
+    if (selectedObject?.id === pathId) setSelectedObject(null);
+  };
+
   // ================= MAP ROUTE TEMPLATE =================
   const [routeDialogOpen, setRouteDialogOpen] = useState(false);
 
@@ -1281,6 +1391,7 @@ export default function App() {
           if (selectedObject.type === 'chart') handleDeleteChart(selectedObject.id);
           else if (selectedObject.type === 'text') handleDeleteText(selectedObject.id);
           else if (selectedObject.type === 'actor') handleDeleteActor(selectedObject.id);
+          else if (selectedObject.type === 'path') handleDeletePath(selectedObject.id);
           else if (selectedObject.type === 'stick') {
             handleDeleteStickFigure(selectedObject.id, false);
           }
@@ -1436,7 +1547,8 @@ export default function App() {
       texts: [],
       images: [],
       actors: [],
-      layers: history.present.layers.filter((l) => l.type !== 'actor'),
+      paths: [],
+      layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path'),
     });
     setCurrentFrame(1);
   };
@@ -1500,6 +1612,7 @@ export default function App() {
     texts,
     images,
     actors,
+    paths,
     layers,
     videoBg,
     videoElement: videoEl,
@@ -1639,6 +1752,10 @@ export default function App() {
             onTransientUpdateActor={handleTransientUpdateActor}
             onCommitActor={handleCommitActor}
             onImportImageFiles={handleImportImageFiles}
+            paths={paths}
+            onCreatePath={handleCreatePath}
+            onTransientUpdatePath={handleTransientUpdatePath}
+            onCommitPath={handleCommitPath}
           />
         </div>
 
@@ -1761,6 +1878,10 @@ export default function App() {
           onCopyStickToFrame={handleCopyStickToFrame}
           onTweenStick={handleTweenStick}
           onOpenRouteDialog={() => setRouteDialogOpen(true)}
+          paths={paths}
+          onUpdatePath={handleUpdatePath}
+          onDeletePath={handleDeletePath}
+          onAttachActorToPath={handleAttachActorToPath}
         />
       </div>
 
@@ -1812,6 +1933,9 @@ export default function App() {
           actors={actors}
           onUpdateActor={handleTransientUpdateActor}
           onCommitActor={handleCommitActor}
+          paths={paths}
+          onUpdatePath={handleTransientUpdatePath}
+          onCommitPath={handleCommitPath}
         />
       </div>
 

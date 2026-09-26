@@ -39,8 +39,10 @@ import {
   CanvasGroup,
   HistorySnapshot,
   ActorOverlay,
+  MotionPath,
 } from '../types';
 import { ActorInspector } from './ActorInspector';
+import { PathInspector } from './PathInspector';
 import { StickAnimationPanel } from './StickAnimationPanel';
 import type { EasingName } from '../engine/keyframes';
 import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
@@ -92,6 +94,11 @@ interface PropertiesInspectorProps {
   onCopyStickToFrame: (stickId: string, toFrame: number) => void;
   onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
   onOpenRouteDialog: () => void;
+  // Motion paths
+  paths: MotionPath[];
+  onUpdatePath: (path: MotionPath, description: string) => void;
+  onDeletePath: (id: string) => void;
+  onAttachActorToPath: (actorId: string, pathId: string) => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -140,6 +147,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onCopyStickToFrame,
   onTweenStick,
   onOpenRouteDialog,
+  paths,
+  onUpdatePath,
+  onDeletePath,
+  onAttachActorToPath,
   pastSteps,
   futureSteps,
   onJumpToHistory,
@@ -163,6 +174,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   const activeActor =
     selectedObject?.type === 'actor' ? actors.find((a) => a.id === selectedObject.id) : undefined;
+
+  const activePath =
+    selectedObject?.type === 'path' ? paths.find((p) => p.id === selectedObject.id) : undefined;
 
   const activeStick =
     selectedObject?.type === 'stick'
@@ -302,6 +316,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
         {/* ================= TAB 1: PROPERTIES (CONTEXTUAL) ================= */}
         {activeTab === 'properties' && (
           <>
+            {activePath && (
+              <PathInspector
+                path={activePath}
+                actors={actors}
+                totalFrames={totalFrames}
+                onChange={onUpdatePath}
+                onDelete={onDeletePath}
+                onAttachActor={onAttachActorToPath}
+                onSelectActor={(id) => onSelectObject({ type: 'actor', id })}
+              />
+            )}
+
             {activeActor && (
               <ActorInspector
                 actor={activeActor}
@@ -311,6 +337,9 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 onChange={onUpdateActor}
                 onDelete={onDeleteActor}
                 onJumpToFrame={onJumpToFrame}
+                paths={paths}
+                onAttachToPath={onAttachActorToPath}
+                onSelectPath={(id) => onSelectObject({ type: 'path', id })}
               />
             )}
 
@@ -939,7 +968,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
             )}
 
             {/* 4. NO OBJECT SELECTED -> DOCUMENT PROPERTIES (FLASH STYLE) */}
-            {!activeChart && !activeText && !activeStick && !activeGroup && !activeActor && (
+            {!activeChart && !activeText && !activeStick && !activeGroup && !activeActor && !activePath && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-neutral-800">
                   <div className="p-1.5 rounded bg-sky-500/10 text-sky-400">

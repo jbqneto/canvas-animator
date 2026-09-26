@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, Image as ImageIcon, Timer, Trash2 } from 'lucide-react';
-import type { ActorOverlay } from '../types';
+import type { ActorOverlay, MotionPath } from '../types';
+import { ActorFollowPanel } from './ActorFollowPanel';
 import {
   ActorProperty,
   actorHasKeyAt,
@@ -9,6 +10,7 @@ import {
   isAnimated,
   setActorProperty,
   toggleAnimated,
+  followedPath,
 } from '../engine/actor';
 import {
   EASING_OPTIONS,
@@ -29,6 +31,9 @@ interface ActorInspectorProps {
   onChange: (actor: ActorOverlay, description: string) => void;
   onDelete: (id: string) => void;
   onJumpToFrame: (frame: number) => void;
+  paths: MotionPath[];
+  onAttachToPath: (actorId: string, pathId: string) => void;
+  onSelectPath: (pathId: string) => void;
 }
 
 const PROPS: { id: ActorProperty; label: string }[] = [
@@ -49,7 +54,11 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
   onChange,
   onDelete,
   onJumpToFrame,
+  paths,
+  onAttachToPath,
+  onSelectPath,
 }) => {
+  const following = !!followedPath(actor, paths);
   const track = (prop: ActorProperty) => actor.tracks[prop] as Track<unknown> | undefined;
   const keyFrames = actorKeyframes(actor);
   const prevKey = [...keyFrames].reverse().find((f) => f < currentFrame);
@@ -58,8 +67,8 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
 
   // Easing shown for the keys at the current frame (they share one when set from here)
   const easingHere = (() => {
-    for (const p of PROPS) {
-      const k = track(p.id)?.find((key) => key.frame === currentFrame);
+    for (const t of [...PROPS.map((p) => track(p.id)), actor.follow?.progress]) {
+      const k = t?.find((key) => key.frame === currentFrame);
       if (k) return k.easing ?? DEFAULT_EASING;
     }
     return null;
@@ -90,10 +99,14 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
     (Object.keys(tracks) as ActorProperty[]).forEach((p) => {
       (tracks as any)[p] = setKeyframeEasing(tracks[p] as Track<any>, currentFrame, easing);
     });
-    onChange({ ...actor, tracks }, `Suavização do keyframe ${currentFrame}`);
+    const follow = actor.follow && {
+      ...actor.follow,
+      progress: setKeyframeEasing(actor.follow.progress, currentFrame, easing),
+    };
+    onChange({ ...actor, tracks, follow }, `Suavização do keyframe ${currentFrame}`);
   };
 
-  const pos = actorPropertyValue(actor, 'position', currentFrame);
+  const pos = actorPropertyValue(actor, 'position', currentFrame, paths);
   const scale = actorPropertyValue(actor, 'scale', currentFrame);
   const rotation = actorPropertyValue(actor, 'rotation', currentFrame);
   const opacity = actorPropertyValue(actor, 'opacity', currentFrame);
@@ -222,7 +235,16 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
 
       {/* Animatable properties */}
       <div className="space-y-2.5">
-        {PROPS.map(({ id, label }) => {
+        <ActorFollowPanel
+          actor={actor}
+          paths={paths}
+          currentFrame={currentFrame}
+          fps={fps}
+          onChange={onChange}
+          onAttach={onAttachToPath}
+          onSelectPath={onSelectPath}
+        />
+        {PROPS.filter(({ id }) => !(following && id === 'position')).map(({ id, label }) => {
           const animated = isAnimated(actor, id);
           const keyAtFrame = hasKeyframeAt(track(id), currentFrame);
           return (
@@ -283,15 +305,17 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       {/* Motion path options */}
       <div className="space-y-1.5 pt-2 border-t border-neutral-800">
         <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-          Caminho
+          Opções de movimento
         </span>
         {(
           [
-            ['smoothPath', 'Caminho curvo (suave entre os pontos)'],
-            ['orientToPath', 'Orientar ao caminho (gira na direção do movimento)'],
+            ['smoothPath', 'Caminho curvo entre os keyframes de posição'],
+            ['orientToPath', 'Orientar ao caminho dos keyframes (gira na direção do movimento)'],
             ['flipX', 'Espelhar horizontalmente'],
           ] as const
-        ).map(([key, label]) => (
+        )
+          // The keyframe-path options don't apply while following a drawn path
+          .filter(([key]) => !following || key === 'flipX').map(([key, label]) => (
           <label key={key} className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer">
             <input
               type="checkbox"
