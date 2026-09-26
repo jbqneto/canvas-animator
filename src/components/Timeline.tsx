@@ -148,25 +148,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     };
   }, [addMenuOpen]);
 
-  // Auto-play interval
-  useEffect(() => {
-    let interval: any = null;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setCurrentFrame((prev) => {
-          if (prev >= totalFrames) {
-            if (isLooping) return 1;
-            setIsPlaying(false);
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 1000 / fps);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isPlaying, fps, totalFrames, isLooping, setCurrentFrame, setIsPlaying]);
+  // Playback clock lives in App (synced with the background video)
 
   // Keyboard navigation shortcuts
   useEffect(() => {

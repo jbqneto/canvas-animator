@@ -21,6 +21,8 @@ import {
   Palette,
   Check,
   Zap,
+  Upload,
+  VideoOff,
 } from 'lucide-react';
 import {
   ChartOverlay,
@@ -64,6 +66,7 @@ interface PropertiesInspectorProps {
   setTotalFrames: (total: number) => void;
   videoBg: VideoBackground;
   setVideoBg: React.Dispatch<React.SetStateAction<VideoBackground>>;
+  onUploadVideo: (file: File) => void;
   // Canvas Dimensions & Presets (YouTube, Shorts, etc.)
   canvasDimensions: import('../types').CanvasDimensions;
   onUpdateCanvasDimensions: (dim: import('../types').CanvasDimensions) => void;
@@ -105,6 +108,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   setTotalFrames,
   videoBg,
   setVideoBg,
+  onUploadVideo,
   canvasDimensions,
   onUpdateCanvasDimensions,
   timelineHeight,
@@ -1112,6 +1116,57 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Background Video (the footage the overlays enrich) */}
+                <div className="space-y-2">
+                  <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
+                    Vídeo de Fundo
+                  </span>
+                  <label className="flex items-center gap-2 p-2 rounded border border-dashed border-neutral-700 hover:border-purple-500 bg-neutral-900 cursor-pointer transition text-xs text-neutral-300">
+                    <Upload size={14} className="text-purple-400" />
+                    <span>
+                      {videoBg.type === 'upload' ? 'Trocar vídeo (MP4/WebM)' : 'Carregar vídeo (MP4/WebM)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onUploadVideo(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {videoBg.type !== 'color' && videoBg.url && (
+                    <>
+                      <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                        <span>Opacidade do vídeo</span>
+                        <span className="font-mono text-neutral-200">
+                          {Math.round(videoBg.opacity * 100)}%
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="1"
+                        step="0.05"
+                        value={videoBg.opacity}
+                        onChange={(e) =>
+                          setVideoBg((prev) => ({ ...prev, opacity: Number(e.target.value) }))
+                        }
+                        className="w-full accent-purple-500"
+                      />
+                      <button
+                        onClick={() => setVideoBg((prev) => ({ ...prev, type: 'color', url: '' }))}
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white text-xs transition"
+                      >
+                        <VideoOff size={13} />
+                        Remover vídeo
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 {/* Quick Add Elements onto Stage */}

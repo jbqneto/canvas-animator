@@ -17,7 +17,12 @@ import {
   createDefaultStickFigure,
   applyPoseToStickFigure,
 } from './utils/stickFigurePresets';
-import { exportVideoSequence, exportSnapshotPNG } from './utils/exportVideo';
+import {
+  exportVideoSequence,
+  exportFramePNG,
+  renderFrameToDataURL,
+  videoTimeForFrame,
+} from './utils/exportVideo';
 import { useHistory } from './hooks/useHistory';
 import { StudioHeader } from './components/StudioHeader';
 import { FlashCanvas } from './components/FlashCanvas';
@@ -68,7 +73,10 @@ export default function App() {
     opacity: 1,
     playbackRate: 1,
   });
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Kept in state (not only a ref) so children re-render once the <video> element mounts
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  // Set when a new video is uploaded: the timeline is resized to its length once metadata loads
+  const fitTimelineToVideoRef = useRef(false);
 
   // Initial Layers
   const initialLayers: StudioLayer[] = [
@@ -212,20 +220,66 @@ export default function App() {
   const { frames, charts, texts, images, layers } = history.present;
 
   // UI Modals & Export state
-  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [aiModalOpen, setAiModalOpen] = useState<boolean>(false);
   const [chatbotOpen, setChatbotOpen] = useState<boolean>(false);
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
 
-  // Sync hidden video currentTime with timeline scrubber
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+
+  // Sync hidden video currentTime with timeline scrubber (while paused; playback drives itself)
   useEffect(() => {
-    const v = videoRef.current;
+    const v = videoEl;
+    if (isPlaying || isExporting) return;
     if (v && videoBg.type !== 'color' && v.duration) {
-      const timeInSec = (currentFrame - 1) / fps;
-      v.currentTime = timeInSec % v.duration;
+      v.currentTime = videoTimeForFrame(currentFrame, fps, v.duration);
     }
-  }, [currentFrame, fps, videoBg.type]);
+  }, [currentFrame, fps, videoBg.type, videoEl, isPlaying, isExporting]);
+
+  // Playback clock: wall-clock based requestAnimationFrame loop. The background video plays
+  // natively and is only re-synced when it drifts, instead of being seeked on every frame.
+  const currentFrameRef = useRef(currentFrame);
+  currentFrameRef.current = currentFrame;
+  useEffect(() => {
+    if (!isPlaying) return;
+    const v = videoEl && videoBg.type !== 'color' ? videoEl : null;
+    let baseFrame = currentFrameRef.current >= totalFrames ? 1 : currentFrameRef.current;
+    let baseTime = performance.now();
+    let raf = 0;
+
+    if (v) {
+      v.playbackRate = 1;
+      v.currentTime = videoTimeForFrame(baseFrame, fps, v.duration);
+      v.play().catch(() => undefined);
+    }
+
+    const tick = (now: number) => {
+      let frame = baseFrame + Math.floor(((now - baseTime) / 1000) * fps);
+      if (frame > totalFrames) {
+        if (!isLooping) {
+          setCurrentFrame(totalFrames);
+          setIsPlaying(false);
+          return;
+        }
+        baseFrame = 1;
+        baseTime = now;
+        frame = 1;
+      }
+      if (v && v.duration) {
+        const expected = videoTimeForFrame(frame, fps, v.duration);
+        if (Math.abs(v.currentTime - expected) > 0.25) v.currentTime = expected;
+        if (v.paused) v.play().catch(() => undefined);
+      }
+      setCurrentFrame(frame);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      v?.pause();
+    };
+  }, [isPlaying, fps, totalFrames, isLooping, videoEl, videoBg.type]);
 
   // Frame update handler
   const handleUpdateFrameData = useCallback(
@@ -667,12 +721,22 @@ export default function App() {
 
     let updatedCharts = charts;
     let updatedTexts = texts;
+    let updatedFrames = history.present.frames;
 
     if (layer.targetId) {
       if (layer.type === 'chart') {
         updatedCharts = charts.filter((c) => c.id !== layer.targetId);
       } else if (layer.type === 'text') {
         updatedTexts = texts.filter((t) => t.id !== layer.targetId);
+      } else if (layer.type === 'group') {
+        // Stick figure layer: remove the figure from every frame, otherwise it stays on stage
+        updatedFrames = {};
+        for (const [fNum, fData] of Object.entries(history.present.frames)) {
+          updatedFrames[Number(fNum)] = {
+            ...fData,
+            stickFigures: fData.stickFigures.filter((s) => s.id !== layer.targetId),
+          };
+        }
       }
     }
 
@@ -681,6 +745,7 @@ export default function App() {
       layers: layers.filter((l) => l.id !== layerId),
       charts: updatedCharts,
       texts: updatedTexts,
+      frames: updatedFrames,
     });
 
     if (selectedLayerId === layerId) {
@@ -974,6 +1039,8 @@ export default function App() {
 
   // Video Upload
   const handleUploadVideo = (file: File) => {
+    if (videoBg.url?.startsWith('blob:')) URL.revokeObjectURL(videoBg.url);
+    fitTimelineToVideoRef.current = true;
     const objectUrl = URL.createObjectURL(file);
     setVideoBg({
       type: 'upload',
@@ -990,7 +1057,7 @@ export default function App() {
     setIsPlaying(false);
 
     try {
-      const blob = await exportVideoSequence(
+      const { blob, extension } = await exportVideoSequence(
         frames,
         totalFrames,
         fps,
@@ -998,7 +1065,7 @@ export default function App() {
         texts,
         images,
         videoBg,
-        videoRef.current,
+        videoEl,
         (progress) => setExportProgress(progress),
         layers,
         canvasDimensions.width,
@@ -1008,31 +1075,41 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `animacao-flashmotion-${Date.now()}.webm`;
+      a.download = `animacao-flashmotion-${Date.now()}.${extension}`;
       a.click();
-      URL.revokeObjectURL(url);
+      // Revoking synchronously can cancel the download before the browser starts it
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       console.error('Export error:', err);
+      alert(`Falha ao exportar o vídeo: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsExporting(false);
       setExportProgress(0);
     }
   };
 
+  // Clean render of the current frame (no editor grid or selection handles)
+  const currentFrameRenderParams = () => ({
+    width: canvasDimensions.width,
+    height: canvasDimensions.height,
+    frame: currentFrame,
+    frameData: frames[currentFrame],
+    charts,
+    texts,
+    images,
+    videoBg,
+    videoElement: videoEl,
+    layers,
+  });
+
   // Snapshot PNG
   const handleSnapshot = () => {
-    const canvas = document.querySelector('canvas');
-    if (canvas) {
-      exportSnapshotPNG(canvas, `frame-${currentFrame}-snapshot.png`);
-    }
+    exportFramePNG(currentFrameRenderParams(), `frame-${currentFrame}-snapshot.png`);
   };
 
   // Open AI Image Modal
-  const handleOpenAiImage = () => {
-    const canvas = document.querySelector('canvas');
-    if (canvas) {
-      setCanvasSnapshot(canvas.toDataURL('image/png'));
-    }
+  const handleOpenAiImage = async () => {
+    setCanvasSnapshot(await renderFrameToDataURL(currentFrameRenderParams()));
     setAiModalOpen(true);
   };
 
@@ -1041,8 +1118,16 @@ export default function App() {
       {/* Hidden Video element for background video frame grabbing */}
       {videoBg.url && (
         <video
-          ref={videoRef}
+          ref={setVideoEl}
           src={videoBg.url}
+          onLoadedMetadata={(e) => {
+            if (!fitTimelineToVideoRef.current) return;
+            fitTimelineToVideoRef.current = false;
+            const duration = e.currentTarget.duration;
+            if (Number.isFinite(duration) && duration > 0) {
+              setTotalFrames(Math.max(1, Math.round(duration * fps)));
+            }
+          }}
           crossOrigin="anonymous"
           muted
           playsInline
@@ -1107,7 +1192,7 @@ export default function App() {
             onDeleteText={handleDeleteText}
             images={images}
             videoBg={videoBg}
-            videoElement={videoRef.current}
+            videoElement={videoEl}
             isPlaying={isPlaying}
             layers={layers}
             onGroupSelected={handleGroupSelected}
@@ -1131,8 +1216,8 @@ export default function App() {
               id: `chart-${Date.now()}`,
               title: 'Novo Gráfico Animado',
               type: chartType || 'bar',
-              x: 640,
-              y: 160,
+              x: Math.round(canvasDimensions.width * 0.5),
+              y: Math.round(canvasDimensions.height * 0.22),
               width: 480,
               height: 280,
               startFrame: currentFrame,
@@ -1158,8 +1243,8 @@ export default function App() {
             const newText: TextOverlay = {
               id: `text-${Date.now()}`,
               text: isNumber ? 'Contador' : 'Novo Texto Animado',
-              x: 640,
-              y: 220,
+              x: Math.round(canvasDimensions.width * 0.5),
+              y: Math.round(canvasDimensions.height * 0.3),
               fontSize: 28,
               color: '#ffffff',
               startFrame: currentFrame,
@@ -1216,6 +1301,7 @@ export default function App() {
           setTotalFrames={setTotalFrames}
           videoBg={videoBg}
           setVideoBg={setVideoBg}
+          onUploadVideo={handleUploadVideo}
           pastSteps={history.past}
           futureSteps={history.future}
           onJumpToHistory={history.jumpToSnapshot}
@@ -1228,7 +1314,6 @@ export default function App() {
           timelineHeight={timelineHeight}
           setTimelineHeight={setTimelineHeight}
           onDeleteStickFigure={handleDeleteStickFigure}
-          onJumpToFrame={setCurrentFrame}
         />
       </div>
 
@@ -1275,7 +1360,7 @@ export default function App() {
           onUpdateText={handleTransientUpdateText}
           onCommitChart={handleCommitChart}
           onCommitText={handleCommitText}
-          getCurrentSnapshot={history.getCurrentSnapshot}
+          getCurrentSnapshot={() => history.presentRef.current}
           onJumpToFrame={setCurrentFrame}
         />
       </div>

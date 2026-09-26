@@ -13,7 +13,8 @@ import {
   CanvasGroup,
   HistorySnapshot,
 } from '../types';
-import { renderCompositeFrame } from '../utils/exportVideo';
+import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
+import { onImageLoaded } from '../utils/imageCache';
 import {
   MousePointer,
   Move,
@@ -87,6 +88,13 @@ interface FlashCanvasProps {
   canvasHeight?: number;
   getCurrentSnapshot: () => HistorySnapshot;
 }
+
+const emptyFrame = (frameNumber: number): FrameData => ({
+  frameNumber,
+  stickFigures: [],
+  drawings: [],
+  groups: [],
+});
 
 // Distance from point to line segment (for stick figure bone hit testing)
 function distToSegment(
@@ -198,6 +206,18 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     [canvasWidth, canvasHeight]
   );
 
+  // Assets finish loading asynchronously (video seeks, images): bump a counter to redraw,
+  // otherwise the stage keeps showing the previous video frame after a scrub.
+  const [assetTick, setAssetTick] = useState(0);
+  useEffect(() => onImageLoaded(() => setAssetTick((t) => t + 1)), []);
+  useEffect(() => {
+    if (!videoElement) return;
+    const redraw = () => setAssetTick((t) => t + 1);
+    const events = ['seeked', 'loadeddata'] as const;
+    events.forEach((ev) => videoElement.addEventListener(ev, redraw));
+    return () => events.forEach((ev) => videoElement.removeEventListener(ev, redraw));
+  }, [videoElement]);
+
   // ================= MAIN CANVAS RENDER EFFECT =================
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -217,7 +237,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       images,
       videoBg,
       videoElement,
-      layers
+      layers,
+      { showGrid: true }
     );
 
     // Optional Onion Skin (previous frame faint silhouette) ONLY IF explicitly turned ON
@@ -462,6 +483,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     currentStroke,
     isPlaying,
     frames,
+    assetTick,
   ]);
 
   // ================= GLOBAL WINDOW DRAG LISTENERS =================
@@ -471,6 +493,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     (e: MouseEvent) => {
       const session = dragSessionRef.current;
       if (!session) return;
+
+      // Always read the latest committed/transient state: this listener is registered once on
+      // mouse down, so props captured by the closure would be stale during the drag.
+      const latest = getCurrentSnapshot();
+      const currentFrameData = latest.frames[currentFrame] || emptyFrame(currentFrame);
+      const { charts, texts } = latest;
 
       const pt = getCanvasCoordinates(e);
       const dist = Math.hypot(pt.x - session.startCanvasPt.x, pt.y - session.startCanvasPt.y);
@@ -558,10 +586,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     },
     [
       getCanvasCoordinates,
+      getCurrentSnapshot,
       currentFrame,
-      currentFrameData,
-      charts,
-      texts,
       onTransientUpdateFrameData,
       onTransientUpdateChart,
       onTransientUpdateText,
@@ -578,11 +604,15 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
       if (!session) return;
 
+      // Same as mousemove: commit what the drag produced, not the pre-drag props of this closure
+      const latest = getCurrentSnapshot();
+      const currentFrameData = latest.frames[currentFrame] || emptyFrame(currentFrame);
+      const { charts, texts } = latest;
+
       // Only commit to history if the object was actually dragged!
       // This eliminates intermediate movements and guarantees 1-step undo!
       if (session.hasMoved) {
         if (session.targetType === 'joint') {
-          const stick = currentFrameData.stickFigures.find((s) => s.id === session.targetId);
           onCommitFrameData(
             currentFrame,
             currentFrameData,
@@ -617,15 +647,21 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     },
     [
       onWindowMouseMove,
+      getCurrentSnapshot,
       currentFrame,
-      currentFrameData,
-      charts,
-      texts,
       onCommitFrameData,
       onCommitChart,
       onCommitText,
     ]
   );
+
+  // Hidden or locked layers can't be picked or edited on the stage
+  const isEditable = (targetId: string | undefined, type: 'drawing' | 'chart' | 'text') => {
+    const resolved = resolveObjectLayer(layers, targetId, type);
+    return !resolved || (resolved.layer.visible && !resolved.layer.locked);
+  };
+  const isOnScreen = (item: { startFrame: number; durationFrames: number }) =>
+    currentFrame >= item.startFrame && currentFrame <= item.startFrame + item.durationFrames;
 
   // ================= MOUSE DOWN: HIT TESTING & DRAG INITIATION =================
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -640,11 +676,13 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       activeTool === 'circle' ||
       activeTool === 'eraser'
     ) {
+      if (!isEditable(undefined, 'drawing')) return;
       strokeBaseSnapshotRef.current = getCurrentSnapshot();
 
       if (activeTool === 'eraser') {
         // Erase strokes within 20px of click
         const remaining = currentFrameData.drawings.filter((stroke) => {
+          if (!isEditable(stroke.groupId, 'drawing')) return true;
           const hit = stroke.points.some((p) => Math.hypot(p.x - pt.x, p.y - pt.y) < 22);
           return !hit;
         });
@@ -676,7 +714,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // 2A. Check if clicking Chart Resize Handles (if chart is selected)
     if (selectedObject?.type === 'chart') {
       const activeChart = charts.find((c) => c.id === selectedObject.id);
-      if (activeChart && activeChart.visible) {
+      if (activeChart && activeChart.visible && isEditable(activeChart.id, 'chart')) {
         const cornerHandleX = activeChart.x + activeChart.width + 3;
         const cornerHandleY = activeChart.y + activeChart.height + 3;
         if (Math.hypot(pt.x - cornerHandleX, pt.y - cornerHandleY) <= 14) {
@@ -699,6 +737,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
     // 2B. Hit Test: Stick Figure Joints (Priority)
     for (const stick of currentFrameData.stickFigures) {
+      if (!isEditable(stick.id, 'drawing')) continue;
       for (const [jId, joint] of Object.entries(stick.joints)) {
         const worldJx = stick.x + joint.x * stick.scale;
         const worldJy = stick.y + joint.y * stick.scale;
@@ -726,6 +765,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
     // 2C. Hit Test: Stick Figure Body Bones & Torso
     for (const stick of currentFrameData.stickFigures) {
+      if (!isEditable(stick.id, 'drawing')) continue;
       let hit = false;
       // Center anchor hit
       if (Math.hypot(pt.x - stick.x, pt.y - stick.y) <= 22) {
@@ -769,7 +809,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // 2D. Hit Test: Chart Overlays (Top to bottom)
     for (let i = charts.length - 1; i >= 0; i--) {
       const c = charts[i];
-      if (!c.visible) continue;
+      if (!c.visible || !isOnScreen(c) || !isEditable(c.id, 'chart')) continue;
       if (pt.x >= c.x && pt.x <= c.x + c.width && pt.y >= c.y && pt.y <= c.y + c.height) {
         onSelectObject({ type: 'chart', id: c.id });
         dragSessionRef.current = {
@@ -791,7 +831,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // 2E. Hit Test: Text Overlays
     for (let i = texts.length - 1; i >= 0; i--) {
       const t = texts[i];
-      if (!t.visible) continue;
+      if (!t.visible || !isOnScreen(t) || !isEditable(t.id, 'text')) continue;
       const textWidth = Math.max(160, t.text.length * (t.fontSize * 0.55));
       const textHeight = t.fontSize * 1.5;
 
