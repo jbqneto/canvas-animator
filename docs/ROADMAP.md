@@ -5,6 +5,10 @@ Este arquivo é a memória do trabalho: status, decisões e contratos que a pró
 
 Base: `docs/RESEARCH.md`.
 
+**Princípio: genérico primeiro.** Pedidos concretos ("avião pousando em países") são exemplos de uso.
+Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e montar o caso específico como
+*modelo* em cima dela, sempre editável com as ferramentas normais.
+
 ## Status
 
 - [x] T0 — Correção de bugs (drag, undo da timeline, export, upload de vídeo, camadas, gráficos)
@@ -20,6 +24,9 @@ Base: `docs/RESEARCH.md`.
 - [x] T10 — PWA instalável (manifest, service worker, ícones, abrir .fmproj pelo sistema)
 - [x] T11 — Template de mapa: mapa-múndi + rota por países gerando keyframes
 - [x] T12 — PR
+- [x] T13 — Caminhos genéricos: ferramenta "Caminho" (pontilhado/tracejado/contínuo, guia invisível, revelar
+  ao percorrer) + "Seguir caminho" para qualquer imagem (tempo, paradas, progresso por keyframe); rota no
+  mapa refeita como modelo sobre essas peças
 
 ## Próximos passos sugeridos
 
@@ -68,6 +75,12 @@ Base: `docs/RESEARCH.md`.
   Testar PWA só no build de produção: `npm run build && NODE_ENV=production npm start`.
 - Mapa (`src/map/`): `worldMap.ts` carrega world-atlas 50m sob demanda (nomes pt via i18n-iso-countries),
   projeção Natural Earth (mundo ou enquadrar a rota), âncora = centróide do maior polígono. O mapa é
-  rasterizado 1× (WebP) e vira ator numa camada travada no fundo. `routeTemplate.ts` gera keys de posição
-  (pausa = 2 keys no mesmo ponto; arco = key no meio com easeIn/easeOut), escala de "pouso" e rótulos.
-  Ator ganhou `trail` (rastro percorrido). Pausa mantém a direção de chegada (`travelAngle`).
+  rasterizado 1× (WebP) e vira ator numa camada travada no fundo. `routeTemplate.ts` é só um *modelo*:
+  cria um `MotionPath` pelos países (+ ponto de arco por trecho) e um ator com `follow`, parando só nos
+  países (`stopAt`); acrescenta escala de "pouso" e rótulos.
+- Caminhos (`src/engine/path.ts`, `MotionPath` em `types.ts`): pontos + curva/fechado + estilo; amostrado por
+  comprimento de arco (memo por objeto). `ActorOverlay.follow = { pathId, progress: Track<number>, orient }`:
+  posição vem do caminho (link vivo; editar o caminho muda o movimento). `buildFollowProgress` gera o tempo
+  (paradas opcionais, tempo por trecho proporcional à distância). Keys de progresso aparecem na timeline como
+  keys do ator. Excluir caminho desliga os seguidores. UI: ferramenta no palco (FlashCanvas),
+  `PathInspector.tsx`, `ActorFollowPanel.tsx`.

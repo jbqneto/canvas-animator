@@ -14,7 +14,12 @@ qualquer editor.
   ligue o cronômetro de posição/escala/rotação/opacidade e mova o objeto em frames diferentes. Easing por
   keyframe, caminho curvo editável no palco, orientar ao caminho, rastro do percurso, losangos arrastáveis
   na linha do tempo.
-- **Rota no mapa**: escolha países na ordem da viagem e o avião voa em arco, pousa em cada um e mostra o nome.
+- **Caminhos + "seguir caminho"** (motion guide do Flash): desenhe uma rota clicando pontos (pontilhada,
+  tracejada, contínua ou guia invisível, que pode ir aparecendo conforme é percorrida) e faça qualquer imagem
+  (PNG, SVG, JPG) percorrê-la, com tempo, suavização, paradas em cada ponto e orientação na direção do
+  movimento. Editar o caminho atualiza o movimento.
+- **Modelos** montados com essas peças, por exemplo "Rota no mapa": mapa-múndi + caminho pelos países +
+  avião que o segue e pousa em cada um. Tudo o que o modelo cria continua editável.
 - **Boneco palito**: poses com cinemática direta (girar o osso leva o resto do membro), poses prontas e
   interpolação de pose entre dois frames (tween clássico), onion skin.
 - **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto.
