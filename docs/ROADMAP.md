@@ -29,14 +29,16 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   mapa refeita como modelo sobre essas peças
 - [x] T14 — i18n pt-BR / en-US: seletor no topo direito, escolha salva no localStorage
 - [x] T15 — CI (GitHub Actions): typecheck, testes, `i18n:scan` e build em todo PR e push na main
+- [x] T16 — Áudio de referência: faixas de áudio (narração, música, efeito ou o som de um vídeo) com forma de
+  onda na timeline, mover/cortar, volume/mudo, ouvir ao arrastar (scrub), mixadas no export
 
 ## Próximos passos sugeridos
 
-1. Áudio de referência (narração/música) com forma de onda na timeline e mixado no export.
+1. Timeline com zoom e tempo em segundos (a grade já é CSS desde T16).
 2. Migrar gráficos e textos para o mesmo modelo de keyframes dos atores (hoje usam "motion tween P1→P2").
-3. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-4. Timeline com zoom e tempo em segundos; desenhar a grade com CSS em vez de uma div por frame.
-5. Biblioteca de ícones/veículos (carro, navio, pino) para o template de rota.
+3. Biblioteca de modelos montados sobre as peças genéricas.
+4. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+5. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
 6. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
@@ -92,3 +94,14 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   `<html lang>` acompanha. Conteúdo do vídeo (formato de números dos contadores, textos já criados) NÃO
   segue o idioma da interface. Nomes de países do mapa seguem. `npm run i18n:scan` lista textos fora do
   dicionário (sai com código 1 se houver). Para um novo idioma: criar o dicionário tipado e somar em `LOCALES`.
+- Áudio (`AudioClip` em `types.ts`, snapshot `audio?`): arquivo embutido como data URL (projeto continua um
+  arquivo só); vídeos e áudios > 8 MB são reconvertidos para Opus/WebM via mediabunny (`Conversion`).
+  Tempo: `startFrame` (quadro) + `offset`/`duration` (segundos no arquivo). Toda a temporização passa por
+  `clipPlayback(clip, fps, de, até)` em `src/engine/audio.ts` (playback, scrub e mixagem concordam).
+  Runtime em `src/audio/audioRuntime.ts`: decodificação em cache por id+src (identidade), `playClips` agenda
+  no AudioContext a partir do relógio do playback (performance.now continua mestre), `scrubClips` toca
+  ~1 quadro com fade, `mixdown` renderiza o trecho exportado num OfflineAudioContext. Export: faixa de áudio
+  opcional (AAC no MP4 quando o navegador codifica; senão Opus); WebM transparente começa sem áudio.
+  Importar áudio estende a timeline para caber (nunca encolhe). UI: `components/AudioTracks.tsx`.
+- Timeline: grade e régua por CSS (`frameGridStyle`/`rulerLabels`), sem um elemento por quadro; as listas da
+  esquerda e da direita têm rolagem sincronizada; arrastar na régua faz scrub contínuo. Máx. 36.000 quadros.

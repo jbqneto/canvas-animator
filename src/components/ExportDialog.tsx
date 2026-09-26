@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, Film, Layers, Loader2, X } from 'lucide-react';
 import type { ExportFormat } from '../utils/exportVideo';
 import { MessageKey, useI18n } from '../i18n';
@@ -7,6 +7,7 @@ export interface ExportRequest {
   format: ExportFormat;
   startFrame: number;
   endFrame: number;
+  includeAudio: boolean;
 }
 
 interface ExportDialogProps {
@@ -20,6 +21,8 @@ interface ExportDialogProps {
   width: number;
   height: number;
   hasBackgroundVideo: boolean;
+  /** Number of audio clips that would be mixed (muted ones don't count). */
+  audibleClips: number;
 }
 
 const FORMATS: { id: ExportFormat; title: MessageKey; description: MessageKey; icon: React.ReactNode }[] = [
@@ -38,16 +41,24 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   width,
   height,
   hasBackgroundVideo,
+  audibleClips,
 }) => {
   const { t } = useI18n();
   const [format, setFormat] = useState<ExportFormat>('mp4');
+  // A transparent layer usually goes over a video that already has the sound, so it starts off there
+  const [includeAudio, setIncludeAudio] = useState<Record<ExportFormat, boolean>>({ mp4: true, 'webm-alpha': false });
   const [startFrame, setStartFrame] = useState(1);
   const [endFrame, setEndFrame] = useState(totalFrames);
 
-  // Keep the range valid when the timeline length changes
+  // Keep the range valid when the timeline length changes; a range that ended at the end of the
+  // timeline keeps doing so (importing a long narration grows the timeline)
+  const previousTotal = useRef(totalFrames);
   useEffect(() => {
-    setEndFrame((e) => Math.min(Math.max(e, 1), totalFrames) || totalFrames);
+    const wasAtEnd = endFrame >= previousTotal.current;
+    previousTotal.current = totalFrames;
+    setEndFrame((e) => (wasAtEnd ? totalFrames : Math.min(Math.max(e, 1), totalFrames) || totalFrames));
     setStartFrame((s) => Math.min(s, totalFrames));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalFrames]);
 
   if (!isOpen) return null;
@@ -125,6 +136,20 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </span>
         </div>
 
+        {audibleClips > 0 && (
+          <label className="flex items-center gap-2 text-neutral-300 cursor-pointer">
+            <input
+              id="export-include-audio"
+              type="checkbox"
+              checked={includeAudio[format]}
+              disabled={isExporting}
+              onChange={(e) => setIncludeAudio((prev) => ({ ...prev, [format]: e.target.checked }))}
+              className="accent-sky-500"
+            />
+            <span>{t('export.includeAudio', { count: audibleClips })}</span>
+          </label>
+        )}
+
         {isExporting ? (
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-sky-300">
@@ -136,7 +161,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </div>
         ) : (
           <button
-            onClick={() => onExport({ format, startFrame: first, endFrame: last })}
+            onClick={() => onExport({ format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format] })}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
           >
             <Download size={15} /> {format === 'mp4' ? t('export.buttonMp4') : t('export.buttonAlpha')}

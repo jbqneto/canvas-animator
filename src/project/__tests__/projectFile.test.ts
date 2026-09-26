@@ -44,8 +44,30 @@ describe('project file', () => {
     const old = JSON.stringify({ format: 'flashmotion-project', version: 1, project: { content: { frames: {} } } });
     const parsed = parseProject(old);
     expect(parsed.content.actors).toEqual([]);
+    expect(parsed.content.audio).toEqual([]);
     expect(parsed.fps).toBe(24);
     expect(parsed.totalFrames).toBe(60);
+  });
+
+  it('keeps embedded audio clips and repairs their timing', () => {
+    const base = state();
+    const clip = {
+      id: 'v1', name: 'narração', src: 'data:audio/webm;base64,AA', sourceDuration: 12,
+      startFrame: 10, offset: 2, duration: 5, volume: 0.8, muted: true,
+    };
+    base.content.audio = [clip];
+    expect(parseProject(serializeProject(base)).content.audio).toEqual([clip]);
+
+    const broken = JSON.stringify({
+      format: 'flashmotion-project', version: 1,
+      project: { content: { audio: [
+        { id: 'x', src: 'data:audio/wav;base64,AA', sourceDuration: 4, offset: 9, duration: 50, volume: 7, startFrame: -3 },
+        { id: 'no-data', src: 'blob:lost', sourceDuration: 4 },
+      ] } },
+    });
+    const [repaired, ...rest] = parseProject(broken).content.audio!;
+    expect(rest).toEqual([]);
+    expect(repaired).toMatchObject({ startFrame: 1, offset: 4, duration: 0, volume: 2, muted: false });
   });
 
   it('rejects files that are not projects', () => {

@@ -23,6 +23,9 @@ qualquer editor.
 - **Boneco palito**: poses com cinemática direta (girar o osso leva o resto do membro), poses prontas e
   interpolação de pose entre dois frames (tween clássico), onion skin.
 - **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto.
+- **Áudio de referência**: narração, música ou efeitos (ou o som de um vídeo) na timeline com forma de onda.
+  Mova e corte as faixas, ajuste volume/mudo e ouça o trecho ao arrastar o cursor (scrub) para acertar a
+  animação na palavra ou na batida. O áudio vai junto no export (opcional) e fica salvo dentro do projeto.
 - **Projeto em arquivo** `.fmproj` (Ctrl+S / Ctrl+O), autosave com recuperação, e o app instalado abre
   `.fmproj` direto do sistema.
 - **Export** MP4 (H.264) ou WebM transparente, com trecho de frames, codificado via WebCodecs com tempo exato.
@@ -36,7 +39,7 @@ Requer Node 20+.
 ```bash
 npm install
 npm run dev        # http://localhost:3000 (Express + Vite)
-npm test           # Vitest (motor de keyframes, rig do boneco, rota, formato de projeto)
+npm test           # Vitest (keyframes, rig do boneco, caminhos, áudio, formato de projeto)
 npm run lint       # typecheck
 npm run i18n:scan  # textos da interface fora dos dicionários (src/i18n)
 npm run build && NODE_ENV=production npm start   # build de produção (necessário para testar o PWA)
@@ -50,7 +53,8 @@ Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`).
 
 | Pasta | Conteúdo |
 |---|---|
-| `src/engine/` | Funções puras e testadas: keyframes, easing e caminhos (`keyframes.ts`), atores (`actor.ts`), rig do boneco (`stickRig.ts`). |
+| `src/engine/` | Funções puras e testadas: keyframes, easing e caminhos (`keyframes.ts`), atores (`actor.ts`), rig do boneco (`stickRig.ts`), tempo dos clipes de áudio (`audio.ts`). |
+| `src/audio/` | Web Audio: decodificação, playback, scrub, mixagem do export e importação de áudio/vídeo. |
 | `src/utils/exportVideo.ts` | `renderCompositeFrame` desenha um frame (preview e export usam a mesma função) e o export via mediabunny. |
 | `src/project/` | Formato `.fmproj`, abrir/salvar (File System Access API) e autosave (IndexedDB). |
 | `src/map/` | Mapa-múndi (world-atlas / Natural Earth) e o template de rota. |

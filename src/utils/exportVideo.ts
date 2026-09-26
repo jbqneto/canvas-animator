@@ -732,6 +732,19 @@ export interface ExportedVideo {
   blob: Blob;
   /** File extension matching the container that was actually produced ('mp4' or 'webm'). */
   extension: 'mp4' | 'webm';
+  /** Audio was requested but the browser can't encode it for this container, so it was left out. */
+  audioDropped?: boolean;
+}
+
+/** First audio codec this browser can encode for the container (AAC for MP4 when available). */
+async function pickAudioCodec(format: { getSupportedAudioCodecs(): string[] }, audio: AudioBuffer) {
+  const { getFirstEncodableAudioCodec } = await loadMediabunny();
+  const preferred = ['aac', 'opus', 'vorbis'] as const;
+  const supported = format.getSupportedAudioCodecs();
+  return getFirstEncodableAudioCodec(
+    preferred.filter((c) => supported.includes(c)),
+    { numberOfChannels: audio.numberOfChannels, sampleRate: audio.sampleRate }
+  );
 }
 
 /**
@@ -780,6 +793,8 @@ export async function exportVideoSequence(
     /** Inclusive frame range; defaults to the whole timeline. */
     startFrame?: number;
     endFrame?: number;
+    /** Sound for the exported range (already mixed and exactly as long as it). */
+    audio?: AudioBuffer | null;
   }
 ): Promise<ExportedVideo> {
   const { totalFrames, fps, onProgress } = options;
@@ -816,7 +831,7 @@ export async function exportVideoSequence(
   const restoreVideoTime = video?.currentTime ?? 0;
   video?.pause();
 
-  const { Output, BufferTarget, CanvasSource, QUALITY_HIGH } = await loadMediabunny();
+  const { Output, BufferTarget, CanvasSource, AudioBufferSource, QUALITY_HIGH } = await loadMediabunny();
   const output = new Output({ format: picked.format, target: new BufferTarget() });
   const source = new CanvasSource(exportCanvas, {
     codec: picked.codec,
@@ -825,7 +840,14 @@ export async function exportVideoSequence(
     alpha: transparent ? 'keep' : 'discard',
   });
   output.addVideoTrack(source, { frameRate: fps });
+
+  const audio = options.audio ?? null;
+  const audioCodec = audio ? await pickAudioCodec(picked.format, audio) : null;
+  const audioSource = audio && audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: QUALITY_HIGH }) : null;
+  if (audioSource) output.addAudioTrack(audioSource);
   await output.start();
+  // The whole mix goes in up front; mediabunny interleaves it with the video as frames arrive
+  const audioDone = audio && audioSource ? audioSource.add(audio).then(() => audioSource.close()) : null;
 
   const frameDuration = 1 / fps;
   try {
@@ -841,6 +863,8 @@ export async function exportVideoSequence(
         onProgress(Math.round(((f - first + 1) / (last - first + 1)) * 100));
       }
     }
+    source.close();
+    await audioDone;
     await output.finalize();
   } catch (err) {
     await output.cancel();
@@ -850,7 +874,11 @@ export async function exportVideoSequence(
   }
 
   const mimeType = picked.extension === 'mp4' ? 'video/mp4' : 'video/webm';
-  return { blob: new Blob([output.target.buffer!], { type: mimeType }), extension: picked.extension };
+  return {
+    blob: new Blob([output.target.buffer!], { type: mimeType }),
+    extension: picked.extension,
+    audioDropped: !!audio && !audioSource,
+  };
 }
 
 /** Renders one clean frame (no grid, no selection handles) and downloads it as PNG. */

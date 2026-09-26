@@ -250,6 +250,28 @@ export interface MotionPath {
   durationFrames: number;
 }
 
+/**
+ * A sound on the timeline (narration, music, effect): used as timing reference while animating and
+ * mixed into the export. The file is embedded so the project stays a single file.
+ */
+export interface AudioClip {
+  id: string;
+  name: string;
+  /** Audio file as a data URL. */
+  src: string;
+  /** Length of the whole source, in seconds. */
+  sourceDuration: number;
+  /** Timeline frame where the clip starts playing. */
+  startFrame: number;
+  /** Seconds skipped at the beginning of the source (trim). */
+  offset: number;
+  /** Seconds played from `offset` on (trim at the end). */
+  duration: number;
+  /** Gain, 0..2 (1 = original level). */
+  volume: number;
+  muted: boolean;
+}
+
 export interface FrameData {
   frameNumber: number;
   stickFigures: StickFigure[];
@@ -303,6 +325,7 @@ export interface HistorySnapshot {
   images: ImageOverlay[];
   actors: ActorOverlay[];
   paths: MotionPath[];
+  audio?: AudioClip[];
   groups?: CanvasGroup[];
   videoBg?: VideoBackground;
 }
