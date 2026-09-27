@@ -752,4 +752,16 @@ export const ptBR = {
   'aiKey.problem.no-key': 'O servidor não tem chave de IA configurada. Use a sua própria chave do Gemini.',
   'aiKey.problem.offline': 'Não encontrei o servidor de IA (por exemplo, no app instalado). Com a sua chave do Gemini, a IA fala direto com o Google.',
   'aiKey.problem.bad-key': 'O Google recusou a sua chave. Troque ou remova a chave salva.',
+
+  // Stage rotation, mirror pose, my poses
+  'stage.history.rotate': 'Girar no frame {frame}',
+  'stickPose.mirror': 'Espelhar pose',
+  'stickPose.mirrorHint': 'Vira a pose como num espelho (esquerda ↔ direita) no frame atual',
+  'stickPose.mirrorName': 'espelhada',
+  'stickPose.myPoses': 'Minhas poses',
+  'stickPose.myPosesEmpty': 'Salve a pose atual com um nome para reutilizá-la em qualquer boneco e projeto deste navegador.',
+  'stickPose.namePlaceholder': 'Nome da pose',
+  'stickPose.save': 'Salvar',
+  'stickPose.saveHint': 'Salva a pose do frame atual (um nome igual substitui a anterior)',
+  'stickPose.deletePose': 'Apagar a pose "{name}"',
 };

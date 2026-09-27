@@ -14,6 +14,8 @@ import {
   stickToStrokes,
   togglePoseTrack,
   withStickLayers,
+  mirrorPose,
+  applyPose,
   stickKeyframes,
   togglePoseKey,
   worldFigure,
@@ -95,6 +97,33 @@ describe('stick actor helpers', () => {
     const layers = withStickLayers([], [s]);
     expect(layers.map((l) => [l.type, l.targetId])).toEqual([['group', 's']]);
     expect(withStickLayers(layers, [s])).toBe(layers);
+  });
+});
+
+describe('mirror and saved poses', () => {
+  it('mirrors around the anchor, swapping left and right and turning the face', () => {
+    const pose = applyPoseToStickFigure(fig(), 'wave').joints;
+    const m = mirrorPose(pose);
+    expect(m.lHand).toMatchObject({ id: 'lHand', x: -pose.rHand.x, y: pose.rHand.y });
+    expect(m.rHand).toMatchObject({ id: 'rHand', x: -pose.lHand.x, y: pose.lHand.y });
+    expect(m.head.x).toBe(-pose.head.x);
+    expect(m.head.facing).toBe(-1);
+    expect(mirrorPose(m)).toEqual({ ...pose, head: { ...pose.head, facing: 1 } });
+  });
+
+  it('the face turns halfway between a pose and its mirror', () => {
+    let s = togglePoseKey(createStickActor(fig(), 1, 20), 1);
+    s = setPose(s, 11, mirrorPose(s.joints));
+    expect(samplePose(s, 5).head.facing ?? 1).toBe(1);
+    expect(samplePose(s, 7).head.facing).toBe(-1);
+  });
+
+  it('applies a saved pose only to the joints the figure has', () => {
+    const current = fig().joints;
+    const out = applyPose(current, { rHand: { id: 'rHand', x: 1, y: 2 }, tail: { id: 'tail', x: 9, y: 9 } });
+    expect(out.rHand).toMatchObject({ x: 1, y: 2 });
+    expect(out.tail).toBeUndefined();
+    expect(out.lHand).toEqual(current.lHand);
   });
 });
 

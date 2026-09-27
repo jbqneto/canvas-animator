@@ -42,6 +42,8 @@ export interface Joint {
   radius?: number;
   color?: string;
   isControlPoint?: boolean;
+  /** Head only: the side the face looks to (1 = right, the default; -1 = left, after mirroring). */
+  facing?: 1 | -1;
 }
 
 export interface Bone {

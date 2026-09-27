@@ -40,6 +40,33 @@ export function samplePose(stick: StickActor, frame: number): StickPose {
   return interpolateStickPose(localFigure(stick, a.value), localFigure(stick, b.value), t).joints;
 }
 
+/** Joint id on the other side of the body ("lHand" ↔ "rHand"), or the same id for the spine/head. */
+const otherSide = (id: string) => (/^l[A-Z]/.test(id) ? `r${id.slice(1)}` : /^r[A-Z]/.test(id) ? `l${id.slice(1)}` : id);
+
+/**
+ * The pose seen in a mirror (around the anchor's vertical axis): x is negated and left/right joints
+ * swap names, so the figure's own left arm takes the place of its mirrored right arm (like "paste
+ * flipped pose" in 3D tools). The face turns to the other side.
+ */
+export function mirrorPose(pose: StickPose): StickPose {
+  const out: StickPose = {};
+  Object.values(pose).forEach((j) => {
+    const target = pose[otherSide(j.id)] ? otherSide(j.id) : j.id;
+    out[target] = { ...pose[target], x: -j.x, y: j.y };
+  });
+  if (out.head) out.head = { ...out.head, facing: (out.head.facing ?? 1) === 1 ? -1 : 1 };
+  return out;
+}
+
+/** Applies a stored pose to a figure: only joints the figure has are moved (other rigs keep theirs). */
+export function applyPose(current: StickPose, pose: StickPose): StickPose {
+  const out: StickPose = { ...current };
+  Object.entries(pose).forEach(([id, j]) => {
+    if (out[id]) out[id] = { ...out[id], x: j.x, y: j.y, ...(j.facing ? { facing: j.facing } : {}) };
+  });
+  return out;
+}
+
 export const hasPoseKeys = (stick: StickActor) => (stick.poses?.length ?? 0) > 0;
 
 /** Stopwatch rule for the pose: no keys → edit the rest pose; with keys → key at `frame`. */

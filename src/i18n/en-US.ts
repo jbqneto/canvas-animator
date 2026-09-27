@@ -751,4 +751,16 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'aiKey.problem.no-key': 'The server has no AI key configured. Use your own Gemini key.',
   'aiKey.problem.offline': 'The AI server was not found (e.g. in the installed app). With your own Gemini key, the AI talks to Google directly.',
   'aiKey.problem.bad-key': 'Google rejected your key. Replace or remove the saved key.',
+
+  // Stage rotation, mirror pose, my poses
+  'stage.history.rotate': 'Rotate at frame {frame}',
+  'stickPose.mirror': 'Mirror pose',
+  'stickPose.mirrorHint': 'Flips the pose as in a mirror (left ↔ right) at the current frame',
+  'stickPose.mirrorName': 'mirrored',
+  'stickPose.myPoses': 'My poses',
+  'stickPose.myPosesEmpty': 'Save the current pose with a name to reuse it on any figure and project in this browser.',
+  'stickPose.namePlaceholder': 'Pose name',
+  'stickPose.save': 'Save',
+  'stickPose.saveHint': 'Saves the pose at the current frame (the same name replaces the old one)',
+  'stickPose.deletePose': 'Delete the pose "{name}"',
 };
