@@ -109,10 +109,12 @@ export function interpolateStickPose(a: StickFigure, b: StickFigure, t: number):
   order.forEach((id) => {
     const ja = a.joints[id];
     const jb = b.joints[id] ?? ja;
+    // Non-positional fields (e.g. which way the face looks) switch halfway through
+    const base = t < 0.5 ? ja : jb;
     const parentId = parents[id];
     const radius = ja.radius !== undefined ? lerp(ja.radius, jb.radius ?? ja.radius, t) : undefined;
     if (!parentId || !joints[parentId]) {
-      joints[id] = { ...ja, x: lerp(ja.x, jb.x, t), y: lerp(ja.y, jb.y, t), ...(radius !== undefined ? { radius } : {}) };
+      joints[id] = { ...base, x: lerp(ja.x, jb.x, t), y: lerp(ja.y, jb.y, t), ...(radius !== undefined ? { radius } : {}) };
       return;
     }
     const pa = a.joints[parentId];
@@ -123,7 +125,7 @@ export function interpolateStickPose(a: StickFigure, b: StickFigure, t: number):
     const ang = angA + angleDelta(angA, angB) * t;
     const parent = joints[parentId];
     joints[id] = {
-      ...ja,
+      ...base,
       x: parent.x + Math.cos(ang) * len,
       y: parent.y + Math.sin(ang) * len,
       ...(radius !== undefined ? { radius } : {}),

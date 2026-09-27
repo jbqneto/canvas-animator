@@ -381,7 +381,7 @@ function drawStickFigure(ctx: CanvasRenderingContext2D, stick: StickFigure) {
     // Eye indicator for face direction
     ctx.fillStyle = '#09090b';
     ctx.beginPath();
-    ctx.arc(head.x + 6, head.y - 2, 3, 0, Math.PI * 2);
+    ctx.arc(head.x + 6 * (head.facing ?? 1), head.y - 2, 3, 0, Math.PI * 2);
     ctx.fill();
   }
 

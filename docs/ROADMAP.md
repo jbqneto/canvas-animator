@@ -47,10 +47,13 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   projetos antigos (uma cópia do boneco por frame) são convertidos ao abrir
 - [x] T24 — Chave própria da IA (BYOK): colada no app, testada e guardada só no navegador; com ela o copiloto
   e as imagens falam direto com o Google (app instalado/site estático sem servidor); sem ela, usa o servidor
+- [x] T25 — Girar no palco (alça redonda acima da seleção, para atores, formas, gráficos, textos e bonecos;
+  Shift = 15°), espelhar pose do boneco e "Minhas poses" (salvas no navegador, valem em qualquer projeto)
 
 ## Próximos passos sugeridos
 
-1. Boneco: rotação da junta direto no palco (anel de rotação), espelhar pose e biblioteca de poses do usuário.
+1. Levar "Minhas poses" junto no arquivo do projeto (hoje ficam só no navegador).
+2. Alças de escala no palco (cantos da seleção), como a de rotação.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -107,7 +110,14 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   (`stickToStrokes`). Migração (`migrateFrameSticks`, ao abrir projeto e nos exemplos): pose-chave onde a
   pose foi feita à mão e muda; trechos só com in-betweens do tween antigo viram easeInOut, o resto 'hold';
   posição/escala viram keys lineares só onde o movimento muda (`simplifySeries`, RDP em 0,5 px).
-  UI: `StickPosePanel.tsx` (cronômetro, navegação, easing até a próxima pose, poses prontas) + `MotionInspector`.
+  UI: `StickPosePanel.tsx` (cronômetro, navegação, easing até a próxima pose, espelhar, Minhas poses, poses
+  prontas) + `MotionInspector`. `mirrorPose` nega x e troca juntas l*/r* (como "colar pose espelhada"); a
+  cabeça ganha `facing` (-1 = olho à esquerda), que troca no meio do trecho ao interpolar. "Minhas poses":
+  `utils/userPoses.ts`, `localStorage['flashmotion.userPoses']`, aplicadas com `applyPose` (só juntas que o
+  boneco tem).
+- Alça de rotação (`FlashCanvas`): 26 px acima do meio da borda superior da caixa, em qualquer objeto animado
+  selecionado; o ângulo é acumulado passo a passo (passa de meia volta sem pular) e grava pela regra do
+  cronômetro (`setActorProperty('rotation')`); Shift arredonda para 15°.
 - Projeto (`src/project/`): `.fmproj` = JSON versionado (`serializeProject`/`parseProject`, com defaults
   para campos novos). Vídeo de fundo não é embutido (só o nome, para avisar ao abrir). File System Access
   API quando existe (Ctrl+S sobrescreve o mesmo arquivo), senão download/input. Autosave em IndexedDB

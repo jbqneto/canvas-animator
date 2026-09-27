@@ -41,6 +41,14 @@ import { localFigure, poseBox, samplePose, setPose } from '../engine/stickActor'
 import { useI18n } from '../i18n';
 
 const PATH_KEY_HIT_RADIUS = 9;
+/** Rotation handle: canvas pixels above the top edge of the selection box, and its hit radius. */
+const ROTATE_HANDLE_OFFSET = 26;
+const ROTATE_HANDLE_HIT = 10;
+/** Local (object space) point of the rotation handle, above the middle of the box's top edge. */
+const rotateHandleLocal = (box: LocalBox, scale: number) => ({
+  x: box.x + box.width / 2,
+  y: box.y - 3 - ROTATE_HANDLE_OFFSET / (scale || 1),
+});
 type Vec2Like = { x: number; y: number };
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
 import { onImageLoaded } from '../utils/imageCache';
@@ -261,6 +269,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       | 'joint'
       | 'chart'
       | 'chart-resize'
+      | 'rotate'
       | 'text'
       | 'actor'
       | 'path-key'
@@ -269,6 +278,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     /** For 'path-anchor': index of the dragged point. */
     anchorIndex?: number;
     initialPath?: MotionPath;
+    /** For 'rotate': rotation at drag start and the pointer's angle around the anchor. */
+    initialRotation?: number;
+    startAngle?: number;
     /** For 'path-key': frame of the position key being dragged. */
     keyFrame?: number;
     targetId: string;
@@ -652,6 +664,17 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.strokeRect(box.x - 3, box.y - 3, box.width + 6, box.height + 6);
         ctx.setLineDash([]);
         const dot = 4 / (st.scale || 1);
+        // Rotation handle: a stem above the box and a round knob (drag to rotate, Shift = 15° steps)
+        const knob = rotateHandleLocal(box, st.scale);
+        ctx.beginPath();
+        ctx.moveTo(knob.x, box.y - 3);
+        ctx.lineTo(knob.x, knob.y);
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(knob.x, knob.y, dot * 1.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
         if (sel.kind === 'chart') {
           // Resize handle (bottom-right corner)
           ctx.fillStyle = '#ffffff';
@@ -730,6 +753,21 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             : dragJointFK(figure, session.jointId, local).joints;
           onTransientUpdateStick(setPose(stick, currentFrame, joints));
         }
+      }
+
+      // Rotation handle: angle swept around the anchor since the drag started (stopwatch rule)
+      else if (session.targetType === 'rotate' && session.initialObj && session.objectKind) {
+        // Accumulated step by step, so turning past half a circle keeps going instead of jumping back
+        const st = sampleActor(session.initialObj, currentFrame, paths);
+        const angle = Math.atan2(pt.y - st.y, pt.x - st.x);
+        let delta = ((angle - (session.startAngle ?? angle)) * 180) / Math.PI;
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        session.startAngle = angle;
+        session.initialRotation = (session.initialRotation ?? 0) + delta;
+        const raw = session.initialRotation;
+        const rotation = e.shiftKey ? Math.round(raw / 15) * 15 : Math.round(raw * 10) / 10;
+        transientAnimated(session.objectKind, setActorProperty(session.initialObj, 'rotation', currentFrame, rotation));
       }
 
       // Chart resize (corner handle): the card grows around its center, so the mouse movement is
@@ -850,6 +888,13 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
               session.baseSnapshot
             );
           }
+        } else if (session.targetType === 'rotate' && session.objectKind) {
+          const obj = findAnimated(session.objectKind, session.targetId, latest);
+          const description = t('stage.history.rotate', { frame: currentFrame });
+          if (obj && session.objectKind === 'actor') onCommitActor(obj as ActorOverlay, description, session.baseSnapshot);
+          if (obj && session.objectKind === 'chart') onCommitChart(obj as ChartOverlay, description, session.baseSnapshot);
+          if (obj && session.objectKind === 'text') onCommitText(obj as TextOverlay, description, session.baseSnapshot);
+          if (obj && session.objectKind === 'stick') onCommitStick(obj as StickActor, description, session.baseSnapshot);
         } else if (session.targetType === 'path-key' && session.objectKind) {
           const description = t('stage.history.editKeyPoint', { frame: session.keyFrame ?? 0 });
           const obj = findAnimated(session.objectKind, session.targetId, latest);
@@ -946,6 +991,31 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     const baseSnapshot = getCurrentSnapshot();
 
     const selected = selectedAnimated();
+
+    // 2A. Rotation handle of the selected object (any animated kind): drag turns it around its anchor
+    if (selected && isEditable(selectedObject!.id, layerTypeOf(selected.kind))) {
+      const st = sampleActor(selected.obj, currentFrame, paths);
+      const knob = rotateHandleLocal(selected.box, st.scale);
+      const local = toActorLocal(st, pt);
+      if (st.visible && Math.hypot(local.x - knob.x, local.y - knob.y) * (st.scale || 1) <= ROTATE_HANDLE_HIT) {
+        dragSessionRef.current = {
+          targetType: 'rotate',
+          targetId: selectedObject!.id,
+          objectKind: selected.kind,
+          initialObj: selected.obj,
+          initialRotation: actorPropertyValue(selected.obj, 'rotation', currentFrame),
+          startAngle: Math.atan2(pt.y - st.y, pt.x - st.x),
+          startCanvasPt: pt,
+          baseSnapshot,
+          hasMoved: false,
+          offsetX: 0,
+          offsetY: 0,
+        };
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
+      }
+    }
 
     // 2A. Resize handle of the selected chart (bottom-right corner of its transformed box)
     if (selected?.kind === 'chart' && isEditable(selectedObject!.id, 'chart')) {
