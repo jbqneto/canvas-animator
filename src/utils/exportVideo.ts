@@ -12,9 +12,11 @@ import {
   LayerType,
   ActorOverlay,
   MotionPath,
+  StickActor,
 } from '../types';
 import { sampleActor, trailPoints } from '../engine/actor';
 import { arrowPolygon, fittedRadius } from '../engine/shapes';
+import { localFigure, samplePose } from '../engine/stickActor';
 import { polylineUpTo, samplePath } from '../engine/path';
 import { sampleTrack, Vec2 } from '../engine/keyframes';
 import { t } from '../i18n';
@@ -30,6 +32,8 @@ export interface SceneContent {
   texts: TextOverlay[];
   images: ImageOverlay[];
   actors: ActorOverlay[];
+  /** Stick figures animated by pose keys. */
+  sticks?: StickActor[];
   paths: MotionPath[];
   layers?: StudioLayer[];
   videoBg: VideoBackground;
@@ -171,9 +175,6 @@ export function renderCompositeFrame(
     if (!state.visible || state.opacity <= 0) return;
     add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state, currentFrame, paths));
   });
-  frameData?.stickFigures?.forEach((stick) => {
-    add(stick.id, 'drawing', FRONT, () => drawStickFigure(ctx, stick));
-  });
   frameData?.drawings?.forEach((stroke) => {
     if (!stroke.points || stroke.points.length === 0) return;
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
@@ -192,6 +193,12 @@ export function renderCompositeFrame(
       ctx.restore();
     };
   };
+  // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
+  // Without a layer of their own they follow the drawings layer, as before.
+  scene.sticks?.forEach((stick) => {
+    const draw = withTransform(stick, () => drawStickFigure(ctx, localFigure(stick, samplePose(stick, currentFrame))));
+    if (draw) add(stick.id, 'drawing', FRONT, draw);
+  });
   charts.forEach((chart) => {
     if (!chart.visible) return;
     const draw = withTransform(chart, () => drawChart(ctx, chart, currentFrame));

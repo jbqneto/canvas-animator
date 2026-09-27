@@ -9,7 +9,7 @@ import {
   SelectedObjectRef,
   CanvasGroup,
   DrawingStroke,
-  StickFigure,
+  StickActor,
   CanvasDimensions,
   HistorySnapshot,
   ActorOverlay,
@@ -20,11 +20,11 @@ import {
   ShapeType,
   Marker,
 } from './types';
-import { attachToPath, createActor } from './engine/actor';
+import { attachToPath, createActor, isActorOnScreen } from './engine/actor';
 import { createChart, createText } from './engine/overlays';
 import { createShapeActor, defaultShapeStyle } from './engine/shapes';
-import { tweenStickFrames } from './engine/stickRig';
-import type { EasingName } from './engine/keyframes';
+import { createStickActor, hasPoseKeys, migrateFrameSticks, samplePose, stickLayer, stickToStrokes } from './engine/stickActor';
+import { setKeyframe } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
 import { LOCALES, shortMonth, translate, useI18n } from './i18n';
 import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
@@ -63,6 +63,7 @@ import { retimeFrame, retimeScene } from './engine/retime';
 
 const EMPTY_AUDIO: AudioClip[] = [];
 const EMPTY_MARKERS: Marker[] = [];
+const EMPTY_STICKS: StickActor[] = [];
 
 export default function App() {
   const { t, locale } = useI18n();
@@ -183,6 +184,9 @@ export default function App() {
     };
   }
 
+  // The demo is described frame by frame, then turned into a stick actor with pose keys
+  const initialScene = migrateFrameSticks(initialFrames);
+
   // Initial Overlays
   const initialCharts: ChartOverlay[] = [
     createChart({
@@ -236,18 +240,20 @@ export default function App() {
   // ================= UNDO / REDO HISTORY ENGINE =================
   const history = useHistory({
     description: t('history.initial'),
-    frames: initialFrames,
+    frames: initialScene.frames,
+    sticks: initialScene.sticks,
     charts: initialCharts,
     texts: initialTexts,
     images: [],
     actors: [],
     paths: [],
-    layers: initialLayers,
+    layers: [...initialScene.sticks.map((s) => stickLayer(s)), ...initialLayers],
   });
 
   const { frames, charts, texts, images, actors, paths, layers } = history.present;
   const audio = history.present.audio ?? EMPTY_AUDIO;
   const markers = history.present.markers ?? EMPTY_MARKERS;
+  const sticks = history.present.sticks ?? EMPTY_STICKS;
 
   // UI Modals & Export state
   const [exportProgress, setExportProgress] = useState<number>(0);
@@ -569,43 +575,40 @@ export default function App() {
     [history]
   );
 
-  // Delete Stick Figure handler (from current frame or all frames)
-  const handleDeleteStickFigure = useCallback(
-    (stickId: string, allFrames = false) => {
-      if (allFrames) {
-        const updatedFrames: Record<number, FrameData> = {};
-        for (const [fNum, fData] of Object.entries(history.present.frames)) {
-          updatedFrames[Number(fNum)] = {
-            ...fData,
-            stickFigures: fData.stickFigures.filter((s) => s.id !== stickId),
-          };
-        }
-        history.pushSnapshot(t('history.deleteStickAll'), {
-          ...history.present,
-          frames: updatedFrames,
-        });
-      } else {
-        const currentData = history.present.frames[currentFrame] || {
-          frameNumber: currentFrame,
-          stickFigures: [],
-          drawings: [],
-          groups: [],
-        };
-        const updatedSticks = currentData.stickFigures.filter((s) => s.id !== stickId);
-        history.pushSnapshot(t('history.deleteStickFrame', { frame: currentFrame }), {
-          ...history.present,
-          frames: {
-            ...history.present.frames,
-            [currentFrame]: {
-              ...currentData,
-              stickFigures: updatedSticks,
-            },
-          },
-        });
-      }
+  // ================= STICK FIGURES (actors animated by pose keys) =================
+  const replaceStick = (snapshot: HistorySnapshot, stick: StickActor): HistorySnapshot => ({
+    ...snapshot,
+    sticks: (snapshot.sticks ?? []).map((s) => (s.id === stick.id ? stick : s)),
+  });
+
+  const handleUpdateStick = (stick: StickActor, description = t('history.edit', { name: stick.name })) => {
+    history.pushSnapshot(description, replaceStick(history.present, stick));
+  };
+
+  const handleTransientUpdateStick = useCallback(
+    (stick: StickActor) => history.updatePresent((prev) => replaceStick(prev, stick)),
+    [history]
+  );
+
+  const handleCommitStick = useCallback(
+    (stick: StickActor, description: string, baseSnapshot: HistorySnapshot) => {
+      history.commitAction(description, baseSnapshot, replaceStick(history.presentRef.current, stick));
+    },
+    [history]
+  );
+
+  const handleDeleteStick = useCallback(
+    (stickId: string) => {
+      const present = history.presentRef.current;
+      const stick = present.sticks?.find((s) => s.id === stickId);
+      history.pushSnapshot(t('history.delete', { name: stick?.name ?? t('selection.stick') }), {
+        ...present,
+        sticks: (present.sticks ?? []).filter((s) => s.id !== stickId),
+        layers: present.layers.filter((l) => l.targetId !== stickId),
+      });
       setSelectedObject(null);
     },
-    [currentFrame, history]
+    [history, t]
   );
 
   // Timeline resize drag handler
@@ -633,11 +636,19 @@ export default function App() {
   const handleDuplicateCurrentFrame = () => {
     if (currentFrame >= totalFrames) return;
     const current = frames[currentFrame];
-    if (!current) return;
 
     const nextFrameNum = currentFrame + 1;
-    const duplicated: FrameData = JSON.parse(JSON.stringify(current));
-    duplicated.frameNumber = nextFrameNum;
+    const duplicated: FrameData = current
+      ? { ...JSON.parse(JSON.stringify(current)), frameNumber: nextFrameNum }
+      : emptyFrameData(nextFrameNum);
+
+    // Figures on stage get a pose key at the next frame holding the current pose (Flash F6)
+    const posedSticks = sticks.map((stick) => {
+      if (!isActorOnScreen(stick, currentFrame)) return stick;
+      const pose = samplePose(stick, currentFrame);
+      const poses = setKeyframe(hasPoseKeys(stick) ? stick.poses : setKeyframe([], currentFrame, pose), nextFrameNum, pose);
+      return { ...stick, poses, durationFrames: Math.max(stick.durationFrames, nextFrameNum - stick.startFrame) };
+    });
 
     history.pushSnapshot(t('history.duplicateFrame', { from: currentFrame, to: nextFrameNum }), {
       ...history.present,
@@ -645,6 +656,7 @@ export default function App() {
         ...history.present.frames,
         [nextFrameNum]: duplicated,
       },
+      sticks: posedSticks,
     });
     setCurrentFrame(nextFrameNum);
   };
@@ -669,85 +681,29 @@ export default function App() {
   // ================= GROUP / UNGROUP OBJECTS =================
   // Flash-inspired: "um boneco palito é resultado de um grupo de objetos -> varios palitos e um circulo"
   const handleUngroupSelected = () => {
-    const currentFrameData = frames[currentFrame];
-    if (!currentFrameData) return;
-
-    // 1. If a Stick Figure is selected, break it apart into individual drawings (head circle + bone line strokes)
+    // 1. A stick figure breaks apart into loose strokes (head circle + bone lines) in the current frame
     if (selectedObject?.type === 'stick') {
-      const stick = currentFrameData.stickFigures.find((s) => s.id === selectedObject.id);
-      if (!stick) return;
-
-      const newStrokes: DrawingStroke[] = [];
-
-      // Head circle stroke
-      const head = stick.joints['head'];
-      if (head) {
-        const hx = stick.x + head.x * stick.scale;
-        const hy = stick.y + head.y * stick.scale;
-        const hr = (head.radius || 20) * stick.scale;
-
-        // Generate circle points
-        const circlePoints = [];
-        for (let i = 0; i <= 24; i++) {
-          const angle = (i / 24) * Math.PI * 2;
-          circlePoints.push({
-            x: Math.round(hx + Math.cos(angle) * hr),
-            y: Math.round(hy + Math.sin(angle) * hr),
-          });
-        }
-
-        newStrokes.push({
-          id: `stroke-head-${Date.now()}`,
-          tool: 'circle',
-          points: circlePoints,
-          color: stick.color,
-          thickness: Math.round(stick.thickness * stick.scale),
-        });
-      }
-
-      // Bone line strokes
-      stick.bones.forEach((bone, idx) => {
-        const jFrom = stick.joints[bone.from];
-        const jTo = stick.joints[bone.to];
-        if (jFrom && jTo) {
-          const x1 = Math.round(stick.x + jFrom.x * stick.scale);
-          const y1 = Math.round(stick.y + jFrom.y * stick.scale);
-          const x2 = Math.round(stick.x + jTo.x * stick.scale);
-          const y2 = Math.round(stick.y + jTo.y * stick.scale);
-
-          newStrokes.push({
-            id: `stroke-bone-${idx}-${Date.now()}`,
-            tool: 'line',
-            points: [
-              { x: x1, y: y1 },
-              { x: x2, y: y2 },
-            ],
-            color: stick.color,
-            thickness: Math.round(stick.thickness * stick.scale),
-          });
-        }
-      });
-
-      // Remove stick figure and add strokes
-      const updatedSticks = currentFrameData.stickFigures.filter(
-        (s) => s.id !== selectedObject.id
-      );
-
+      const stick = sticks.find((s) => s.id === selectedObject.id);
+      if (!stick || !isActorOnScreen(stick, currentFrame)) return;
+      const data = frames[currentFrame] ?? emptyFrameData(currentFrame);
       history.pushSnapshot(t('history.breakStick'), {
         ...history.present,
+        sticks: sticks.filter((s) => s.id !== stick.id),
+        layers: history.present.layers.filter((l) => l.targetId !== stick.id),
         frames: {
           ...history.present.frames,
           [currentFrame]: {
-            ...currentFrameData,
-            stickFigures: updatedSticks,
-            drawings: [...currentFrameData.drawings, ...newStrokes],
+            ...data,
+            drawings: [...data.drawings, ...stickToStrokes(stick, currentFrame, `stroke-${Date.now()}`)],
           },
         },
       });
-
       setSelectedObject(null);
       return;
     }
+
+    const currentFrameData = frames[currentFrame];
+    if (!currentFrameData) return;
 
     // 2. If a Canvas Group is selected, dissolve it into its member items
     if (selectedObject?.type === 'group') {
@@ -810,7 +766,7 @@ export default function App() {
 
     let updatedCharts = [...charts];
     let updatedTexts = [...texts];
-    let updatedFrames = { ...history.present.frames };
+    let updatedSticks = sticks;
 
     if (type === 'chart') {
       newName = t('timeline.layer.chart');
@@ -860,22 +816,14 @@ export default function App() {
       newName = t('timeline.layer.stick');
       newColor = '#f59e0b';
       targetId = `stick-${Date.now()}`;
-      const newStick = createDefaultStickFigure(
+      const figure = createDefaultStickFigure(
         targetId,
         t('app.newStickNumbered', { n: Date.now() % 1000 }),
         Math.round(canvasDimensions.width / 2),
         Math.round(canvasDimensions.height / 2)
       );
-      const curData = updatedFrames[currentFrame] || {
-        frameNumber: currentFrame,
-        stickFigures: [],
-        drawings: [],
-        groups: [],
-      };
-      updatedFrames[currentFrame] = {
-        ...curData,
-        stickFigures: [...curData.stickFigures, newStick],
-      };
+      // On stage from the current frame to the end of the timeline
+      updatedSticks = [...sticks, createStickActor(figure, currentFrame, Math.max(1, totalFrames - currentFrame))];
       setSelectedObject({ type: 'stick', id: targetId });
     } else if (type === 'drawing') {
       newName = t('timeline.layer.drawing');
@@ -898,7 +846,7 @@ export default function App() {
       layers: [newLayer, ...layers],
       charts: updatedCharts,
       texts: updatedTexts,
-      frames: updatedFrames,
+      sticks: updatedSticks,
     });
 
     setSelectedLayerId(layerId);
@@ -910,7 +858,7 @@ export default function App() {
 
     let updatedCharts = charts;
     let updatedTexts = texts;
-    let updatedFrames = history.present.frames;
+    let updatedSticks = sticks;
     let updatedActors = actors;
 
     if (layer.targetId) {
@@ -921,14 +869,7 @@ export default function App() {
       } else if (layer.type === 'actor') {
         updatedActors = actors.filter((a) => a.id !== layer.targetId);
       } else if (layer.type === 'group') {
-        // Stick figure layer: remove the figure from every frame, otherwise it stays on stage
-        updatedFrames = {};
-        for (const [fNum, fData] of Object.entries(history.present.frames)) {
-          updatedFrames[Number(fNum)] = {
-            ...fData,
-            stickFigures: fData.stickFigures.filter((s) => s.id !== layer.targetId),
-          };
-        }
+        updatedSticks = sticks.filter((s) => s.id !== layer.targetId);
       }
     }
 
@@ -942,7 +883,7 @@ export default function App() {
       layers: layers.filter((l) => l.id !== layerId),
       charts: updatedCharts,
       texts: updatedTexts,
-      frames: updatedFrames,
+      sticks: updatedSticks,
       actors: updatedActors,
     });
 
@@ -1031,61 +972,12 @@ export default function App() {
     if (selectedObject?.id === textId) setSelectedObject(null);
   };
 
-  // ================= STICK FIGURE POSE ANIMATION (classic tween) =================
   const emptyFrameData = (frameNumber: number): FrameData => ({
     frameNumber,
     stickFigures: [],
     drawings: [],
     groups: [],
   });
-
-  /** Returns frames with `stick` placed (replacing the same id) in frame `f`. */
-  const withStickInFrame = (
-    allFrames: Record<number, FrameData>,
-    f: number,
-    stick: StickFigure
-  ): Record<number, FrameData> => {
-    const data = allFrames[f] ?? emptyFrameData(f);
-    const exists = data.stickFigures.some((s) => s.id === stick.id);
-    return {
-      ...allFrames,
-      [f]: {
-        ...data,
-        stickFigures: exists
-          ? data.stickFigures.map((s) => (s.id === stick.id ? stick : s))
-          : [...data.stickFigures, stick],
-      },
-    };
-  };
-
-  const handleCopyStickToFrame = (stickId: string, toFrame: number) => {
-    const stick = frames[currentFrame]?.stickFigures.find((s) => s.id === stickId);
-    if (!stick || toFrame === currentFrame) return;
-    history.pushSnapshot(t('history.copyPose', { from: currentFrame, to: toFrame }), {
-      ...history.present,
-      frames: withStickInFrame(history.present.frames, toFrame, { ...stick, tweened: false }),
-    });
-    if (toFrame > totalFrames) setTotalFrames(toFrame);
-    setCurrentFrame(toFrame);
-  };
-
-  const handleTweenStick = (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => {
-    const a = frames[fromFrame]?.stickFigures.find((s) => s.id === stickId);
-    const b = frames[toFrame]?.stickFigures.find((s) => s.id === stickId);
-    if (!a || !b) {
-      alert(t('app.error.stickMissing', { from: fromFrame, to: toFrame }));
-      return;
-    }
-    const poses = tweenStickFrames(a, b, fromFrame, toFrame, easing);
-    let updated = history.present.frames;
-    Object.entries(poses).forEach(([f, pose]) => {
-      updated = withStickInFrame(updated, Number(f), pose);
-    });
-    history.pushSnapshot(t('history.tweenPose', { from: fromFrame, to: toFrame }), {
-      ...history.present,
-      frames: updated,
-    });
-  };
 
   // ================= ACTORS (imported images animated by keyframes) =================
   const handleAddActor = (params: { src: string; name: string; width: number; height: number }) => {
@@ -1263,7 +1155,7 @@ export default function App() {
    * both are visible (the timing can be edited afterwards like any keyframes).
    */
   /** Links any animated object (actor, chart, text) to a drawn path; see `attachToPath`. */
-  const handleAttachToPath = (kind: 'actor' | 'chart' | 'text', id: string, pathId: string) => {
+  const handleAttachToPath = (kind: 'actor' | 'chart' | 'text' | 'stick', id: string, pathId: string) => {
     const present = history.present;
     const path = present.paths.find((p) => p.id === pathId);
     if (!path) return;
@@ -1274,12 +1166,15 @@ export default function App() {
         ? present.actors.find((a) => a.id === id)?.name
         : kind === 'chart'
           ? present.charts.find((c) => c.id === id)?.title
-          : present.texts.find((x) => x.id === id)?.text;
+          : kind === 'stick'
+            ? present.sticks?.find((x) => x.id === id)?.name
+            : present.texts.find((x) => x.id === id)?.text;
     history.pushSnapshot(t('history.follow', { actor: name ?? '', path: path.name }), {
       ...present,
       actors: kind === 'actor' ? link(present.actors) : present.actors,
       charts: kind === 'chart' ? link(present.charts) : present.charts,
       texts: kind === 'text' ? link(present.texts) : present.texts,
+      sticks: kind === 'stick' && present.sticks ? link(present.sticks) : present.sticks,
     });
     setSelectedObject({ type: kind, id });
   };
@@ -1295,6 +1190,7 @@ export default function App() {
       actors: unlink(snapshot.actors),
       charts: unlink(snapshot.charts),
       texts: unlink(snapshot.texts),
+      sticks: snapshot.sticks && unlink(snapshot.sticks),
       layers: snapshot.layers.filter((l) => l.targetId !== pathId),
     };
   };
@@ -1683,9 +1579,7 @@ export default function App() {
           else if (selectedObject.type === 'text') handleDeleteText(selectedObject.id);
           else if (selectedObject.type === 'actor') handleDeleteActor(selectedObject.id);
           else if (selectedObject.type === 'path') handleDeletePath(selectedObject.id);
-          else if (selectedObject.type === 'stick') {
-            handleDeleteStickFigure(selectedObject.id, false);
-          }
+          else if (selectedObject.type === 'stick') handleDeleteStick(selectedObject.id);
         }
       }
     };
@@ -1698,7 +1592,7 @@ export default function App() {
     currentFrame,
     frames,
     handleUpdateFrameData,
-    handleDeleteStickFigure,
+    handleDeleteStick,
     handleDeleteChart,
     handleDeleteText,
     handleGroupSelected,
@@ -1707,6 +1601,19 @@ export default function App() {
   ]);
 
   // ================= SCENE PRESETS =================
+  /** Loads a scene described frame by frame: its figures become stick actors with pose keys. */
+  const loadStickScene = (name: string, sceneFrames: Record<number, FrameData>, extra: Partial<HistorySnapshot> = {}) => {
+    const scene = migrateFrameSticks(sceneFrames);
+    const present = history.present;
+    history.pushSnapshot(t('history.loadScene', { name }), {
+      ...present,
+      ...extra,
+      frames: scene.frames,
+      sticks: scene.sticks,
+      layers: [...scene.sticks.map((s) => stickLayer(s)), ...present.layers.filter((l) => l.type !== 'group')],
+    });
+  };
+
   const handleLoadPreset = (presetName: string) => {
     if (presetName === 'presenter') {
       const newFrames: Record<number, FrameData> = {};
@@ -1738,12 +1645,7 @@ export default function App() {
         };
       }
 
-      history.pushSnapshot(t('history.loadScene', { name: t('header.example.presenter') }), {
-        ...history.present,
-        frames: newFrames,
-        charts: initialCharts,
-        texts: initialTexts,
-      });
+      loadStickScene(t('header.example.presenter'), newFrames, { charts: initialCharts, texts: initialTexts });
 
       setCurrentFrame(1);
       setSelectedObject({ type: 'stick', id: 'stick-presenter' });
@@ -1769,10 +1671,7 @@ export default function App() {
         };
       }
 
-      history.pushSnapshot(t('history.loadScene', { name: t('header.example.walkcycle') }), {
-        ...history.present,
-        frames: newFrames,
-      });
+      loadStickScene(t('header.example.walkcycle'), newFrames);
 
       setCurrentFrame(1);
       setSelectedObject({ type: 'stick', id: 'stick-walker' });
@@ -1811,10 +1710,7 @@ export default function App() {
         };
       }
 
-      history.pushSnapshot(t('history.loadScene', { name: t('header.example.action') }), {
-        ...history.present,
-        frames: newFrames,
-      });
+      loadStickScene(t('header.example.action'), newFrames);
 
       setCurrentFrame(1);
       setSelectedObject({ type: 'stick', id: 'stick-action' });
@@ -1838,10 +1734,11 @@ export default function App() {
       texts: [],
       images: [],
       actors: [],
+      sticks: [],
       paths: [],
       audio: [],
       markers: [],
-      layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path'),
+      layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path' && l.type !== 'group'),
     });
     setCurrentFrame(1);
   };
@@ -1910,6 +1807,7 @@ export default function App() {
     texts,
     images,
     actors,
+    sticks,
     paths,
     layers,
     videoBg,
@@ -2046,7 +1944,10 @@ export default function App() {
             layers={layers}
             onGroupSelected={handleGroupSelected}
             onUngroupSelected={handleUngroupSelected}
-            onDeleteStickFigure={handleDeleteStickFigure}
+            sticks={sticks}
+            onTransientUpdateStick={handleTransientUpdateStick}
+            onCommitStick={handleCommitStick}
+            onDeleteStick={handleDeleteStick}
             canvasWidth={canvasDimensions.width}
             canvasHeight={canvasDimensions.height}
             getCurrentSnapshot={() => history.presentRef.current}
@@ -2128,26 +2029,7 @@ export default function App() {
           onUpdateFrameData={handleUpdateFrameData}
           onGroupSelected={handleGroupSelected}
           onUngroupSelected={handleUngroupSelected}
-          onAddStickFigure={() => {
-            const currentF = frames[currentFrame] || {
-              frameNumber: currentFrame,
-              stickFigures: [],
-              drawings: [],
-              groups: [],
-            };
-            const newId = `stick-${Date.now()}`;
-            const newStick = createDefaultStickFigure(
-              newId,
-              t('app.newStick'),
-              350,
-              420
-            );
-            handleUpdateFrameData(currentFrame, {
-              ...currentF,
-              stickFigures: [...currentF.stickFigures, newStick],
-            });
-            setSelectedObject({ type: 'stick', id: newId });
-          }}
+          onAddStickFigure={() => handleAddLayer('group')}
           fps={fps}
           setFps={handleChangeFps}
           totalFrames={totalFrames}
@@ -2166,15 +2048,14 @@ export default function App() {
           onUpdateCanvasDimensions={setCanvasDimensions}
           timelineHeight={timelineHeight}
           setTimelineHeight={setTimelineHeight}
-          onDeleteStickFigure={handleDeleteStickFigure}
+          sticks={sticks}
+          onUpdateStick={handleUpdateStick}
+          onDeleteStick={handleDeleteStick}
           actors={actors}
           onUpdateActor={handleUpdateActor}
           onDeleteActor={handleDeleteActor}
           onImportImageFiles={handleImportImageFiles}
           onJumpToFrame={setCurrentFrame}
-          frames={frames}
-          onCopyStickToFrame={handleCopyStickToFrame}
-          onTweenStick={handleTweenStick}
           onOpenTemplates={() => setTemplatesOpen(true)}
           onAddShape={handleAddShape}
           paths={paths}
@@ -2233,6 +2114,9 @@ export default function App() {
           actors={actors}
           onUpdateActor={handleTransientUpdateActor}
           onCommitActor={handleCommitActor}
+          sticks={sticks}
+          onUpdateStick={handleTransientUpdateStick}
+          onCommitStick={handleCommitStick}
           paths={paths}
           onUpdatePath={handleTransientUpdatePath}
           onCommitPath={handleCommitPath}

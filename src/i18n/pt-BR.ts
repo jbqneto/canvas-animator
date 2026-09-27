@@ -93,16 +93,6 @@ export const ptBR = {
   'easing.hold': 'Segurar (salto)',
 
   // Stick figure pose animation
-  'stickAnim.title': 'Animar pose (tween clássico)',
-  'stickAnim.help': '1) Faça a pose aqui. 2) Copie o boneco para um frame à frente e mude a pose lá. 3) Interpole: os frames do meio são gerados. Arrastar uma articulação gira o osso; com Alt ela se move livre.',
-  'stickAnim.copyTo': 'Copiar para o frame',
-  'stickAnim.copyHint': 'Copia este boneco (pose atual) para o frame e vai até lá',
-  'stickAnim.from': 'De',
-  'stickAnim.to': 'até',
-  'stickAnim.tweenHint': 'Gera as poses dos frames {from} a {to}',
-  'stickAnim.tweenDisabled': 'Os dois frames precisam ter este boneco posado à mão, com pelo menos um frame entre eles',
-  'stickAnim.tween': 'Interpolar poses',
-  'stickAnim.keyPoses': 'Poses-chave:',
 
   // Actor inspector
   'actor.prop.position': 'Posição',
@@ -349,8 +339,6 @@ export const ptBR = {
   'timeline.invisibleGuide': ' (guia invisível)',
   'timeline.actorClip': '{name} | F{start} ➔ F{end}\nArraste para mover (os keyframes vão junto); as bordas ajustam a duração',
   'timeline.keyframeHint': 'Keyframe no frame {frame} — arraste para mudar o tempo',
-  'timeline.tweenedPose': 'Pose interpolada no frame {frame}',
-  'timeline.keyPose': 'Pose-chave do boneco no frame {frame}',
   'timeline.drawingKey': 'Desenho no frame {frame}',
 
   // Properties inspector
@@ -398,15 +386,11 @@ export const ptBR = {
   'inspector.doc.subtitle': 'Flash Stage & Configurações Globais',
   'inspector.doc.title': 'Propriedades do Documento',
   'inspector.stick.color': 'Cor do Traço:',
-  'inspector.stick.scale': 'Escala do Boneco:',
   'inspector.stick.poses': 'Poses Prontas da Biblioteca',
   'inspector.ungroupHelp': 'Desagrupar divide o boneco em 1 círculo (cabeça) e vários palitos (linhas) independentes.',
   'inspector.groupHint': 'Agrupar objetos selecionados (Ctrl+G)',
   'inspector.grouping': 'Agrupamento Flash (Ctrl+G / Ctrl+B)',
-  'inspector.stick.clearAll': 'Limpar Todos',
-  'inspector.stick.deleteAll': 'Excluir este boneco de toda a linha do tempo (todos os frames)',
   'inspector.delete': 'Excluir',
-  'inspector.stick.deleteHere': 'Excluir este boneco do frame atual (Delete)',
   'inspector.group.subtitle': 'Grupo unificado de traços e formas',
   'inspector.stick.subtitle': 'Composto por círculos e palitos articulados',
   'inspector.group.title': 'Objeto Agrupado',
@@ -521,7 +505,6 @@ export const ptBR = {
   'app.newText': 'Novo texto animado',
   'app.newCounter': 'Contador',
   'app.newStickNumbered': 'Boneco palito {n}',
-  'app.newStick': 'Novo boneco palito',
   'app.newGroup': 'Grupo {n}',
   'app.newPath': 'Caminho {n}',
   'app.newChart': 'Novo gráfico animado',
@@ -540,7 +523,6 @@ export const ptBR = {
   'app.confirm.openFileWithUnsaved': 'Há alterações não salvas. Abrir o arquivo mesmo assim?',
   'app.missingVideo': 'Este projeto usava o vídeo "{name}". Carregue-o de novo em Vídeo de fundo.',
   'app.error.open': 'Não foi possível abrir: {error}',
-  'app.error.stickMissing': 'O boneco precisa existir nos frames {from} e {to}.',
   'app.error.import': 'Não foi possível importar {name}: {error}',
   'app.error.export': 'Falha ao exportar o vídeo: {error}',
   'app.restore.message': 'Encontramos alterações não salvas de {name} ({date}). Deseja restaurar?',
@@ -551,8 +533,6 @@ export const ptBR = {
   'history.initial': 'Estado inicial',
   'history.projectOpened': 'Projeto aberto',
   'history.editStage': 'Modificar palco',
-  'history.deleteStickAll': 'Excluir boneco de todos os frames',
-  'history.deleteStickFrame': 'Excluir boneco do frame {frame}',
   'history.duplicateFrame': 'Duplicar frame {from} → {to}',
   'history.clearFrame': 'Limpar frame {frame}',
   'history.breakStick': 'Desagrupar boneco em traços',
@@ -568,8 +548,6 @@ export const ptBR = {
   'history.deleteChart': 'Excluir gráfico',
   'history.updateText': 'Atualizar texto "{name}"',
   'history.deleteText': 'Excluir texto',
-  'history.copyPose': 'Copiar pose F{from} → F{to}',
-  'history.tweenPose': 'Interpolar pose F{from} → F{to}',
   'history.import': 'Importar "{name}"',
   'history.edit': 'Editar "{name}"',
   'history.drawPath': 'Desenhar {name}',
@@ -731,4 +709,20 @@ export const ptBR = {
 
   // Frame rate change
   'history.changeFps': 'Taxa de quadros {from} → {to} fps (mesma duração)',
+
+  // Stick figure pose track
+  'stickPose.label': 'Pose',
+  'stickPose.prevKey': 'Pose-chave anterior',
+  'stickPose.nextKey': 'Próxima pose-chave',
+  'stickPose.helpStatic': 'Arraste as articulações no palco para posar. Ligue o cronômetro para animar: cada pose vira uma chave no frame atual.',
+  'stickPose.helpAnimated': '{count} pose(s)-chave. Entre elas os ossos giram sozinhos; posar em outro frame cria uma nova chave. Alt + arrastar estica o osso.',
+  'stickPose.easing': 'Até a próxima pose',
+  'stickPose.history.animate': 'Animar pose',
+  'stickPose.history.stop': 'Parar de animar pose',
+  'stickPose.history.addKey': 'Pose-chave no frame {frame}',
+  'stickPose.history.removeKey': 'Remover pose-chave do frame {frame}',
+  'stickPose.history.preset': 'Pose: {pose}',
+  'stickPose.history.keyPreset': 'Pose {pose} no frame {frame}',
+  'inspector.stick.deleteHint': 'Excluir este boneco (Delete)',
+  'inspector.stick.thickness': 'Espessura',
 };

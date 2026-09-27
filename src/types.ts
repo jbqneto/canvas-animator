@@ -67,6 +67,25 @@ export interface StickFigure {
   tweened?: boolean;
 }
 
+/** Joint positions of a stick figure (local, unscaled), as keyed on its pose track. */
+export type StickPose = Record<string, Joint>;
+
+/**
+ * A stick figure as an animated object: the rig (bones, rest pose, look) plus a pose track whose
+ * keys are interpolated bone by bone. Position, scale (figure size), rotation and opacity come from
+ * the shared `Animated` transform, like any actor.
+ */
+export interface StickActor extends Animated {
+  id: string;
+  name: string;
+  color: string;
+  thickness: number;
+  bones: Bone[];
+  /** Rest pose, used while the pose track has no keys (stopwatch off). */
+  joints: StickPose;
+  poses: Track<StickPose>;
+}
+
 export interface DrawingStroke {
   id: string;
   tool: 'pen' | 'line' | 'rect' | 'circle' | 'arrow';
@@ -358,6 +377,8 @@ export interface HistorySnapshot {
   paths: MotionPath[];
   audio?: AudioClip[];
   markers?: Marker[];
+  /** Stick figures (older projects kept a copy per frame in `frames`; they are migrated here). */
+  sticks?: StickActor[];
   /**
    * Frame rate and timeline length this snapshot was made for. Set when the frame rate changes, so
    * undo/redo also restores them (the scene is rescaled with them).

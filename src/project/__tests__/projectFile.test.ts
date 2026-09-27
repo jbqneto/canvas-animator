@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseProject, ProjectFileError, ProjectState, serializeProject, projectNameFromFile } from '../projectFile';
 import { createActor } from '../../engine/actor';
+import { createStickActor, togglePoseKey } from '../../engine/stickActor';
+import { applyPoseToStickFigure, createDefaultStickFigure } from '../../utils/stickFigurePresets';
 
 const state = (): ProjectState => ({
   name: 'Viagem',
@@ -83,6 +85,28 @@ describe('project file', () => {
       project: { content: { markers: [{ frame: 'x' }, { frame: 3.6 }, null] } },
     });
     expect(parseProject(broken).content.markers).toEqual([{ id: 'marker-0', frame: 4, label: '', color: '#f59e0b' }]);
+  });
+
+  it('keeps stick actors with their pose keys', () => {
+    const base = state();
+    base.content.sticks = [togglePoseKey(createStickActor(createDefaultStickFigure('s1', 'Zé', 100, 200), 1, 60), 12)];
+    const parsed = parseProject(serializeProject(base));
+    expect(parsed.content.sticks![0].poses.map((k) => k.frame)).toEqual([12]);
+    // A figure without a layer of its own gets one (older files drew it on the drawings layer)
+    expect(parsed.content.layers.find((l) => l.targetId === 's1')?.type).toBe('group');
+  });
+
+  it('turns stick figures stored per frame (older files) into stick actors', () => {
+    const fig = createDefaultStickFigure('s1', 'Zé', 100, 200);
+    const frames = {
+      1: { frameNumber: 1, stickFigures: [fig], drawings: [] },
+      10: { frameNumber: 10, stickFigures: [applyPoseToStickFigure(fig, 'wave')], drawings: [{ id: 'd' }] },
+    };
+    const old = JSON.stringify({ format: 'flashmotion-project', version: 1, project: { content: { frames } } });
+    const { content } = parseProject(old);
+    expect(content.frames[10].stickFigures).toEqual([]);
+    expect(content.frames[10].drawings).toHaveLength(1);
+    expect(content.sticks!.map((s) => [s.id, s.startFrame, s.poses.length])).toEqual([['s1', 1, 2]]);
   });
 
   it('rejects files that are not projects', () => {

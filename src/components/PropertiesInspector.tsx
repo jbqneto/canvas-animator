@@ -39,7 +39,7 @@ import {
   TextEffect,
   SelectedObjectRef,
   FrameData,
-  StickFigure,
+  StickActor,
   CanvasGroup,
   HistorySnapshot,
   ActorOverlay,
@@ -47,13 +47,11 @@ import {
   ShapeType,
 } from '../types';
 import { ActorInspector } from './ActorInspector';
-import { MotionInspector } from './MotionInspector';
+import { MotionInspector, motionInputClass } from './MotionInspector';
 import { SHAPE_TYPES } from '../engine/shapes';
 import { PathInspector } from './PathInspector';
-import { StickAnimationPanel } from './StickAnimationPanel';
+import { StickPosePanel } from './StickPosePanel';
 import { MessageKey, shortMonth, useI18n } from '../i18n';
-import type { EasingName } from '../engine/keyframes';
-import { STICK_POSE_PRESETS, applyPoseToStickFigure } from '../utils/stickFigurePresets';
 
 interface PropertiesInspectorProps {
   selectedObject: SelectedObjectRef | null;
@@ -89,18 +87,16 @@ interface PropertiesInspectorProps {
   // Timeline height
   timelineHeight: number;
   setTimelineHeight: (h: number | ((prev: number) => number)) => void;
-  // Stick Figure deletion
-  onDeleteStickFigure?: (stickId: string, allFrames?: boolean) => void;
+  // Stick figures (animated by pose keys)
+  sticks: StickActor[];
+  onUpdateStick: (stick: StickActor, description?: string) => void;
+  onDeleteStick: (stickId: string) => void;
   // Actors (imported images)
   actors: ActorOverlay[];
   onUpdateActor: (actor: ActorOverlay, description: string) => void;
   onDeleteActor: (id: string) => void;
   onImportImageFiles: (files: FileList) => void;
   onJumpToFrame: (frame: number) => void;
-  // Stick figure pose tween
-  frames: Record<number, FrameData>;
-  onCopyStickToFrame: (stickId: string, toFrame: number) => void;
-  onTweenStick: (stickId: string, fromFrame: number, toFrame: number, easing: EasingName) => void;
   onOpenTemplates: () => void;
   onAddShape: (type: ShapeType) => void;
   // Motion paths
@@ -109,7 +105,7 @@ interface PropertiesInspectorProps {
   onDeletePath: (id: string) => void;
   onAttachActorToPath: (actorId: string, pathId: string) => void;
   /** Charts and texts can follow a drawn path too. */
-  onAttachToPath: (kind: 'chart' | 'text', id: string, pathId: string) => void;
+  onAttachToPath: (kind: 'chart' | 'text' | 'stick', id: string, pathId: string) => void;
   // History
   pastSteps: HistorySnapshot[];
   futureSteps: HistorySnapshot[];
@@ -148,15 +144,14 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   onUpdateCanvasDimensions,
   timelineHeight,
   setTimelineHeight,
-  onDeleteStickFigure,
+  sticks,
+  onUpdateStick,
+  onDeleteStick,
   actors,
   onUpdateActor,
   onDeleteActor,
   onImportImageFiles,
   onJumpToFrame,
-  frames,
-  onCopyStickToFrame,
-  onTweenStick,
   onOpenTemplates,
   onAddShape,
   paths,
@@ -194,7 +189,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   const activeStick =
     selectedObject?.type === 'stick'
-      ? currentFrameData.stickFigures.find((s) => s.id === selectedObject.id)
+      ? sticks.find((s) => s.id === selectedObject.id)
       : null;
 
   const activeGroup =
@@ -859,42 +854,16 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     </div>
                   </div>
 
-                  {/* Explicit Delete Buttons */}
-                  <div className="flex items-center gap-1">
+                  {activeStick && (
                     <button
-                      onClick={() => {
-                        if (onDeleteStickFigure && activeStick) {
-                          onDeleteStickFigure(activeStick.id, false);
-                        } else if (activeStick) {
-                          const updatedSticks = currentFrameData.stickFigures.filter(
-                            (s) => s.id !== activeStick.id
-                          );
-                          onUpdateFrameData(currentFrame, {
-                            ...currentFrameData,
-                            stickFigures: updatedSticks,
-                          });
-                        }
-                        onSelectObject(null);
-                      }}
-                      title={t('inspector.stick.deleteHere')}
+                      onClick={() => onDeleteStick(activeStick.id)}
+                      title={t('inspector.stick.deleteHint')}
                       className="flex items-center gap-1 px-2 py-1 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-[10px] font-semibold transition"
                     >
                       <Trash2 size={11} />
                       <span>{t('inspector.delete')}</span>
                     </button>
-                    {activeStick && onDeleteStickFigure && (
-                      <button
-                        onClick={() => {
-                          onDeleteStickFigure(activeStick.id, true);
-                          onSelectObject(null);
-                        }}
-                        title={t('inspector.stick.deleteAll')}
-                        className="flex items-center gap-1 px-1.5 py-1 rounded bg-neutral-900 hover:bg-rose-950/60 text-neutral-400 hover:text-rose-300 border border-neutral-800 text-[9px] transition"
-                      >
-                        <span>{t('inspector.stick.clearAll')}</span>
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 {/* Grouping / Ungrouping Actions (Flash Flashback!) */}
@@ -927,93 +896,61 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                   </p>
                 </div>
 
-                {/* Pose Library for Stick Figures */}
                 {activeStick && (
-                  <StickAnimationPanel
-                    stickId={activeStick.id}
-                    frames={frames}
-                    currentFrame={currentFrame}
-                    totalFrames={totalFrames}
-                    onCopyToFrame={onCopyStickToFrame}
-                    onTween={onTweenStick}
-                  />
-                )}
-
-                {activeStick && (
-                  <div className="space-y-2 pt-2 border-t border-neutral-800">
-                    <span className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
-                      {t('inspector.stick.poses')}
-                    </span>
-                    <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                      {Object.entries(STICK_POSE_PRESETS).map(([key, preset]) => (
-                        <button
-                          key={key}
-                          onClick={() => {
-                            const updated = { ...applyPoseToStickFigure(activeStick, key as any), tweened: false };
-                            const updatedSticks = currentFrameData.stickFigures.map((s) =>
-                              s.id === activeStick.id ? updated : s
-                            );
-                            onUpdateFrameData(currentFrame, {
-                              ...currentFrameData,
-                              stickFigures: updatedSticks,
-                            });
-                          }}
-                          className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 text-left transition"
-                        >
-                          <Zap size={11} className="text-amber-400 shrink-0" />
-                          <span className="truncate" title={t(`pose.${key}.desc` as MessageKey)}>
-                            {t(`pose.${key}.name` as MessageKey)}
-                          </span>
-                        </button>
-                      ))}
+                  <>
+                    {/* Pose: stopwatch, pose keys and the pose library */}
+                    <div className="space-y-2 pt-2 border-t border-neutral-800">
+                      <StickPosePanel
+                        stick={activeStick}
+                        currentFrame={currentFrame}
+                        onChange={onUpdateStick}
+                        onJumpToFrame={onJumpToFrame}
+                      />
                     </div>
 
-                    {/* Scale & Color */}
-                    <div className="space-y-2 pt-2 border-t border-neutral-800">
-                      <div>
-                        <span className="text-[10px] text-neutral-400 block mb-1">
-                          {t('inspector.stick.scale')} {activeStick.scale.toFixed(2)}x
-                        </span>
-                        <input
-                          type="range"
-                          min="0.5"
-                          max="2.5"
-                          step="0.05"
-                          value={activeStick.scale}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            const updatedSticks = currentFrameData.stickFigures.map((s) =>
-                              s.id === activeStick.id ? { ...s, scale: val } : s
-                            );
-                            onUpdateFrameData(currentFrame, {
-                              ...currentFrameData,
-                              stickFigures: updatedSticks,
-                            });
-                          }}
-                          className="w-full accent-amber-500"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-neutral-400">{t('inspector.stick.color')}</span>
+                    {/* Look */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-800">
+                      <label className="flex items-center justify-between gap-2 text-[10px] text-neutral-400">
+                        {t('inspector.stick.color')}
                         <input
                           type="color"
                           value={activeStick.color}
-                          onChange={(e) => {
-                            const col = e.target.value;
-                            const updatedSticks = currentFrameData.stickFigures.map((s) =>
-                              s.id === activeStick.id ? { ...s, color: col } : s
-                            );
-                            onUpdateFrameData(currentFrame, {
-                              ...currentFrameData,
-                              stickFigures: updatedSticks,
-                            });
-                          }}
+                          onChange={(e) => onUpdateStick({ ...activeStick, color: e.target.value })}
                           className="w-7 h-7 rounded bg-transparent border-0 cursor-pointer"
                         />
-                      </div>
+                      </label>
+                      <label className="flex items-center gap-1 text-[10px] text-neutral-400">
+                        {t('inspector.stick.thickness')}
+                        <input
+                          type="number"
+                          min={1}
+                          max={40}
+                          value={activeStick.thickness}
+                          onChange={(e) =>
+                            onUpdateStick({ ...activeStick, thickness: Math.max(1, Math.min(40, Number(e.target.value) || 1)) })
+                          }
+                          className={motionInputClass}
+                        />
+                      </label>
                     </div>
-                  </div>
+
+                    {/* Movement: same keyframed transform as actors (scale = figure size) */}
+                    <div className="space-y-2 pt-2 border-t border-neutral-800">
+                      <label className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider block">
+                        {t('inspector.motion')}
+                      </label>
+                      <MotionInspector
+                        obj={activeStick}
+                        currentFrame={currentFrame}
+                        fps={fps}
+                        onChange={onUpdateStick}
+                        onJumpToFrame={onJumpToFrame}
+                        paths={paths}
+                        onAttachToPath={(id, pathId) => onAttachToPath('stick', id, pathId)}
+                        onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             )}

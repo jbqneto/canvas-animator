@@ -42,11 +42,14 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T21 — Marcadores na timeline: tecla M (inclusive tocando), nome/cor, arrastar, Shift+←/→, snap de clipes,
   keys, áudio e cursor (Alt solta) e marcadores automáticos onde o som do áudio recomeça depois de uma pausa
 - [x] T22 — Trocar o FPS mantendo a duração em segundos: cena inteira reescalada num passo de desfazer
+- [x] T23 — Boneco palito como ator: uma trilha de poses-chave (interpoladas osso a osso) + o mesmo transform
+  animado dos atores (posição, escala, rotação, opacidade, seguir caminho), clipe e losangos na timeline;
+  projetos antigos (uma cópia do boneco por frame) são convertidos ao abrir
 
 ## Próximos passos sugeridos
 
-1. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-2. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+1. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+2. Boneco: rotação da junta direto no palco (anel de rotação), espelhar pose e biblioteca de poses do usuário.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -82,8 +85,19 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   do ator, arrastar o ator tem prioridade (grava key no frame atual).
 - Boneco (`src/engine/stickRig.ts`): hierarquia pelos ossos (`from` = pai; cabeça presa ao pescoço).
   Arrastar junta = FK (gira em volta do pai, cadeia acompanha); Alt = livre. `interpolateStickPose`
-  interpola ângulo (arco curto) e comprimento por osso. `StickFigure.tweened` marca frames gerados
-  (ponto na timeline); editar à mão vira pose-chave. UI: `StickAnimationPanel.tsx`.
+  interpola ângulo (arco curto) e comprimento por osso.
+- Boneco como ator (`src/engine/stickActor.ts`, `StickActor extends Animated`): `joints` = pose de repouso,
+  `poses: Track<StickPose>` = poses-chave (juntas locais, sem escala). Regra do cronômetro igual às outras
+  propriedades (`setPose`: sem keys edita o repouso; com keys grava/atualiza o key no frame atual;
+  `togglePoseTrack`/`togglePoseKey`). `samplePose` usa `interpolateStickPose` com o easing do key que abre o
+  trecho ('hold' = segura a pose). O tamanho do boneco é a escala do transform (`base.scale`). Renderer desenha
+  a figura local dentro do mesmo `withTransform` de gráficos/textos; sem camada própria segue a de desenhos.
+  Camada `'group'` com `targetId` = id do boneco (`stickLayer`/`withStickLayers`). F6 grava a pose atual no
+  próximo frame; Ctrl+B quebra o boneco (como está no frame, com rotação) em traços soltos
+  (`stickToStrokes`). Migração (`migrateFrameSticks`, ao abrir projeto e nos exemplos): pose-chave onde a
+  pose foi feita à mão e muda; trechos só com in-betweens do tween antigo viram easeInOut, o resto 'hold';
+  posição/escala viram keys lineares só onde o movimento muda (`simplifySeries`, RDP em 0,5 px).
+  UI: `StickPosePanel.tsx` (cronômetro, navegação, easing até a próxima pose, poses prontas) + `MotionInspector`.
 - Projeto (`src/project/`): `.fmproj` = JSON versionado (`serializeProject`/`parseProject`, com defaults
   para campos novos). Vídeo de fundo não é embutido (só o nome, para avisar ao abrir). File System Access
   API quando existe (Ctrl+S sobrescreve o mesmo arquivo), senão download/input. Autosave em IndexedDB
@@ -146,8 +160,8 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - FPS (`engine/retime.ts`): `retimeScene(cena, total, deFps, paraFps)` reescala tudo que é medido em quadros
   para o mesmo instante (`retimeFrame(f, k) = round(1 + (f − 1)·k)`): intervalos (bordas reescaladas), keys
   (colisões ficam com o key mais tardio), progresso de "seguir caminho", `animDurationFrames`, caminhos,
-  imagens, início dos clipes de áudio (o resto do áudio já é em segundos), marcadores, e reamostra os quadros
-  desenhados/poses. O snapshot guarda `timing {fps, totalFrames}` para o desfazer restaurar FPS e duração
+  imagens, início dos clipes de áudio (o resto do áudio já é em segundos), marcadores, poses-chave dos bonecos,
+  e reamostra os quadros desenhados. O snapshot guarda `timing {fps, totalFrames}` para o desfazer restaurar FPS e duração
   junto com a cena. Efeitos embutidos de texto/imagem (máquina de escrever, pop, pulso…) contam quadros de
   24 fps (`SceneContent.fps` → `effectRate`), então duram os mesmos segundos em qualquer FPS.
 - Timeline: grade e régua por CSS (`frameGridStyle`), sem um elemento por quadro. Escala pura em
