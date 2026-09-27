@@ -728,4 +728,7 @@ export const ptBR = {
   'marker.history.delete': 'Excluir marcador',
   'marker.history.fromAudio': '{count} marcadores de "{name}"',
   'marker.noneFound': 'Nenhum início de som encontrado no trecho audível desta faixa.',
+
+  // Frame rate change
+  'history.changeFps': 'Taxa de quadros {from} → {to} fps (mesma duração)',
 };

@@ -35,6 +35,8 @@ qualquer editor.
   animação na palavra ou na batida. O áudio vai junto no export (opcional) e fica salvo dentro do projeto.
 - **Marcadores**: aperte **M** (até com a animação tocando) para marcar palavras ou batidas; clipes, keys e
   áudio grudam neles ao arrastar (Alt solta). Um clique na faixa de áudio cria marcadores onde cada fala começa.
+- **Trocar o FPS** (12/24/30/60) mantém tudo no mesmo segundo: keys, clipes, marcadores e áudio são
+  reescalados, como no After Effects (e dá para desfazer).
 - **Timeline em segundos ou quadros**, com zoom (Ctrl + roda do mouse, ancorado no cursor) para ajustar
   quadro a quadro ou ver minutos inteiros; a vista acompanha o cursor durante o play.
 - **Projeto em arquivo** `.fmproj` (Ctrl+S / Ctrl+O), autosave com recuperação, e o app instalado abre

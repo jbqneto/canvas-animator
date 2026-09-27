@@ -59,6 +59,7 @@ import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 import { framesToFitAudio, frameTime } from './engine/audio';
 import { decodeClip, loadAudioFile, mixdown, playClips, prepareClips, resumeAudio, scrubClips } from './audio/audioRuntime';
 import { addMarker, clipOnsetFrames, removeMarker, updateMarker } from './engine/markers';
+import { retimeFrame, retimeScene } from './engine/retime';
 
 const EMPTY_AUDIO: AudioClip[] = [];
 const EMPTY_MARKERS: Marker[] = [];
@@ -1375,6 +1376,33 @@ export default function App() {
     if (sounds.length) handleImportAudioFiles(sounds);
   };
 
+  // ================= FRAME RATE =================
+  /**
+   * A new frame rate keeps every event at the same second (After Effects behavior): the whole scene
+   * is rescaled in one undoable step, and the timeline length and playhead follow.
+   */
+  const handleChangeFps = (next: number) => {
+    if (next === fps || !(next > 0)) return;
+    const { description: _d, ...content } = history.presentRef.current;
+    const { scene, totalFrames: nextTotal } = retimeScene(content, totalFrames, fps, next);
+    // The snapshot being left remembers its timing, so undo brings the old rate back with it
+    history.updatePresent((prev) => ({ ...prev, timing: { fps, totalFrames } }));
+    const description = t('history.changeFps', { from: fps, to: next });
+    history.pushSnapshot(description, { ...scene, description, timing: { fps: next, totalFrames: nextTotal } });
+    setFps(next);
+    setTotalFrames(nextTotal);
+    setCurrentFrame((f) => Math.min(nextTotal, retimeFrame(f, next / fps)));
+  };
+
+  // Undo/redo across a frame-rate change: follow the timing stored in the snapshot
+  const presentTiming = history.present.timing;
+  useEffect(() => {
+    if (!presentTiming) return;
+    setFps((f) => (f === presentTiming.fps ? f : presentTiming.fps));
+    setTotalFrames((n) => (n === presentTiming.totalFrames ? n : presentTiming.totalFrames));
+    setCurrentFrame((f) => Math.min(f, presentTiming.totalFrames));
+  }, [presentTiming]);
+
   // ================= TIMELINE MARKERS =================
   const withMarkers = (snapshot: HistorySnapshot, next: Marker[]): HistorySnapshot => ({ ...snapshot, markers: next });
   const markerSeq = useRef(0);
@@ -1886,6 +1914,7 @@ export default function App() {
     layers,
     videoBg,
     videoElement: videoEl,
+    fps,
   });
   const currentFrameRenderParams = () => ({
     width: canvasDimensions.width,
@@ -2120,7 +2149,7 @@ export default function App() {
             setSelectedObject({ type: 'stick', id: newId });
           }}
           fps={fps}
-          setFps={setFps}
+          setFps={handleChangeFps}
           totalFrames={totalFrames}
           setTotalFrames={setTotalFrames}
           videoBg={videoBg}
@@ -2173,7 +2202,7 @@ export default function App() {
           totalFrames={totalFrames}
           setTotalFrames={setTotalFrames}
           fps={fps}
-          setFps={setFps}
+          setFps={handleChangeFps}
           isPlaying={isPlaying}
           setIsPlaying={setIsPlaying}
           isLooping={isLooping}

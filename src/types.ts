@@ -358,6 +358,11 @@ export interface HistorySnapshot {
   paths: MotionPath[];
   audio?: AudioClip[];
   markers?: Marker[];
+  /**
+   * Frame rate and timeline length this snapshot was made for. Set when the frame rate changes, so
+   * undo/redo also restores them (the scene is rescaled with them).
+   */
+  timing?: { fps: number; totalFrames: number };
   groups?: CanvasGroup[];
   videoBg?: VideoBackground;
 }
