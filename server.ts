@@ -2,6 +2,16 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import {
+  chatContents,
+  chatSystemInstruction,
+  ChatRequest,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_IMAGE_MODEL,
+  extractImage,
+  imageParts,
+  ImageRequest,
+} from './src/ai/prompts';
 
 dotenv.config();
 
@@ -11,158 +21,69 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Lazy GoogleGenAI initialization
+// Lazy GoogleGenAI initialization (server key from .env)
 let aiClient: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured in the environment.');
-    }
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
-  }
-  return aiClient;
-}
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
 
-// Chatbot endpoint with multi-turn history & role instruction
+/** Missing server key: the app then suggests using the user's own key (see src/ai/aiClient.ts). */
+class NoServerKeyError extends Error {}
+
+function getAIClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new NoServerKeyError('GEMINI_API_KEY is not configured on the server.');
+    aiClient = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+  }
+  return aiClient;
+}
+
+function sendError(res: express.Response, error: any, fallback: string) {
+  if (error instanceof NoServerKeyError) {
+    return res.status(503).json({ error: error.message, code: 'no-server-key' });
+  }
+  console.error(fallback, error);
+  res.status(500).json({ error: error?.message || fallback });
+}
+
+// Chatbot endpoint with multi-turn history & role instruction (prompts shared with the browser)
 app.post('/api/gemini/chat', async (req, res) => {
   try {
-    const { messages, role, model, locale } = req.body;
-
+    const { messages, role, model, locale } = req.body as ChatRequest;
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Messages array is required.' });
     }
-
-    const ai = getAIClient();
-
-    // Default system instructions based on role
-    let systemInstruction = `Você é o FlashMotion Copilot, um especialista lendário em animação 2D, animação estilo Adobe Flash, Remotion, motion design educativo e narrativa visual.
-Seu objetivo é ajudar o usuário a planejar e criar animações incríveis, incluindo:
-1. Roteiros educativos cena a cena com temporização precisa.
-2. Coreografia e poses de boneco palito (stick figures) com frames chave (keyframing, antecipação, squash & stretch, follow-through).
-3. Ideias de gráficos animados (barras crescendo, roscas de porcentagem, linhas de tendência) e overlays de texto cinético para vídeos.
-4. Instruções práticas e amigáveis em português brasileiro (ou no idioma que o usuário preferir).`;
-
-    if (role === 'choreographer') {
-      systemInstruction += `\nFoco atual: COREÓGRAFO DE BONECOS PALITO & ANIMAÇÃO FLASH. Descreva poses chave (Keyframes), articulações (cabeça, braço, antebraço, perna, tronco), timing de passos e curvas de aceleração.`;
-    } else if (role === 'educator') {
-      systemInstruction += `\nFoco atual: DIRETOR DE VÍDEO EDUCATIVO & OVERLAYS. Planeje títulos dinâmicos, destaques de dados, gráficos em barras/linhas e chamadas que se sobrepõem ao vídeo.`;
-    } else if (role === 'generator') {
-      systemInstruction += `\nFoco atual: GERADOR DE DADOS DE CENA. Quando sugerir uma animação de gráfico ou stick figure, forneça sugestões concretas de valores numéricos, títulos e sequências de frames que o usuário possa aplicar diretamente.`;
-    }
-
-    // Reply in the interface language chosen in the app
-    systemInstruction +=
-      locale === 'en-US'
-        ? '\nAlways answer in English (US).'
-        : '\nResponda sempre em português do Brasil.';
-
-    // Format conversation history for Gemini API
-    const formattedContents = messages.map((m: { role: string; content: string }) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
-
-    // Choose model safely: support requested models with safe fallback
-    const targetModel = model || 'gemini-3.8-flash';
-
-    const response = await ai.models.generateContent({
-      model: targetModel,
-      contents: formattedContents,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-      },
+    const response = await getAIClient().models.generateContent({
+      model: model || DEFAULT_CHAT_MODEL,
+      contents: chatContents(messages),
+      config: { systemInstruction: chatSystemInstruction(role, locale), temperature: 0.7 },
     });
-
-    const replyText = response.text || 'Sem resposta do modelo.';
-    res.json({ reply: replyText });
+    res.json({ reply: response.text || '' });
   } catch (error: any) {
-    console.error('Chat error:', error);
-    res.status(500).json({ error: error.message || 'Erro ao processar mensagem com Gemini.' });
+    sendError(res, error, 'Erro ao processar mensagem com Gemini.');
   }
 });
 
-// Image Generation & Editing endpoint
+// Image generation & editing endpoint
 app.post('/api/gemini/image', async (req, res) => {
   try {
-    const { prompt, base64Image, aspectRatio = '16:9', model } = req.body;
-
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt é obrigatório.' });
-    }
-
-    const ai = getAIClient();
-    const imageModel = model || 'gemini-3.1-flash-lite-image';
-
-    let parts: any[] = [];
-
-    if (base64Image) {
-      // Clean base64 header if present
-      const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
-      parts.push({
-        inlineData: {
-          data: cleanBase64,
-          mimeType: 'image/png',
-        },
-      });
-      parts.push({
-        text: `Edite a imagem com base na seguinte instrução: ${prompt}. Mantenha estilo limpo adequado para ilustração ou backdrop de animação 2D.`,
-      });
-    } else {
-      parts.push({
-        text: `Crie uma imagem de alta qualidade para uso em animação/vídeo: ${prompt}. Estilo limpo, moderno, ilustração vetorial ou cenário para animação e motion design.`,
-      });
-    }
-
-    const response = await ai.models.generateContent({
-      model: imageModel,
-      contents: { parts },
-      config: {
-        imageConfig: {
-          aspectRatio: aspectRatio as any,
-        },
-      },
+    const { prompt, base64Image, aspectRatio = '16:9', model } = req.body as ImageRequest;
+    if (!prompt) return res.status(400).json({ error: 'Prompt é obrigatório.' });
+    const response = await getAIClient().models.generateContent({
+      model: model || DEFAULT_IMAGE_MODEL,
+      contents: { parts: imageParts(prompt, base64Image) },
+      config: { imageConfig: { aspectRatio: aspectRatio as any } },
     });
-
-    let imageUrl: string | null = null;
-    let textFeedback = '';
-
-    const candidates = response.candidates;
-    if (candidates && candidates[0] && candidates[0].content && candidates[0].content.parts) {
-      for (const part of candidates[0].content.parts) {
-        if (part.inlineData?.data) {
-          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        } else if (part.text) {
-          textFeedback += part.text;
-        }
-      }
-    }
-
+    const { imageUrl, text } = extractImage(response);
     if (!imageUrl) {
-      return res.status(422).json({
-        error: 'Não foi possível extrair a imagem gerada da resposta do modelo.',
-        details: textFeedback,
-      });
+      return res.status(422).json({ error: 'Não foi possível extrair a imagem gerada da resposta do modelo.', details: text, code: 'no-image' });
     }
-
-    res.json({ imageUrl, text: textFeedback });
+    res.json({ imageUrl, text });
   } catch (error: any) {
-    console.error('Image generation error:', error);
-    res.status(500).json({ error: error.message || 'Erro ao gerar imagem com Gemini.' });
+    sendError(res, error, 'Erro ao gerar imagem com Gemini.');
   }
 });
 

@@ -52,6 +52,7 @@ import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
 import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
+import { AiKeyDialog } from './components/AiKeyDialog';
 import type { AnimationTemplate, TemplateValues } from './templates/types';
 import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
@@ -259,6 +260,7 @@ export default function App() {
   const [exportProgress, setExportProgress] = useState<number>(0);
   const [aiModalOpen, setAiModalOpen] = useState<boolean>(false);
   const [chatbotOpen, setChatbotOpen] = useState<boolean>(false);
+  const [aiKeyOpen, setAiKeyOpen] = useState<boolean>(false);
   const [canvasSnapshot, setCanvasSnapshot] = useState<string | null>(null);
 
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -2186,6 +2188,7 @@ export default function App() {
         onAddImageOverlay={(img) => {
           handleAddActor({ src: img.url, name: t('app.aiImageName'), width: img.width, height: img.height });
         }}
+        onOpenAiKey={() => setAiKeyOpen(true)}
         onSetAsBackground={(url) => {
           setVideoBg({
             type: 'preset',
@@ -2200,7 +2203,10 @@ export default function App() {
       <GeminiChatbot
         isOpen={chatbotOpen}
         onToggle={() => setChatbotOpen(false)}
+        onOpenAiKey={() => setAiKeyOpen(true)}
       />
+
+      <AiKeyDialog isOpen={aiKeyOpen} onClose={() => setAiKeyOpen(false)} />
     </div>
   );
 }

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Sparkles, Image as ImageIcon, Wand2, X, Check, Loader2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Sparkles, Image as ImageIcon, Wand2, X, Check, Loader2, KeyRound } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { ImageOverlay, VideoBackground } from '../types';
+import { AiNoImageError, AiSetupError, AiSetupProblem, generateImage } from '../ai/aiClient';
+import { useAiKey } from '../ai/useAiKey';
 
 interface AiImageModalProps {
   isOpen: boolean;
@@ -11,6 +13,8 @@ interface AiImageModalProps {
   canvasSnapshot: string | null;
   onAddImageOverlay: (img: ImageOverlay) => void;
   onSetAsBackground: (url: string) => void;
+  /** Opens the "own AI key" dialog. */
+  onOpenAiKey: () => void;
 }
 
 export const AiImageModal: React.FC<AiImageModalProps> = ({
@@ -21,6 +25,7 @@ export const AiImageModal: React.FC<AiImageModalProps> = ({
   canvasSnapshot,
   onAddImageOverlay,
   onSetAsBackground,
+  onOpenAiKey,
 }) => {
   const { t } = useI18n();
   const [prompt, setPrompt] = useState('');
@@ -29,6 +34,9 @@ export const AiImageModal: React.FC<AiImageModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [setupProblem, setSetupProblem] = useState<AiSetupProblem | null>(null);
+  const ownKey = useAiKey();
+  useEffect(() => setSetupProblem(null), [ownKey]);
 
   if (!isOpen) return null;
 
@@ -36,32 +44,19 @@ export const AiImageModal: React.FC<AiImageModalProps> = ({
     if (!prompt.trim()) return;
     setIsLoading(true);
     setErrorMsg(null);
+    setSetupProblem(null);
 
     try {
-      const payload: any = {
+      const imageUrl = await generateImage({
         prompt,
         aspectRatio,
-        model: 'gemini-3.1-flash-lite-image', // user prompt mentioned gemini-3.1-flash-image-preview
-      };
-
-      if (mode === 'edit' && canvasSnapshot) {
-        payload.base64Image = canvasSnapshot;
-      }
-
-      const res = await fetch('/api/gemini/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        base64Image: mode === 'edit' && canvasSnapshot ? canvasSnapshot : undefined,
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || t('aiImage.errorGenerate'));
-      }
-
-      setGeneratedImage(data.imageUrl);
+      setGeneratedImage(imageUrl);
     } catch (err: any) {
-      setErrorMsg(err.message || t('aiImage.errorFailed'));
+      if (err instanceof AiSetupError) setSetupProblem(err.problem);
+      else if (err instanceof AiNoImageError) setErrorMsg(t('aiImage.errorGenerate') + (err.details ? ` ${err.details}` : ''));
+      else setErrorMsg(err.message || t('aiImage.errorFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -108,12 +103,22 @@ export const AiImageModal: React.FC<AiImageModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onOpenAiKey}
+              title={t('aiKey.open')}
+              className={`p-1 rounded hover:text-white ${ownKey ? 'text-amber-400' : 'text-neutral-400'}`}
+              data-open-ai-key
+            >
+              <KeyRound size={16} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded text-neutral-400 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -191,6 +196,15 @@ export const AiImageModal: React.FC<AiImageModalProps> = ({
               className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-xs text-white placeholder-neutral-500 focus:border-fuchsia-500 outline-none resize-none"
             />
           </div>
+
+          {setupProblem && (
+            <div className="p-3 rounded bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2" data-ai-setup={setupProblem}>
+              <span className="flex-1">{t(`aiKey.problem.${setupProblem}`)}</span>
+              <button onClick={onOpenAiKey} className="shrink-0 px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold">
+                {t('aiKey.configure')}
+              </button>
+            </div>
+          )}
 
           {errorMsg && (
             <div className="p-3 rounded bg-rose-950/50 border border-rose-800/80 text-rose-300 text-xs">

@@ -45,7 +45,8 @@ qualquer editor.
 - **Projeto em arquivo** `.fmproj` (Ctrl+S / Ctrl+O), autosave com recuperação, e o app instalado abre
   `.fmproj` direto do sistema.
 - **Export** MP4 (H.264) ou WebM transparente, com trecho de frames, codificado via WebCodecs com tempo exato.
-- IA opcional (Gemini) para imagens e um copiloto de roteiro.
+- IA opcional (Gemini) para imagens e um copiloto de roteiro, com a chave do servidor ou a sua própria chave
+  (ícone de chave no copiloto ou no gerador de imagens), que fica só no navegador e fala direto com o Google.
 - Interface em **português (BR)** e **inglês (US)**, escolhida no canto superior direito e lembrada no navegador.
 
 ## Desenvolvimento
@@ -63,12 +64,14 @@ npm run build && NODE_ENV=production npm start   # build de produção (necessá
 
 O CI (`.github/workflows/ci.yml`) roda typecheck, testes, `i18n:scan` e build em todo PR.
 
-Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`).
+Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`) ou deixe cada usuário colar a
+própria chave no app (ícone de chave): assim o app instalado ou hospedado só como site estático também usa a IA.
 
 ## Arquitetura
 
 | Pasta | Conteúdo |
 |---|---|
+| `src/ai/` | IA: prompts compartilhados entre servidor e navegador (`prompts.ts`), chave própria (`aiKey.ts`) e a escolha do caminho, servidor ou direto com o Google (`aiClient.ts`). |
 | `src/engine/` | Funções puras e testadas: keyframes, easing e caminhos (`keyframes.ts`), atores (`actor.ts`), rig do boneco (`stickRig.ts`) e poses-chave do boneco (`stickActor.ts`), tempo dos clipes de áudio (`audio.ts`). |
 | `src/audio/` | Web Audio: decodificação, playback, scrub, mixagem do export e importação de áudio/vídeo. |
 | `src/utils/exportVideo.ts` | `renderCompositeFrame` desenha um frame (preview e export usam a mesma função) e o export via mediabunny. |

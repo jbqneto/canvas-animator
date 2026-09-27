@@ -13,20 +13,26 @@ import {
   X,
   Loader2,
   Layers,
+  KeyRound,
 } from 'lucide-react';
 import { ChatMessage, ChatRole } from '../types';
 import { useI18n } from '../i18n';
+import { AiSetupError, AiSetupProblem, sendChat } from '../ai/aiClient';
+import { useAiKey } from '../ai/useAiKey';
 
 interface GeminiChatbotProps {
   isOpen: boolean;
   onToggle: () => void;
   onApplyAction?: (actionType: string, payload: any) => void;
+  /** Opens the "own AI key" dialog. */
+  onOpenAiKey: () => void;
 }
 
 export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
   isOpen,
   onToggle,
   onApplyAction,
+  onOpenAiKey,
 }) => {
   const { t, locale } = useI18n();
   // The welcome text is translated when shown, so it follows a language change
@@ -40,6 +46,10 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
   const [model, setModel] = useState<string>('gemini-3.5-flash');
   const [isLoading, setIsLoading] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  // Set when the AI can't answer until a key is configured (shown with a shortcut to the key dialog)
+  const [setupProblem, setSetupProblem] = useState<AiSetupProblem | null>(null);
+  const ownKey = useAiKey();
+  useEffect(() => setSetupProblem(null), [ownKey]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -67,34 +77,28 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/gemini/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newHistory.map((m) => ({
-            role: m.role,
-            content: messageText(m),
-          })),
-          role,
-          model,
-          locale,
-        }),
+      const reply = await sendChat({
+        messages: newHistory.map((m) => ({ role: m.role, content: messageText(m) })),
+        role,
+        model,
+        locale,
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || t('chat.errorResponse'));
-      }
-
+      setSetupProblem(null);
       const botMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
         role: 'assistant',
-        content: data.reply,
+        content: reply || t('chat.errorResponse'),
         timestamp: Date.now(),
       };
-
       setMessages((prev) => [...prev, botMsg]);
     } catch (err: any) {
+      // A setup problem is shown once, as a banner with the fix, not as a chat message
+      if (err instanceof AiSetupError) {
+        setSetupProblem(err.problem);
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        setInput(textToSend);
+        return;
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -141,6 +145,14 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
             title={isMinimized ? t('chat.expand') : t('chat.minimize')}
           >
             {isMinimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+          </button>
+          <button
+            onClick={onOpenAiKey}
+            className={`p-1 rounded hover:text-white ${ownKey ? 'text-amber-400' : 'text-neutral-400'}`}
+            title={t('aiKey.open')}
+            data-open-ai-key
+          >
+            <KeyRound size={14} />
           </button>
           <button
             onClick={onToggle}
@@ -260,6 +272,18 @@ export const GeminiChatbot: React.FC<GeminiChatbotProps> = ({
             )}
             <div ref={messagesEndRef} />
           </div>
+
+          {setupProblem && (
+            <div className="px-3 py-2 border-t border-amber-500/30 bg-amber-950/40 text-[11px] text-amber-200 flex items-center gap-2" data-ai-setup={setupProblem}>
+              <span className="flex-1 leading-snug">{t(`aiKey.problem.${setupProblem}`)}</span>
+              <button
+                onClick={onOpenAiKey}
+                className="shrink-0 px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold"
+              >
+                {t('aiKey.configure')}
+              </button>
+            </div>
+          )}
 
           {/* Bottom Chat Input */}
           <div className="p-2.5 border-t border-neutral-800 bg-neutral-950">

@@ -45,13 +45,23 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T23 — Boneco palito como ator: uma trilha de poses-chave (interpoladas osso a osso) + o mesmo transform
   animado dos atores (posição, escala, rotação, opacidade, seguir caminho), clipe e losangos na timeline;
   projetos antigos (uma cópia do boneco por frame) são convertidos ao abrir
+- [x] T24 — Chave própria da IA (BYOK): colada no app, testada e guardada só no navegador; com ela o copiloto
+  e as imagens falam direto com o Google (app instalado/site estático sem servidor); sem ela, usa o servidor
 
 ## Próximos passos sugeridos
 
-1. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
-2. Boneco: rotação da junta direto no palco (anel de rotação), espelhar pose e biblioteca de poses do usuário.
+1. Boneco: rotação da junta direto no palco (anel de rotação), espelhar pose e biblioteca de poses do usuário.
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- IA (`src/ai/`): `prompts.ts` (puro) monta instrução de sistema, conversa e partes da imagem e lê a imagem da
+  resposta; usado pelo servidor e pelo navegador. `aiClient.ts`: com chave própria (`aiKey.ts`,
+  `localStorage['flashmotion.geminiKey']`) chama o Google direto pelo SDK (`@google/genai`, import sob demanda,
+  chunk separado) e nunca o servidor; sem chave, POST em `/api/gemini/*`. Problemas que o usuário resolve com
+  uma chave viram `AiSetupError`: 'no-key' (servidor responde 503 `code: 'no-server-key'`), 'offline' (sem
+  servidor: erro de rede, 404 ou resposta que não é JSON — site estático/app instalado), 'bad-key' (Google
+  recusou: 401/403 ou mensagem de API key). Os diálogos mostram uma faixa com "Configurar chave".
+  `AiKeyDialog` testa a chave (`models.list`, 1 item) antes de salvar.
 
 - Renderer: `renderCompositeFrame` em `src/utils/exportVideo.ts` é a única função de desenho (preview e export).
   Ordem de desenho = ordem das camadas (`resolveObjectLayer`).
