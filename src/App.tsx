@@ -31,6 +31,7 @@ import { parseProject, ProjectFileError, projectNameFromFile, serializeProject }
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
 import { loadImageFileAsActorSource } from './utils/importImage';
+import { mergeUserPoses, readUserPoses } from './utils/userPoses';
 import {
   createDefaultStickFigure,
   applyPoseToStickFigure,
@@ -298,8 +299,10 @@ export default function App() {
 
   const serializeCurrent = () => {
     const { description: _d, ...content } = history.presentRef.current;
+    // "My poses" go along with the file, so the project can be opened on another computer with them
+    const poses = readUserPoses();
     return serializeProject(
-      { name: projectName, fps, totalFrames, canvas: canvasDimensions, videoBg, content },
+      { name: projectName, fps, totalFrames, canvas: canvasDimensions, videoBg, content, ...(poses.length ? { poses } : {}) },
       videoFileName
     );
   };
@@ -332,8 +335,10 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [isDirty]);
 
-  const applyProjectText = (text: string, name?: string) => {
+  /** `importPoses`: add the file's saved poses to this browser (not when restoring our own autosave). */
+  const applyProjectText = (text: string, name?: string, importPoses = true) => {
     const project = parseProject(text);
+    if (importPoses && project.poses?.length) mergeUserPoses(project.poses);
     markSavedOnRenderRef.current = true;
     setFps(project.fps);
     setTotalFrames(project.totalFrames);
@@ -404,7 +409,7 @@ export default function App() {
   const handleRestoreAutosave = (restore: boolean) => {
     if (restore && pendingRestore) {
       try {
-        applyProjectText(pendingRestore.text, pendingRestore.name);
+        applyProjectText(pendingRestore.text, pendingRestore.name, false);
         markSavedOnRenderRef.current = false; // restored work still isn't in a file
       } catch {
         clearAutosave();

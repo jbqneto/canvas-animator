@@ -49,11 +49,11 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   e as imagens falam direto com o Google (app instalado/site estático sem servidor); sem ela, usa o servidor
 - [x] T25 — Girar no palco (alça redonda acima da seleção, para atores, formas, gráficos, textos e bonecos;
   Shift = 15°), espelhar pose do boneco e "Minhas poses" (salvas no navegador, valem em qualquer projeto)
+- [x] T26 — "Minhas poses" vão junto no arquivo do projeto e entram na lista de quem abre o arquivo
 
 ## Próximos passos sugeridos
 
-1. Levar "Minhas poses" junto no arquivo do projeto (hoje ficam só no navegador).
-2. Alças de escala no palco (cantos da seleção), como a de rotação.
+1. Alças de escala no palco (cantos da seleção), como a de rotação.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -114,7 +114,9 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   prontas) + `MotionInspector`. `mirrorPose` nega x e troca juntas l*/r* (como "colar pose espelhada"); a
   cabeça ganha `facing` (-1 = olho à esquerda), que troca no meio do trecho ao interpolar. "Minhas poses":
   `utils/userPoses.ts`, `localStorage['flashmotion.userPoses']`, aplicadas com `applyPose` (só juntas que o
-  boneco tem).
+  boneco tem). Salvar o projeto grava a lista em `project.poses` (fora do histórico, não entra no desfazer);
+  abrir um arquivo chama `mergeUserPoses`: entram só nomes que o navegador ainda não tem (nunca sobrescreve
+  nem duplica). Restaurar o autosave não importa poses (senão uma pose apagada voltaria).
 - Alça de rotação (`FlashCanvas`): 26 px acima do meio da borda superior da caixa, em qualquer objeto animado
   selecionado; o ângulo é acumulado passo a passo (passa de meia volta sem pular) e grava pela regra do
   cronômetro (`setActorProperty('rotation')`); Shift arredonda para 15°.

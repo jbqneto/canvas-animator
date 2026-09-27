@@ -1,3 +1,4 @@
+import type { UserPose } from '../utils/userPoses';
 import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, StickActor, VideoBackground } from '../types';
 import { t } from '../i18n';
 import { migrateChart, migrateText } from '../engine/overlays';
@@ -16,6 +17,8 @@ export interface ProjectState {
   canvas: CanvasDimensions;
   videoBg: VideoBackground;
   content: Omit<HistorySnapshot, 'description'>;
+  /** The user's saved poses ("My poses") at save time, so they travel with the file. */
+  poses?: UserPose[];
 }
 
 interface ProjectFileV1 {
@@ -95,6 +98,20 @@ function parseSticks(value: unknown): StickActor[] {
     }));
 }
 
+/** Saved poses with a name and joints that have numeric positions; anything else is dropped. */
+function parseUserPoses(value: unknown): UserPose[] {
+  return asArray<any>(value)
+    .filter((p) => p && typeof p.name === 'string' && p.name.trim() && p.joints && typeof p.joints === 'object')
+    .map((p, i) => {
+      const joints: UserPose['joints'] = {};
+      Object.entries(p.joints as Record<string, any>).forEach(([id, j]) => {
+        if (j && Number.isFinite(j.x) && Number.isFinite(j.y)) joints[id] = { ...j, id };
+      });
+      return { id: typeof p.id === 'string' ? p.id : `pose-${i}`, name: p.name.trim(), joints };
+    })
+    .filter((p) => Object.keys(p.joints).length > 0);
+}
+
 /**
  * Parses and validates a project file, filling fields added in later versions with defaults
  * (e.g. `actors` did not exist in the first snapshots).
@@ -150,6 +167,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       url: videoBg.type === 'preset' && typeof videoBg.url === 'string' ? videoBg.url : '',
     },
     missingVideo: typeof videoBg.fileName === 'string' ? videoBg.fileName : undefined,
+    poses: parseUserPoses(p.poses),
     content: {
       frames: legacy.frames,
       sticks,

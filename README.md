@@ -29,7 +29,7 @@ qualquer editor.
 - **Boneco palito**: um objeto animado como os outros. Arraste as articulações para posar (girar o osso leva o
   resto do membro; Alt estica); com o cronômetro da pose ligado, cada pose vira uma pose-chave e os ossos giram
   sozinhos entre elas. Posição, tamanho, rotação e opacidade usam os mesmos keyframes dos atores (e ele pode
-  seguir um caminho). Poses prontas, espelhar pose, "Minhas poses" salvas no navegador, F6 para repetir a pose
+  seguir um caminho). Poses prontas, espelhar pose, "Minhas poses" (vão junto no arquivo do projeto), F6 para repetir a pose
   no próximo frame, Ctrl+B para quebrar em traços, onion skin.
 - **Girar no palco**: todo objeto selecionado tem uma alça redonda acima da caixa; arraste para girar (Shift =
   passos de 15°).
