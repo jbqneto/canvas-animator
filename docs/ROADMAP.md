@@ -39,13 +39,14 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   mapa) sobre as peças genéricas + entradas/saídas prontas (fade, slide, pop) aplicáveis a qualquer objeto
 - [x] T20 — Formas editáveis (retângulo, elipse, seta, linha) como tipo de ator: cor, contorno, cantos e
   tamanho editáveis a qualquer momento; os modelos usam essas formas no lugar de imagens SVG
+- [x] T21 — Marcadores na timeline: tecla M (inclusive tocando), nome/cor, arrastar, Shift+←/→, snap de clipes,
+  keys, áudio e cursor (Alt solta) e marcadores automáticos onde o som do áudio recomeça depois de uma pausa
 
 ## Próximos passos sugeridos
 
-1. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-2. Marcadores na timeline (ex.: batidas/palavras da narração) para alinhar keys a eles.
-3. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
-4. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+1. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
+2. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+3. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -135,6 +136,13 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   gravam keys comuns nas bordas do clipe (fade = opacidade; slides = opacidade + posição; pop = escala com
   `backOut`), a partir dos valores de repouso do objeto. Disponível no `MotionInspector` para qualquer objeto.
   Texto com `effect: 'none'` não tem entrada própria (só keyframes) — usado pelos modelos.
+- Marcadores (`engine/markers.ts`, `HistorySnapshot.markers`): `{id, frame, label, color}`, ordenados, um por
+  quadro. Snap: `snapFrame(f, alvos, limiar)` / `snapSpan(início, duração, …)` (a borda mais próxima ganha e o
+  clipe mantém a duração); limiar = 8 px convertidos em quadros pela largura da timeline (só "puxa" quando o
+  quadro é mais estreito que isso); alvos = marcadores + cursor nas edições, só marcadores no scrub; Alt
+  desliga. Aplicado em clipes (mover/cortar), losangos, áudio e régua. `detectOnsets(peaks)` acha onde o som
+  volta acima de 20% do pico depois de ≥ 0,25 s abaixo; `clipOnsetFrames` converte o trecho audível do clipe.
+  A régua agora mapeia o clique para a célula sob o ponteiro (antes arredondava e caía um quadro antes).
 - Timeline: grade e régua por CSS (`frameGridStyle`), sem um elemento por quadro. Escala pura em
   `src/engine/timelineScale.ts`: `timelineScale(total, fps, pxPorQuadro, unidade)` escolhe passo das linhas
   fortes (rótulos ≥ 56 px) e fracas (≥ 6 px); em segundos usa tempos "redondos" (0,25 s, 1 s, 5 s, 1:00…) e,

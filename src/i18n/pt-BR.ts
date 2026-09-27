@@ -711,4 +711,21 @@ export const ptBR = {
 
   // Shape selection label
   'selection.shape': 'Forma',
+
+  // Timeline markers
+  'marker.add': 'Marcador',
+  'marker.addHint': 'Adicionar marcador no cursor (tecla M — funciona durante o play, no ritmo da narração)',
+  'marker.prev': 'Marcador anterior (Shift + ←)',
+  'marker.next': 'Próximo marcador (Shift + →)',
+  'marker.hint': 'Marcador no quadro {frame}: {label}. Arraste para mover; clique para nomear ou excluir. Clipes e keys grudam nele (Alt solta).',
+  'marker.unnamed': 'sem nome',
+  'marker.namePlaceholder': 'Nome (quadro {frame})',
+  'marker.delete': 'Excluir marcador',
+  'marker.fromAudioHint': 'Criar marcadores onde o som recomeça depois de uma pausa (início das falas ou batidas)',
+  'marker.history.add': 'Marcador no quadro {frame}',
+  'marker.history.move': 'Mover marcador para o quadro {frame}',
+  'marker.history.rename': 'Renomear marcador',
+  'marker.history.delete': 'Excluir marcador',
+  'marker.history.fromAudio': '{count} marcadores de "{name}"',
+  'marker.noneFound': 'Nenhum início de som encontrado no trecho audível desta faixa.',
 };

@@ -295,6 +295,14 @@ export interface AudioClip {
   muted: boolean;
 }
 
+/** A named point in time on the timeline (a word, a beat) that edits snap to. */
+export interface Marker {
+  id: string;
+  frame: number;
+  label: string;
+  color: string;
+}
+
 export interface FrameData {
   frameNumber: number;
   stickFigures: StickFigure[];
@@ -349,6 +357,7 @@ export interface HistorySnapshot {
   actors: ActorOverlay[];
   paths: MotionPath[];
   audio?: AudioClip[];
+  markers?: Marker[];
   groups?: CanvasGroup[];
   videoBg?: VideoBackground;
 }

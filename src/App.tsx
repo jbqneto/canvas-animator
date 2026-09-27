@@ -18,6 +18,7 @@ import {
   AudioClip,
   Animated,
   ShapeType,
+  Marker,
 } from './types';
 import { attachToPath, createActor } from './engine/actor';
 import { createChart, createText } from './engine/overlays';
@@ -56,9 +57,11 @@ import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 import { framesToFitAudio, frameTime } from './engine/audio';
-import { loadAudioFile, mixdown, playClips, prepareClips, resumeAudio, scrubClips } from './audio/audioRuntime';
+import { decodeClip, loadAudioFile, mixdown, playClips, prepareClips, resumeAudio, scrubClips } from './audio/audioRuntime';
+import { addMarker, clipOnsetFrames, removeMarker, updateMarker } from './engine/markers';
 
 const EMPTY_AUDIO: AudioClip[] = [];
+const EMPTY_MARKERS: Marker[] = [];
 
 export default function App() {
   const { t, locale } = useI18n();
@@ -243,6 +246,7 @@ export default function App() {
 
   const { frames, charts, texts, images, actors, paths, layers } = history.present;
   const audio = history.present.audio ?? EMPTY_AUDIO;
+  const markers = history.present.markers ?? EMPTY_MARKERS;
 
   // UI Modals & Export state
   const [exportProgress, setExportProgress] = useState<number>(0);
@@ -1371,6 +1375,62 @@ export default function App() {
     if (sounds.length) handleImportAudioFiles(sounds);
   };
 
+  // ================= TIMELINE MARKERS =================
+  const withMarkers = (snapshot: HistorySnapshot, next: Marker[]): HistorySnapshot => ({ ...snapshot, markers: next });
+  const markerSeq = useRef(0);
+  const markerId = () => `marker-${Date.now()}-${markerSeq.current++}`;
+
+  // Reads the latest snapshot: M can be pressed several times per second while playing
+  const handleAddMarker = useCallback(
+    (frame: number) => {
+      const present = history.presentRef.current;
+      const current = present.markers ?? [];
+      const next = addMarker(current, frame, markerId());
+      if (next !== current) history.pushSnapshot(t('marker.history.add', { frame: Math.round(frame) }), withMarkers(present, next));
+    },
+    [history, t]
+  );
+
+  const handleUpdateMarker = (marker: Marker, description: string) => {
+    const present = history.presentRef.current;
+    history.pushSnapshot(description, withMarkers(present, updateMarker(present.markers ?? [], marker)));
+  };
+
+  const handleTransientMarker = useCallback(
+    (marker: Marker) => history.updatePresent((prev) => withMarkers(prev, updateMarker(prev.markers ?? [], marker))),
+    [history]
+  );
+
+  const handleCommitMarker = useCallback(
+    (marker: Marker, description: string, base: HistorySnapshot) => {
+      const current = history.presentRef.current;
+      history.commitAction(description, base, withMarkers(current, updateMarker(current.markers ?? [], marker)));
+    },
+    [history]
+  );
+
+  const handleDeleteMarker = (id: string) => {
+    const present = history.presentRef.current;
+    history.pushSnapshot(t('marker.history.delete'), withMarkers(present, removeMarker(present.markers ?? [], id)));
+  };
+
+  /** Markers where the clip's sound starts after a pause (phrases of a narration, beats). */
+  const handleAutoMarkers = async (clip: AudioClip) => {
+    const { peaks } = await decodeClip(clip);
+    const frames = clipOnsetFrames(clip, peaks, fps).filter((f) => f >= 1 && f <= totalFrames);
+    const present = history.presentRef.current;
+    const before = present.markers ?? [];
+    const next = frames.reduce((list, f) => addMarker(list, f, markerId()), before);
+    if (next.length === before.length) {
+      alert(t('marker.noneFound'));
+      return;
+    }
+    history.pushSnapshot(
+      t('marker.history.fromAudio', { count: next.length - before.length, name: clip.name }),
+      withMarkers(present, next)
+    );
+  };
+
   // ================= TEMPLATE LIBRARY =================
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
@@ -1752,6 +1812,7 @@ export default function App() {
       actors: [],
       paths: [],
       audio: [],
+      markers: [],
       layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path'),
     });
     setCurrentFrame(1);
@@ -2154,6 +2215,13 @@ export default function App() {
           onDeleteAudioClip={handleDeleteAudioClip}
           audioScrub={audioScrub}
           setAudioScrub={setAudioScrub}
+          markers={markers}
+          onAddMarker={handleAddMarker}
+          onUpdateMarker={handleUpdateMarker}
+          onTransientMarker={handleTransientMarker}
+          onCommitMarker={handleCommitMarker}
+          onDeleteMarker={handleDeleteMarker}
+          onAutoMarkers={handleAutoMarkers}
         />
       </div>
 

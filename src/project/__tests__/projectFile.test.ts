@@ -45,6 +45,7 @@ describe('project file', () => {
     const parsed = parseProject(old);
     expect(parsed.content.actors).toEqual([]);
     expect(parsed.content.audio).toEqual([]);
+    expect(parsed.content.markers).toEqual([]);
     expect(parsed.fps).toBe(24);
     expect(parsed.totalFrames).toBe(60);
   });
@@ -68,6 +69,20 @@ describe('project file', () => {
     const [repaired, ...rest] = parseProject(broken).content.audio!;
     expect(rest).toEqual([]);
     expect(repaired).toMatchObject({ startFrame: 1, offset: 4, duration: 0, volume: 2, muted: false });
+  });
+
+  it('keeps markers sorted and drops broken ones', () => {
+    const base = state();
+    base.content.markers = [
+      { id: 'b', frame: 40, label: 'fim', color: '#fff' },
+      { id: 'a', frame: 12, label: 'começo', color: '#000' },
+    ];
+    expect(parseProject(serializeProject(base)).content.markers!.map((m) => m.id)).toEqual(['a', 'b']);
+    const broken = JSON.stringify({
+      format: 'flashmotion-project', version: 1,
+      project: { content: { markers: [{ frame: 'x' }, { frame: 3.6 }, null] } },
+    });
+    expect(parseProject(broken).content.markers).toEqual([{ id: 'marker-0', frame: 4, label: '', color: '#f59e0b' }]);
   });
 
   it('rejects files that are not projects', () => {
