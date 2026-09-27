@@ -29,6 +29,9 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Flag,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { isTypingTarget } from '../utils/keyboard';
 import { useI18n } from '../i18n';
@@ -44,7 +47,9 @@ import {
   MotionPath,
   AudioClip,
   Animated,
+  Marker,
 } from '../types';
+import { nextMarker, prevMarker, snapFrame, snapSpan } from '../engine/markers';
 
 type AnimKind = 'actor' | 'chart' | 'text';
 import { AudioLanes, AudioList } from './AudioTracks';
@@ -91,6 +96,8 @@ function readTimeUnit(): TimeUnit {
 }
 type ClipMode = 'move' | 'trim-start' | 'trim-end';
 const MIN_CLIP_FRAMES = 5;
+/** Edits snap to markers (and the playhead) closer than this, in screen pixels; Alt disables it. */
+const SNAP_PX = 8;
 /** 10 minutes at 60 fps: long narrations fit; the grid is CSS so length doesn't cost rendering. */
 const MAX_TIMELINE_FRAMES = 36000;
 
@@ -145,6 +152,13 @@ interface TimelineProps {
   onDeleteAudioClip: (clipId: string) => void;
   audioScrub: boolean;
   setAudioScrub: (on: boolean) => void;
+  markers: Marker[];
+  onAddMarker: (frame: number) => void;
+  onUpdateMarker: (marker: Marker, description: string) => void;
+  onTransientMarker: (marker: Marker) => void;
+  onCommitMarker: (marker: Marker, description: string, baseSnapshot: HistorySnapshot) => void;
+  onDeleteMarker: (id: string) => void;
+  onAutoMarkers: (clip: AudioClip) => void;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -195,6 +209,13 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDeleteAudioClip,
   audioScrub,
   setAudioScrub,
+  markers,
+  onAddMarker,
+  onUpdateMarker,
+  onTransientMarker,
+  onCommitMarker,
+  onDeleteMarker,
+  onAutoMarkers,
 }) => {
   const { t, locale } = useI18n();
   const rulerRef = useRef<HTMLDivElement>(null);
@@ -208,6 +229,54 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [rulerScrubbing, setRulerScrubbing] = useState(false);
   /** Width of the whole timeline content in pixels (the frame area, zoomed). */
   const trackWidth = () => rulerRef.current?.getBoundingClientRect().width || 800;
+
+  // ================= MARKERS & SNAPPING =================
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const selectedMarker = markers.find((m) => m.id === selectedMarkerId) ?? null;
+  // A shorter timeline hides markers past its end (they come back if it grows again)
+  const visibleMarkers = markers.filter((m) => m.frame <= totalFrames);
+  // Read by window listeners during drags (always the latest values)
+  const snapRef = useRef({ markers: [] as number[], playhead: 1 });
+  snapRef.current = { markers: markers.map((m) => m.frame), playhead: currentFrame };
+  /** Snap distance in frames for a drag measured against `width` pixels of timeline. */
+  const snapThreshold = (width: number) => (SNAP_PX * totalFrames) / Math.max(1, width);
+  const editTargets = () => [...snapRef.current.markers, snapRef.current.playhead];
+  const [markerDrag, setMarkerDrag] = useState<{
+    marker: Marker;
+    startClientX: number;
+    base?: HistorySnapshot;
+    last: Marker;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!markerDrag) return;
+    const drag = markerDrag;
+    const width = trackWidth();
+    const onMove = (e: MouseEvent) => {
+      const delta = Math.round((e.clientX - drag.startClientX) * (totalFrames / width));
+      const frame = Math.max(1, Math.min(totalFrames, drag.marker.frame + delta));
+      if (frame === drag.last.frame) return;
+      drag.last = { ...drag.marker, frame };
+      onTransientMarker(drag.last);
+    };
+    const onUp = () => {
+      if (drag.last.frame !== drag.marker.frame && drag.base) {
+        onCommitMarker(drag.last, t('marker.history.move', { frame: drag.last.frame }), drag.base);
+      } else {
+        // A click: select it and bring the playhead there
+        setSelectedMarkerId(drag.marker.id);
+        setCurrentFrame(drag.marker.frame);
+      }
+      setMarkerDrag(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markerDrag, totalFrames]);
 
   // Actors, charts and texts share the keyframed transform: same timeline editing for all
   const updateAnimated = (kind: AnimKind, obj: Animated) => {
@@ -369,7 +438,8 @@ export const Timeline: React.FC<TimelineProps> = ({
     const drag = keyDrag;
     const onMove = (e: MouseEvent) => {
       const delta = Math.round((e.clientX - drag.startClientX) * (totalFrames / drag.trackWidth));
-      const to = Math.max(1, Math.min(totalFrames, drag.fromFrame + delta));
+      const raw = Math.max(1, Math.min(totalFrames, drag.fromFrame + delta));
+      const to = e.altKey ? raw : snapFrame(raw, snapRef.current.markers, snapThreshold(drag.trackWidth));
       if (to === drag.toFrame) return;
       drag.toFrame = to;
       updateAnimated(drag.kind, moveActorKeys(drag.obj, drag.fromFrame, to));
@@ -418,6 +488,12 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Playback clock lives in App (synced with the background video)
 
   // Keyboard navigation shortcuts
+  const currentFrameRef = useRef(currentFrame);
+  currentFrameRef.current = currentFrame;
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
+  const onAddMarkerRef = useRef(onAddMarker);
+  onAddMarkerRef.current = onAddMarker;
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
@@ -425,6 +501,17 @@ export const Timeline: React.FC<TimelineProps> = ({
       if (e.code === 'Space') {
         e.preventDefault();
         setIsPlaying((p) => !p);
+      } else if (e.code === 'KeyM' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Works while playing too: tap M on each beat or word of the narration
+        e.preventDefault();
+        onAddMarkerRef.current(currentFrameRef.current);
+      } else if (e.shiftKey && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) {
+        e.preventDefault();
+        const target =
+          e.code === 'ArrowRight'
+            ? nextMarker(markersRef.current, currentFrameRef.current)
+            : prevMarker(markersRef.current, currentFrameRef.current);
+        if (target) setCurrentFrame(target.frame);
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
         setCurrentFrame((f) => Math.min(totalFrames, f + 1));
@@ -455,14 +542,22 @@ export const Timeline: React.FC<TimelineProps> = ({
   const frameAtClientX = (clientX: number) => {
     const rect = rulerRef.current?.getBoundingClientRect();
     if (!rect) return null;
+    // The frame whose cell is under the pointer (cell N spans (N-1)/total .. N/total of the width)
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return Math.max(1, Math.min(totalFrames, Math.round(pct * totalFrames) || 1));
+    return Math.max(1, Math.min(totalFrames, Math.floor(pct * totalFrames) + 1));
+  };
+
+  /** Frame under the pointer, pulled onto a nearby marker unless Alt is held. */
+  const scrubFrameAt = (clientX: number, altKey: boolean) => {
+    const frame = frameAtClientX(clientX);
+    if (frame === null || altKey) return frame;
+    return snapFrame(frame, snapRef.current.markers, snapThreshold(trackWidth()));
   };
 
   const handleTimelineScrub = (e: React.MouseEvent<HTMLDivElement>) => {
     // If a clip is being dragged, don't scrub
     if (activeClipDrag) return;
-    const frame = frameAtClientX(e.clientX);
+    const frame = scrubFrameAt(e.clientX, e.altKey);
     if (frame !== null) setCurrentFrame(frame);
   };
 
@@ -470,7 +565,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   useEffect(() => {
     if (!rulerScrubbing) return;
     const onMove = (e: MouseEvent) => {
-      const frame = frameAtClientX(e.clientX);
+      const frame = scrubFrameAt(e.clientX, e.altKey);
       if (frame !== null) setCurrentFrame(frame);
     };
     const onUp = () => setRulerScrubbing(false);
@@ -524,26 +619,32 @@ export const Timeline: React.FC<TimelineProps> = ({
     const drag = activeClipDrag;
 
     // New [start, duration] for the clip, kept inside the timeline and at least MIN_CLIP_FRAMES long
-    const computeSpan = (deltaFrames: number) => {
+    // Edges snap to markers and the playhead (Alt = free)
+    const computeSpan = (deltaFrames: number, snap: boolean) => {
       const { initialStartFrame: start0, initialDuration: dur0 } = drag;
+      const threshold = snap ? snapThreshold(drag.trackWidth) : 0;
+      const targets = editTargets();
       if (drag.mode === 'trim-end') {
-        const durationFrames = Math.max(MIN_CLIP_FRAMES, Math.min(totalFrames - start0 + 1, dur0 + deltaFrames));
+        const end = snapFrame(start0 + dur0 + deltaFrames, targets, threshold);
+        const durationFrames = Math.max(MIN_CLIP_FRAMES, Math.min(totalFrames - start0 + 1, end - start0));
         return { startFrame: start0, durationFrames };
       }
       if (drag.mode === 'trim-start') {
         const maxStart = start0 + dur0 - MIN_CLIP_FRAMES;
-        const startFrame = Math.max(1, Math.min(maxStart, start0 + deltaFrames));
+        const start = snapFrame(start0 + deltaFrames, targets, threshold);
+        const startFrame = Math.max(1, Math.min(maxStart, start));
         return { startFrame, durationFrames: dur0 - (startFrame - start0) };
       }
       const maxStart = Math.max(1, totalFrames - dur0 + 1);
-      return { startFrame: Math.max(1, Math.min(maxStart, start0 + deltaFrames)), durationFrames: dur0 };
+      const start = snapSpan(start0 + deltaFrames, dur0, targets, threshold);
+      return { startFrame: Math.max(1, Math.min(maxStart, start)), durationFrames: dur0 };
     };
 
     const onWindowMouseMove = (e: MouseEvent) => {
       const deltaPx = e.clientX - drag.startClientX;
       const deltaFrames = Math.round(deltaPx * (totalFrames / drag.trackWidth));
       if (Math.abs(deltaFrames) > 0) drag.hasMoved = true;
-      const span = computeSpan(deltaFrames);
+      const span = computeSpan(deltaFrames, !e.altKey);
 
       if (drag.type === 'path') {
         const path = paths.find((p) => p.id === drag.id);
@@ -688,7 +789,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           <div className="h-4 w-px bg-neutral-800 mx-1" />
 
           {/* Current Frame indicator badge */}
-          <span className="text-[11px] font-mono text-neutral-300">
+          <span className="text-[11px] font-mono text-neutral-300 whitespace-nowrap">
             {t('timeline.frame')} <span className="text-sky-400 font-bold">{currentFrame}</span> / {totalFrames}
           </span>
         </div>
@@ -702,7 +803,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 transition font-medium text-[11px]"
           >
             <Copy size={12} />
-            {t('timeline.duplicatePose')}
+            <span className="hidden min-[1500px]:inline whitespace-nowrap">{t('timeline.duplicatePose')}</span>
           </button>
 
           <button
@@ -712,8 +813,68 @@ export const Timeline: React.FC<TimelineProps> = ({
             className="flex items-center gap-1 px-2 py-1 rounded hover:bg-rose-950/40 text-neutral-400 hover:text-rose-300 border border-transparent hover:border-rose-800/40 transition text-[11px]"
           >
             <Trash2 size={12} />
-            {t('timeline.clearFrame')}
+            <span className="hidden min-[1500px]:inline whitespace-nowrap">{t('timeline.clearFrame')}</span>
           </button>
+
+          <div className="h-4 w-px bg-neutral-800 mx-1" />
+
+          {/* Markers: previous / add (M) / next, and the selected one's name */}
+          <div className="flex items-center gap-0.5">
+            <button
+              id="marker-prev-btn"
+              onClick={() => {
+                const m = prevMarker(markers, currentFrame);
+                if (m) setCurrentFrame(m.frame);
+              }}
+              title={t('marker.prev')}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition"
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <button
+              id="marker-add-btn"
+              onClick={() => onAddMarker(currentFrame)}
+              title={t('marker.addHint')}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition text-[11px] font-medium"
+            >
+              <Flag size={12} />
+              {t('marker.add')}
+            </button>
+            <button
+              id="marker-next-btn"
+              onClick={() => {
+                const m = nextMarker(markers, currentFrame);
+                if (m) setCurrentFrame(m.frame);
+              }}
+              title={t('marker.next')}
+              className="p-1 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition"
+            >
+              <ChevronRight size={13} />
+            </button>
+          </div>
+          {selectedMarker && (
+            <div className="flex items-center gap-1" data-marker-editor>
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedMarker.color }} />
+              <input
+                id="marker-label-input"
+                value={selectedMarker.label}
+                placeholder={t('marker.namePlaceholder', { frame: selectedMarker.frame })}
+                onChange={(e) => onUpdateMarker({ ...selectedMarker, label: e.target.value }, t('marker.history.rename'))}
+                className="w-28 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-[11px] text-neutral-200 focus:border-amber-500 outline-none"
+              />
+              <button
+                id="marker-delete-btn"
+                onClick={() => {
+                  onDeleteMarker(selectedMarker.id);
+                  setSelectedMarkerId(null);
+                }}
+                title={t('marker.delete')}
+                className="p-1 rounded hover:bg-rose-950/40 text-neutral-500 hover:text-rose-400 transition"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: FPS & Total Frames Duration */}
@@ -1095,6 +1256,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               getCurrentSnapshot={getCurrentSnapshot}
               scrub={audioScrub}
               setScrub={setAudioScrub}
+              onAutoMarkers={onAutoMarkers}
             />
           </div>
         </div>
@@ -1133,6 +1295,36 @@ export const Timeline: React.FC<TimelineProps> = ({
               </span>
             ))}
 
+            {/* Markers: drag to move, click to select (name / delete in the transport bar) */}
+            {visibleMarkers.map((m) => (
+              <div
+                key={m.id}
+                data-marker={m.id}
+                style={{ left: `${((m.frame - 1) / totalFrames) * 100}%` }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setMarkerDrag({ marker: m, startClientX: e.clientX, base: getCurrentSnapshot?.(), last: m });
+                }}
+                onClick={(e) => e.stopPropagation()}
+                title={t('marker.hint', { frame: m.frame, label: m.label || t('marker.unnamed') })}
+                className="absolute bottom-0 z-40 -translate-x-1/2 cursor-ew-resize flex flex-col items-center"
+              >
+                {m.label && (
+                  <span
+                    className="mb-px px-1 rounded text-[8px] leading-tight font-semibold text-neutral-950 whitespace-nowrap max-w-[90px] truncate"
+                    style={{ background: m.color }}
+                  >
+                    {m.label}
+                  </span>
+                )}
+                <div
+                  className={`w-3 h-2.5 ${selectedMarkerId === m.id ? 'ring-2 ring-white' : ''}`}
+                  style={{ background: m.color, clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }}
+                />
+              </div>
+            ))}
+
             {/* Red Playhead Scrubber in Ruler */}
             <div
               style={{
@@ -1149,6 +1341,13 @@ export const Timeline: React.FC<TimelineProps> = ({
 
           {/* Keyframe Tracks Corresponding to Each Layer */}
           <div onClick={handleTimelineScrub} className="flex-1 relative cursor-pointer">
+            {visibleMarkers.map((m) => (
+              <div
+                key={m.id}
+                style={{ left: `${((m.frame - 1) / totalFrames) * 100}%`, borderColor: m.color }}
+                className="absolute top-0 bottom-0 border-l border-dashed opacity-40 pointer-events-none z-10"
+              />
+            ))}
             {/* Vertical Red Playhead Line extending down all tracks */}
             <div
               style={{
@@ -1528,6 +1727,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               onCommit={onCommitAudioClip}
               getCurrentSnapshot={getCurrentSnapshot}
               getTrackWidth={trackWidth}
+              getSnapTargets={editTargets}
             />
           </div>
           </div>

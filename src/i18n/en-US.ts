@@ -710,4 +710,21 @@ export const enUS: Record<keyof typeof ptBR, string> = {
 
   // Shape selection label
   'selection.shape': 'Shape',
+
+  // Timeline markers
+  'marker.add': 'Marker',
+  'marker.addHint': 'Add a marker at the playhead (M key — works while playing, in time with the narration)',
+  'marker.prev': 'Previous marker (Shift + ←)',
+  'marker.next': 'Next marker (Shift + →)',
+  'marker.hint': 'Marker at frame {frame}: {label}. Drag to move; click to name or delete. Clips and keys snap to it (Alt releases).',
+  'marker.unnamed': 'unnamed',
+  'marker.namePlaceholder': 'Name (frame {frame})',
+  'marker.delete': 'Delete marker',
+  'marker.fromAudioHint': 'Add markers where the sound starts again after a pause (start of phrases or beats)',
+  'marker.history.add': 'Marker at frame {frame}',
+  'marker.history.move': 'Move marker to frame {frame}',
+  'marker.history.rename': 'Rename marker',
+  'marker.history.delete': 'Delete marker',
+  'marker.history.fromAudio': '{count} markers from "{name}"',
+  'marker.noneFound': 'No sound onsets found in the audible part of this track.',
 };

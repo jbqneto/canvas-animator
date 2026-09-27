@@ -3,10 +3,11 @@
  * waveform on the right (drag to move, edges to trim).
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { AudioLines, Headphones, Music, Plus, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { AudioLines, Flag, Headphones, Music, Plus, Trash2, Volume2, VolumeX } from 'lucide-react';
 import type { AudioClip, HistorySnapshot } from '../types';
 import { useI18n } from '../i18n';
 import { clipDurationFrames, clipWaveform, moveClip, trimClipEnd, trimClipStart } from '../engine/audio';
+import { snapFrame, snapSpan } from '../engine/markers';
 import { decodeClip } from '../audio/audioRuntime';
 
 export const AUDIO_HEADER_HEIGHT = 'h-7';
@@ -27,6 +28,8 @@ interface AudioListProps {
   getCurrentSnapshot?: () => HistorySnapshot;
   scrub: boolean;
   setScrub: (on: boolean) => void;
+  /** Adds markers where the clip's sound starts after a pause. */
+  onAutoMarkers: (clip: AudioClip) => void;
 }
 
 /** Left column: section header and one control row per clip. */
@@ -40,6 +43,7 @@ export const AudioList: React.FC<AudioListProps> = ({
   getCurrentSnapshot,
   scrub,
   setScrub,
+  onAutoMarkers,
 }) => {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -130,6 +134,14 @@ export const AudioList: React.FC<AudioListProps> = ({
             className="w-16 accent-violet-500 shrink-0"
           />
           <button
+            data-auto-markers={clip.id}
+            onClick={() => onAutoMarkers(clip)}
+            title={t('marker.fromAudioHint')}
+            className="p-1 rounded hover:bg-neutral-800 text-amber-400/80 hover:text-amber-300 shrink-0"
+          >
+            <Flag size={12} />
+          </button>
+          <button
             onClick={() => onDelete(clip.id)}
             title={t('audio.delete')}
             className="p-1 rounded hover:bg-rose-950/40 text-neutral-500 hover:text-rose-400 shrink-0"
@@ -204,6 +216,8 @@ interface AudioLanesProps {
   getCurrentSnapshot?: () => HistorySnapshot;
   /** Width of the frame area in pixels, to turn mouse movement into frames. */
   getTrackWidth: () => number;
+  /** Frames that clip edges snap to (markers, playhead). */
+  getSnapTargets: () => number[];
 }
 
 /** Right column: rows aligned with AudioList, each with its clip bar. */
@@ -215,6 +229,7 @@ export const AudioLanes: React.FC<AudioLanesProps> = ({
   onCommit,
   getCurrentSnapshot,
   getTrackWidth,
+  getSnapTargets,
 }) => {
   const { t } = useI18n();
   const [drag, setDrag] = useState<{
@@ -229,15 +244,25 @@ export const AudioLanes: React.FC<AudioLanesProps> = ({
   useEffect(() => {
     if (!drag) return;
     const session = drag;
-    const apply = (clientX: number) => {
+    // Snapping to markers/playhead (Alt = free): the edge being dragged, or either edge when moving
+    const apply = (clientX: number, snap: boolean) => {
       const delta = Math.round((clientX - session.startX) * (totalFrames / session.trackWidth));
       const c = session.clip;
-      if (session.mode === 'move') return moveClip(c, Math.min(totalFrames, c.startFrame + delta));
-      if (session.mode === 'trim-start') return trimClipStart(c, delta, fps);
-      return trimClipEnd(c, delta, fps);
+      const threshold = snap ? (8 * totalFrames) / Math.max(1, session.trackWidth) : 0;
+      const targets = getSnapTargets();
+      const length = clipDurationFrames(c, fps);
+      if (session.mode === 'move') {
+        const start = snapSpan(c.startFrame + delta, length, targets, threshold);
+        return moveClip(c, Math.min(totalFrames, start));
+      }
+      if (session.mode === 'trim-start') {
+        return trimClipStart(c, snapFrame(c.startFrame + delta, targets, threshold) - c.startFrame, fps);
+      }
+      const end = c.startFrame + length;
+      return trimClipEnd(c, snapFrame(end + delta, targets, threshold) - end, fps);
     };
     const onMove = (e: MouseEvent) => {
-      session.last = apply(e.clientX);
+      session.last = apply(e.clientX, !e.altKey);
       onTransientUpdate(session.last);
     };
     const onUp = () => {

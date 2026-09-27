@@ -1,4 +1,4 @@
-import type { ActorOverlay, AudioClip, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
+import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
 import { t } from '../i18n';
 import { migrateChart, migrateText } from '../engine/overlays';
 import { normalizeShape } from '../engine/shapes';
@@ -46,6 +46,19 @@ export class ProjectFileError extends Error {}
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asNumber = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/** Markers with a valid frame, sorted; missing labels/colors get defaults. */
+function parseMarkers(value: unknown): Marker[] {
+  return asArray<any>(value)
+    .filter((m) => m && Number.isFinite(m.frame))
+    .map((m, i) => ({
+      id: typeof m.id === 'string' ? m.id : `marker-${i}`,
+      frame: Math.max(1, Math.round(m.frame)),
+      label: typeof m.label === 'string' ? m.label : '',
+      color: typeof m.color === 'string' ? m.color : '#f59e0b',
+    }))
+    .sort((a, b) => a.frame - b.frame);
+}
 
 /** Audio clips with the timing fields repaired; clips without data are dropped. */
 function parseAudio(value: unknown): AudioClip[] {
@@ -125,6 +138,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       actors: asArray<ActorOverlay>(c.actors).map(normalizeShape),
       paths: asArray(c.paths),
       audio: parseAudio(c.audio),
+      markers: parseMarkers(c.markers),
       layers: asArray(c.layers),
       groups: asArray(c.groups),
     },
