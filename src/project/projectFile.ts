@@ -1,7 +1,8 @@
-import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, VideoBackground } from '../types';
+import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, StickActor, VideoBackground } from '../types';
 import { t } from '../i18n';
 import { migrateChart, migrateText } from '../engine/overlays';
 import { normalizeShape } from '../engine/shapes';
+import { migrateFrameSticks, withStickLayers } from '../engine/stickActor';
 
 export const PROJECT_FORMAT = 'flashmotion-project';
 export const PROJECT_VERSION = 1;
@@ -81,6 +82,19 @@ function parseAudio(value: unknown): AudioClip[] {
     });
 }
 
+/** Stick actors with the fields a figure needs; the pose track defaults to empty (rest pose). */
+function parseSticks(value: unknown): StickActor[] {
+  return asArray<any>(value)
+    .filter((s) => s && typeof s.id === 'string' && s.joints && Array.isArray(s.bones) && s.base)
+    .map((s) => ({
+      ...s,
+      tracks: s.tracks ?? {},
+      poses: asArray(s.poses),
+      smoothPath: s.smoothPath !== false,
+      orientToPath: s.orientToPath === true,
+    }));
+}
+
 /**
  * Parses and validates a project file, filling fields added in later versions with defaults
  * (e.g. `actors` did not exist in the first snapshots).
@@ -113,6 +127,13 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
     };
   });
 
+  // Older files kept a copy of each stick figure per frame: turned into stick actors with pose keys
+  const sticks = parseSticks(c.sticks);
+  const legacy = migrateFrameSticks(frames);
+  legacy.sticks.forEach((s) => {
+    if (!sticks.some((x) => x.id === s.id)) sticks.push(s);
+  });
+
   const canvasW = asNumber(p.canvas?.width, 1280);
   const canvasH = asNumber(p.canvas?.height, 720);
   const videoBg = p.videoBg ?? {};
@@ -130,7 +151,8 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
     },
     missingVideo: typeof videoBg.fileName === 'string' ? videoBg.fileName : undefined,
     content: {
-      frames,
+      frames: legacy.frames,
+      sticks,
       // Older files stored charts/texts with x/y and a P1→P2 tween: converted to the keyframe model
       charts: asArray(c.charts).map(migrateChart),
       texts: asArray(c.texts).map(migrateText),
@@ -139,7 +161,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       paths: asArray(c.paths),
       audio: parseAudio(c.audio),
       markers: parseMarkers(c.markers),
-      layers: asArray(c.layers),
+      layers: withStickLayers(asArray(c.layers), sticks),
       groups: asArray(c.groups),
     },
   };

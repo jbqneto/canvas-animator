@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
-  StickFigure,
+  StickActor,
   DrawingStroke,
   Point,
   FrameData,
@@ -31,10 +31,13 @@ import {
 } from '../engine/actor';
 import { chartBox, textBox } from '../engine/overlays';
 
-type AnimKind = 'actor' | 'chart' | 'text';
-const KIND_COLOR: Record<AnimKind, string> = { actor: '#f97316', chart: '#0ea5e9', text: '#10b981' };
+type AnimKind = 'actor' | 'chart' | 'text' | 'stick';
+const KIND_COLOR: Record<AnimKind, string> = { actor: '#f97316', chart: '#0ea5e9', text: '#10b981', stick: '#f59e0b' };
+/** Layer type an object falls back to when it has no layer of its own (figures: the drawings layer). */
+const layerTypeOf = (kind: AnimKind) => (kind === 'stick' ? 'drawing' : kind);
 import { pathPolyline, samplePosition, setKeyframe } from '../engine/keyframes';
 import { dragJointFK } from '../engine/stickRig';
+import { localFigure, poseBox, samplePose, setPose } from '../engine/stickActor';
 import { useI18n } from '../i18n';
 
 const PATH_KEY_HIT_RADIUS = 9;
@@ -110,7 +113,10 @@ interface FlashCanvasProps {
   layers: StudioLayer[];
   onGroupSelected: () => void;
   onUngroupSelected: () => void;
-  onDeleteStickFigure?: (stickId: string, allFrames?: boolean) => void;
+  sticks: StickActor[];
+  onTransientUpdateStick: (stick: StickActor) => void;
+  onCommitStick: (stick: StickActor, description: string, baseSnapshot: HistorySnapshot) => void;
+  onDeleteStick: (stickId: string) => void;
   canvasWidth?: number;
   canvasHeight?: number;
   getCurrentSnapshot: () => HistorySnapshot;
@@ -181,7 +187,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   layers,
   onGroupSelected,
   onUngroupSelected,
-  onDeleteStickFigure,
+  sticks,
+  onTransientUpdateStick,
+  onCommitStick,
+  onDeleteStick,
   canvasWidth = 1280,
   canvasHeight = 720,
   getCurrentSnapshot,
@@ -269,7 +278,6 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     baseSnapshot: HistorySnapshot;
     hasMoved: boolean;
     // Copies of object state at drag start
-    initialStick?: StickFigure;
     initialChart?: ChartOverlay;
     initialText?: TextOverlay;
     /** Actor, chart or text being moved/resized, as it was when the drag started. */
@@ -290,17 +298,20 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   const findAnimated = (
     kind: AnimKind,
     id: string,
-    from: Pick<HistorySnapshot, 'actors' | 'charts' | 'texts'> = { actors, charts, texts }
+    from: Pick<HistorySnapshot, 'actors' | 'charts' | 'texts' | 'sticks'> = { actors, charts, texts, sticks }
   ): Animated | undefined =>
     kind === 'actor'
       ? from.actors.find((a) => a.id === id)
       : kind === 'chart'
         ? from.charts.find((c) => c.id === id)
-        : from.texts.find((x) => x.id === id);
+        : kind === 'stick'
+          ? from.sticks?.find((x) => x.id === id)
+          : from.texts.find((x) => x.id === id);
 
   const boxOf = (kind: AnimKind, obj: Animated): LocalBox => {
     if (kind === 'chart') return chartBox(obj as ChartOverlay);
     if (kind === 'text') return textBox(obj as TextOverlay);
+    if (kind === 'stick') return poseBox(obj as StickActor, currentFrame);
     const a = obj as ActorOverlay;
     return { x: -a.width / 2, y: -a.height / 2, width: a.width, height: a.height };
   };
@@ -308,16 +319,45 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   /** The selected actor/chart/text with its local box and selection color, if any. */
   const selectedAnimated = () => {
     const kind = selectedObject?.type;
-    if (kind !== 'actor' && kind !== 'chart' && kind !== 'text') return null;
+    if (kind !== 'actor' && kind !== 'chart' && kind !== 'text' && kind !== 'stick') return null;
     const obj = findAnimated(kind, selectedObject!.id);
-    if (!obj || (kind !== 'actor' && !(obj as ChartOverlay | TextOverlay).visible)) return null;
+    if (!obj || ((kind === 'chart' || kind === 'text') && !(obj as ChartOverlay | TextOverlay).visible)) return null;
     return { kind, obj, box: boxOf(kind, obj), color: KIND_COLOR[kind] };
   };
 
   const transientAnimated = (kind: AnimKind, obj: Animated) => {
     if (kind === 'actor') onTransientUpdateActor(obj as ActorOverlay);
+    else if (kind === 'stick') onTransientUpdateStick(obj as StickActor);
     else if (kind === 'chart') onTransientUpdateChart(obj as ChartOverlay);
     else onTransientUpdateText(obj as TextOverlay);
+  };
+
+  /**
+   * Joints of a figure on the stage at the current frame, in canvas space (its animated position,
+   * scale and rotation applied). Empty when the figure is off screen.
+   */
+  const stickJointsOnStage = (stick: StickActor) => {
+    const state = sampleActor(stick, currentFrame, paths);
+    if (!state.visible) return [];
+    const rad = (state.rotation * Math.PI) / 180;
+    return Object.values(samplePose(stick, currentFrame)).map((j) => ({
+      joint: j,
+      scale: state.scale,
+      x: state.x + (j.x * Math.cos(rad) - j.y * Math.sin(rad)) * state.scale,
+      y: state.y + (j.x * Math.sin(rad) + j.y * Math.cos(rad)) * state.scale,
+    }));
+  };
+
+  /** Joint of an editable figure under `pt` (the head has a larger target). */
+  const jointAt = (pt: Point) => {
+    for (const stick of sticks) {
+      if (!isEditable(stick.id, 'drawing')) continue;
+      for (const p of stickJointsOnStage(stick)) {
+        const hitRadius = p.joint.id === 'head' ? 24 : 14;
+        if (Math.hypot(pt.x - p.x, pt.y - p.y) <= hitRadius) return { stick, jointId: p.joint.id };
+      }
+    }
+    return null;
   };
 
   // Convert mouse/touch event coordinates into canvas-space coordinates (0..canvasWidth, 0..canvasHeight)
@@ -361,45 +401,47 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       canvasWidth,
       canvasHeight,
       currentFrame,
-      { frames, charts, texts, images, actors, paths, videoBg, videoElement, layers, fps },
+      { frames, charts, texts, images, actors, sticks, paths, videoBg, videoElement, layers, fps },
       { showGrid: true }
     );
 
     // Optional Onion Skin (previous frame faint silhouette) ONLY IF explicitly turned ON
     if (onionSkinEnabled && currentFrame > 1) {
-      const prevFrame = frames[currentFrame - 1];
-      if (prevFrame && prevFrame.stickFigures) {
+      const prev = currentFrame - 1;
+      ctx.save();
+      ctx.globalAlpha = 0.22;
+      sticks.forEach((stick) => {
+        const state = sampleActor(stick, prev, paths);
+        if (!state.visible) return;
+        const fig = localFigure(stick, samplePose(stick, prev));
         ctx.save();
-        ctx.globalAlpha = 0.22;
-        prevFrame.stickFigures.forEach((stick) => {
-          ctx.save();
-          ctx.translate(stick.x, stick.y);
-          ctx.scale(stick.scale, stick.scale);
-          ctx.strokeStyle = '#0284c7';
-          ctx.lineWidth = stick.thickness;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          stick.bones.forEach((bone) => {
-            const fromJ = stick.joints[bone.from];
-            const toJ = stick.joints[bone.to];
-            if (fromJ && toJ) {
-              ctx.beginPath();
-              ctx.moveTo(fromJ.x, fromJ.y);
-              ctx.lineTo(toJ.x, toJ.y);
-              ctx.stroke();
-            }
-          });
-          const head = stick.joints['head'];
-          if (head) {
-            ctx.fillStyle = '#0284c7';
+        ctx.translate(state.x, state.y);
+        ctx.rotate((state.rotation * Math.PI) / 180);
+        ctx.scale(state.scale, state.scale);
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = fig.thickness;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        fig.bones.forEach((bone) => {
+          const fromJ = fig.joints[bone.from];
+          const toJ = fig.joints[bone.to];
+          if (fromJ && toJ) {
             ctx.beginPath();
-            ctx.arc(head.x, head.y, head.radius || 20, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(fromJ.x, fromJ.y);
+            ctx.lineTo(toJ.x, toJ.y);
+            ctx.stroke();
           }
-          ctx.restore();
         });
+        const head = fig.joints['head'];
+        if (head) {
+          ctx.fillStyle = '#0284c7';
+          ctx.beginPath();
+          ctx.arc(head.x, head.y, head.radius || 20, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
-      }
+      });
+      ctx.restore();
     }
 
     // 2. Render freehand stroke currently being drawn
@@ -468,24 +510,15 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
     // 3. Selection Bounding Boxes, Interactive Joint Handles & Gizmos
     if (!isPlaying) {
-      // 3A. Stick Figure Selection & Joint Rings
-      currentFrameData.stickFigures.forEach((stick) => {
-        const isSelected =
-          selectedObject?.type === 'stick' && selectedObject.id === stick.id;
-
-        // Render joint interactive rings
-        Object.values(stick.joints).forEach((joint) => {
-          const worldJx = stick.x + joint.x * stick.scale;
-          const worldJy = stick.y + joint.y * stick.scale;
+      // 3A. Stick figure joint rings (the selection box is drawn with the other animated objects)
+      sticks.forEach((stick) => {
+        const isSelected = selectedObject?.type === 'stick' && selectedObject.id === stick.id;
+        stickJointsOnStage(stick).forEach(({ joint, x, y, scale }) => {
           const isHead = joint.id === 'head';
-          const isHovered =
-            hoveredJoint?.stickId === stick.id && hoveredJoint?.jointId === joint.id;
-
+          const isHovered = hoveredJoint?.stickId === stick.id && hoveredJoint?.jointId === joint.id;
           ctx.save();
           ctx.beginPath();
-          const ringRadius = (isHead ? 10 : 6) * stick.scale;
-          ctx.arc(worldJx, worldJy, ringRadius, 0, Math.PI * 2);
-
+          ctx.arc(x, y, (isHead ? 10 : 6) * scale, 0, Math.PI * 2);
           if (isHovered) {
             ctx.fillStyle = '#38bdf8';
             ctx.strokeStyle = '#ffffff';
@@ -503,28 +536,6 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           ctx.stroke();
           ctx.restore();
         });
-
-        // Flash-style dashed selection box and center crosshair when selected
-        if (isSelected) {
-          ctx.save();
-          ctx.translate(stick.x, stick.y);
-          ctx.strokeStyle = '#38bdf8';
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([5, 5]);
-          ctx.strokeRect(-70 * stick.scale, -145 * stick.scale, 140 * stick.scale, 280 * stick.scale);
-          ctx.setLineDash([]);
-
-          // Center Move Crosshair
-          ctx.strokeStyle = '#38bdf8';
-          ctx.beginPath();
-          ctx.arc(0, 0, 7, 0, Math.PI * 2);
-          ctx.moveTo(-11, 0);
-          ctx.lineTo(11, 0);
-          ctx.moveTo(0, -11);
-          ctx.lineTo(0, 11);
-          ctx.stroke();
-          ctx.restore();
-        }
       });
 
       // 3E. Motion paths (editor only): hidden guides drawn faintly; selected path shows its points
@@ -676,6 +687,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     frames,
     assetTick,
     actors,
+    sticks,
     paths,
     draftPath,
     cursorPt,
@@ -702,53 +714,22 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         session.hasMoved = true;
       }
 
-      // Handle Joint Drag (Posing Stick Figure)
+      // Joint drag (posing a figure): stopwatch rule on the pose (rest pose, or a key at this frame)
       if (session.targetType === 'joint' && session.jointId) {
-        const stick = currentFrameData.stickFigures.find((s) => s.id === session.targetId);
+        const stick = latest.sticks?.find((s) => s.id === session.targetId);
         if (stick) {
-          const local = { x: (pt.x - stick.x) / stick.scale, y: (pt.y - stick.y) / stick.scale };
-
+          const local = toActorLocal(sampleActor(stick, currentFrame, latest.paths), pt);
+          const figure = localFigure(stick, samplePose(stick, currentFrame));
           // Default: rotate the bone around its parent and bring the sub-chain along (FK, keeps
           // proportions like Pivot/Flash bones). Alt: move the joint freely (stretch the bone).
-          const posed = e.altKey
+          const joints = e.altKey
             ? {
-                ...stick,
-                joints: {
-                  ...stick.joints,
-                  [session.jointId]: {
-                    ...stick.joints[session.jointId],
-                    x: Math.round(local.x),
-                    y: Math.round(local.y),
-                  },
-                },
+                ...figure.joints,
+                [session.jointId]: { ...figure.joints[session.jointId], x: Math.round(local.x), y: Math.round(local.y) },
               }
-            : dragJointFK(stick, session.jointId, local);
-
-          // A hand-posed frame becomes a key pose (no longer an in-between)
-          const updatedSticks = currentFrameData.stickFigures.map((s) =>
-            s.id === stick.id ? { ...posed, tweened: false } : s
-          );
-
-          onTransientUpdateFrameData(currentFrame, {
-            ...currentFrameData,
-            stickFigures: updatedSticks,
-          });
+            : dragJointFK(figure, session.jointId, local).joints;
+          onTransientUpdateStick(setPose(stick, currentFrame, joints));
         }
-      }
-
-      // Handle Stick Figure Body Drag
-      else if (session.targetType === 'stick') {
-        const newX = Math.round(pt.x - session.offsetX);
-        const newY = Math.round(pt.y - session.offsetY);
-
-        const updatedSticks = currentFrameData.stickFigures.map((s) =>
-          s.id === session.targetId ? { ...s, x: newX, y: newY, tweened: false } : s
-        );
-
-        onTransientUpdateFrameData(currentFrame, {
-          ...currentFrameData,
-          stickFigures: updatedSticks,
-        });
       }
 
       // Chart resize (corner handle): the card grows around its center, so the mouse movement is
@@ -792,9 +773,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         transientAnimated(session.objectKind!, { ...obj, tracks: { ...obj.tracks, position } });
       }
 
-      // Actor / chart / text drag: stopwatch rule (static value, or key at the current frame)
+      // Actor / figure / chart / text drag: stopwatch rule (static value, or key at the current frame)
       else if (
-        (session.targetType === 'actor' || session.targetType === 'chart' || session.targetType === 'text') &&
+        (session.targetType === 'actor' ||
+          session.targetType === 'stick' ||
+          session.targetType === 'chart' ||
+          session.targetType === 'text') &&
         session.initialObj
       ) {
         const pos = { x: Math.round(pt.x - session.offsetX), y: Math.round(pt.y - session.offsetY) };
@@ -805,7 +789,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       getCanvasCoordinates,
       getCurrentSnapshot,
       currentFrame,
-      onTransientUpdateFrameData,
+      onTransientUpdateStick,
       onTransientUpdateActor,
       onTransientUpdatePath,
       onTransientUpdateChart,
@@ -825,26 +809,20 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
       // Same as mousemove: commit what the drag produced, not the pre-drag props of this closure
       const latest = getCurrentSnapshot();
-      const currentFrameData = latest.frames[currentFrame] || emptyFrame(currentFrame);
       const { charts, texts, actors } = latest;
 
       // Only commit to history if the object was actually dragged!
       // This eliminates intermediate movements and guarantees 1-step undo!
       if (session.hasMoved) {
-        if (session.targetType === 'joint') {
-          onCommitFrameData(
-            currentFrame,
-            currentFrameData,
-            t('stage.history.moveJoint'),
-            session.baseSnapshot
-          );
-        } else if (session.targetType === 'stick') {
-          onCommitFrameData(
-            currentFrame,
-            currentFrameData,
-            t('stage.history.moveStick'),
-            session.baseSnapshot
-          );
+        if (session.targetType === 'joint' || session.targetType === 'stick') {
+          const stick = latest.sticks?.find((s) => s.id === session.targetId);
+          if (stick) {
+            onCommitStick(
+              stick,
+              session.targetType === 'joint' ? t('stage.history.moveJoint') : t('stage.history.moveStick'),
+              session.baseSnapshot
+            );
+          }
         } else if (session.targetType === 'chart' || session.targetType === 'chart-resize') {
           const chart = charts.find((c) => c.id === session.targetId);
           if (chart) {
@@ -878,6 +856,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           if (obj && session.objectKind === 'actor') onCommitActor(obj as ActorOverlay, description, session.baseSnapshot);
           if (obj && session.objectKind === 'chart') onCommitChart(obj as ChartOverlay, description, session.baseSnapshot);
           if (obj && session.objectKind === 'text') onCommitText(obj as TextOverlay, description, session.baseSnapshot);
+          if (obj && session.objectKind === 'stick') onCommitStick(obj as StickActor, description, session.baseSnapshot);
         } else if (session.targetType === 'actor') {
           const actor = actors.find((a) => a.id === session.targetId);
           if (actor) {
@@ -890,7 +869,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       onWindowMouseMove,
       getCurrentSnapshot,
       currentFrame,
-      onCommitFrameData,
+      onCommitStick,
       onCommitChart,
       onCommitText,
       onCommitActor,
@@ -1024,7 +1003,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       const key = onAnchor
         ? undefined
         : obj.tracks.position?.find((k) => Math.hypot(pt.x - k.value.x, pt.y - k.value.y) <= PATH_KEY_HIT_RADIUS);
-      if (key && (obj.tracks.position?.length ?? 0) >= 2 && isEditable(id, selected.kind)) {
+      if (key && (obj.tracks.position?.length ?? 0) >= 2 && isEditable(id, layerTypeOf(selected.kind))) {
         dragSessionRef.current = {
           targetType: 'path-key',
           targetId: id,
@@ -1043,75 +1022,59 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       }
     }
 
-    // 2B. Hit Test: Stick Figure Joints (Priority)
-    for (const stick of currentFrameData.stickFigures) {
-      if (!isEditable(stick.id, 'drawing')) continue;
-      for (const [jId, joint] of Object.entries(stick.joints)) {
-        const worldJx = stick.x + joint.x * stick.scale;
-        const worldJy = stick.y + joint.y * stick.scale;
-        const hitRadius = jId === 'head' ? 24 : 14;
-
-        if (Math.hypot(pt.x - worldJx, pt.y - worldJy) <= hitRadius) {
-          onSelectObject({ type: 'stick', id: stick.id });
-          dragSessionRef.current = {
-            targetType: 'joint',
-            targetId: stick.id,
-            jointId: jId,
-            startCanvasPt: pt,
-            baseSnapshot,
-            hasMoved: false,
-            initialStick: { ...stick },
-            offsetX: 0,
-            offsetY: 0,
-          };
-          window.addEventListener('mousemove', onWindowMouseMove);
-          window.addEventListener('mouseup', onWindowMouseUp);
-          return;
-        }
-      }
+    // 2B. Hit Test: stick figure joints (priority): drag to pose
+    const jointHit = jointAt(pt);
+    if (jointHit) {
+      onSelectObject({ type: 'stick', id: jointHit.stick.id });
+      dragSessionRef.current = {
+        targetType: 'joint',
+        targetId: jointHit.stick.id,
+        jointId: jointHit.jointId,
+        startCanvasPt: pt,
+        baseSnapshot,
+        hasMoved: false,
+        offsetX: 0,
+        offsetY: 0,
+      };
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
+      return;
     }
 
-    // 2C. Hit Test: Stick Figure Body Bones & Torso
-    for (const stick of currentFrameData.stickFigures) {
+    // 2C. Hit Test: stick figure bones (in the figure's own space): drag to move it
+    for (const stick of sticks) {
       if (!isEditable(stick.id, 'drawing')) continue;
-      let hit = false;
-      // Center anchor hit
-      if (Math.hypot(pt.x - stick.x, pt.y - stick.y) <= 22) {
-        hit = true;
-      } else {
-        // Test distance from cursor to any stick bone segment
-        for (const bone of stick.bones) {
-          const j1 = stick.joints[bone.from];
-          const j2 = stick.joints[bone.to];
-          if (j1 && j2) {
-            const x1 = stick.x + j1.x * stick.scale;
-            const y1 = stick.y + j1.y * stick.scale;
-            const x2 = stick.x + j2.x * stick.scale;
-            const y2 = stick.y + j2.y * stick.scale;
-            if (distToSegment(pt.x, pt.y, x1, y1, x2, y2) <= 16) {
-              hit = true;
-              break;
-            }
-          }
-        }
-      }
+      const state = sampleActor(stick, currentFrame, paths);
+      if (!state.visible) continue;
+      const local = toActorLocal(state, pt);
+      const tolerance = 16 / (state.scale || 1);
+      const pose = samplePose(stick, currentFrame);
+      const onBone = stick.bones.some((bone) => {
+        const j1 = pose[bone.from];
+        const j2 = pose[bone.to];
+        return !!j1 && !!j2 && distToSegment(local.x, local.y, j1.x, j1.y, j2.x, j2.y) <= tolerance;
+      });
+      const head = pose.head;
+      const onHead = !!head && Math.hypot(local.x - head.x, local.y - head.y) <= (head.radius ?? 20) + tolerance;
+      if (!onBone && !onHead && Math.hypot(pt.x - state.x, pt.y - state.y) > 22) continue;
 
-      if (hit) {
-        onSelectObject({ type: 'stick', id: stick.id });
-        dragSessionRef.current = {
-          targetType: 'stick',
-          targetId: stick.id,
-          startCanvasPt: pt,
-          baseSnapshot,
-          hasMoved: false,
-          initialStick: { ...stick },
-          offsetX: pt.x - stick.x,
-          offsetY: pt.y - stick.y,
-        };
-        window.addEventListener('mousemove', onWindowMouseMove);
-        window.addEventListener('mouseup', onWindowMouseUp);
-        return;
-      }
+      onSelectObject({ type: 'stick', id: stick.id });
+      if (followedPath(stick, paths)) return;
+      const pos = actorPropertyValue(stick, 'position', currentFrame, paths);
+      dragSessionRef.current = {
+        targetType: 'stick',
+        targetId: stick.id,
+        objectKind: 'stick',
+        initialObj: stick,
+        startCanvasPt: pt,
+        baseSnapshot,
+        hasMoved: false,
+        offsetX: pt.x - pos.x,
+        offsetY: pt.y - pos.y,
+      };
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
+      return;
     }
 
     // 2C'. Hit Test: Actors, front-most layer first
@@ -1208,19 +1171,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
 
     // Check hovered stick joints for cursor feedback
     if (activeTool === 'pointer' || activeTool === 'transform') {
-      let foundHover: { stickId: string; jointId: string } | null = null;
-      for (const stick of currentFrameData.stickFigures) {
-        for (const joint of Object.values(stick.joints)) {
-          const worldJx = stick.x + joint.x * stick.scale;
-          const worldJy = stick.y + joint.y * stick.scale;
-          const hitRadius = joint.id === 'head' ? 24 : 14;
-          if (Math.hypot(pt.x - worldJx, pt.y - worldJy) <= hitRadius) {
-            foundHover = { stickId: stick.id, jointId: joint.id };
-            break;
-          }
-        }
-        if (foundHover) break;
-      }
+      const hit = jointAt(pt);
+      const foundHover = hit ? { stickId: hit.stick.id, jointId: hit.jointId } : null;
       setHoveredJoint(foundHover);
     }
   };
@@ -1460,19 +1412,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
               onClick={() => {
                 if (selectedObject?.type === 'chart') onDeleteChart(selectedObject.id);
                 else if (selectedObject?.type === 'text') onDeleteText(selectedObject.id);
-                else if (selectedObject?.type === 'stick') {
-                  if (onDeleteStickFigure) {
-                    onDeleteStickFigure(selectedObject.id, false);
-                  } else {
-                    const filtered = currentFrameData.stickFigures.filter(
-                      (s) => s.id !== selectedObject.id
-                    );
-                    onUpdateFrameData(currentFrame, {
-                      ...currentFrameData,
-                      stickFigures: filtered,
-                    });
-                  }
-                }
+                else if (selectedObject?.type === 'stick') onDeleteStick(selectedObject.id);
                 onSelectObject(null);
               }}
               title={t('selection.delete')}

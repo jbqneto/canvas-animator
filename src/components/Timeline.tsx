@@ -48,10 +48,11 @@ import {
   AudioClip,
   Animated,
   Marker,
+  StickActor,
 } from '../types';
 import { nextMarker, prevMarker, snapFrame, snapSpan } from '../engine/markers';
 
-type AnimKind = 'actor' | 'chart' | 'text';
+type AnimKind = 'actor' | 'chart' | 'text' | 'stick';
 import { AudioLanes, AudioList } from './AudioTracks';
 import {
   clampZoom,
@@ -63,8 +64,17 @@ import {
   TimeUnit,
 } from '../engine/timelineScale';
 import { actorKeyframes, moveActorKeys, shiftActorTime } from '../engine/actor';
+import { moveStickKeys, shiftStickTime, stickKeyframes } from '../engine/stickActor';
 
-type ClipType = 'chart' | 'text' | 'actor' | 'path';
+// Stick figures carry a pose track besides the transform: their key operations include it
+const keysOf = (kind: AnimKind, obj: Animated) =>
+  kind === 'stick' ? stickKeyframes(obj as StickActor) : actorKeyframes(obj);
+const moveKeys = (kind: AnimKind, obj: Animated, from: number, to: number): Animated =>
+  kind === 'stick' ? moveStickKeys(obj as StickActor, from, to) : moveActorKeys(obj, from, to);
+const shiftTime = (kind: AnimKind, obj: Animated, delta: number): Animated =>
+  kind === 'stick' ? shiftStickTime(obj as StickActor, delta) : shiftActorTime(obj, delta);
+
+type ClipType = 'chart' | 'text' | 'actor' | 'path' | 'stick';
 
 /**
  * Grid drawn as CSS background tiles (cheap at any timeline length): a strong line at every labelled
@@ -141,6 +151,9 @@ interface TimelineProps {
   actors: ActorOverlay[];
   onUpdateActor: (actor: ActorOverlay) => void;
   onCommitActor: (actor: ActorOverlay, description: string, baseSnapshot: HistorySnapshot) => void;
+  sticks: StickActor[];
+  onUpdateStick: (stick: StickActor) => void;
+  onCommitStick: (stick: StickActor, description: string, baseSnapshot: HistorySnapshot) => void;
   paths: MotionPath[];
   onUpdatePath: (path: MotionPath) => void;
   onCommitPath: (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => void;
@@ -198,6 +211,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   actors,
   onUpdateActor,
   onCommitActor,
+  sticks,
+  onUpdateStick,
+  onCommitStick,
   paths,
   onUpdatePath,
   onCommitPath,
@@ -281,18 +297,20 @@ export const Timeline: React.FC<TimelineProps> = ({
   // Actors, charts and texts share the keyframed transform: same timeline editing for all
   const updateAnimated = (kind: AnimKind, obj: Animated) => {
     if (kind === 'actor') onUpdateActor(obj as ActorOverlay);
+    else if (kind === 'stick') onUpdateStick(obj as StickActor);
     else if (kind === 'chart') onUpdateChart?.(obj as ChartOverlay);
     else onUpdateText?.(obj as TextOverlay);
   };
   const commitAnimated = (kind: AnimKind, obj: Animated, description: string, base: HistorySnapshot) => {
     if (kind === 'actor') onCommitActor(obj as ActorOverlay, description, base);
+    else if (kind === 'stick') onCommitStick(obj as StickActor, description, base);
     else if (kind === 'chart') onCommitChart?.(obj as ChartOverlay, description, base);
     else onCommitText?.(obj as TextOverlay, description, base);
   };
 
   /** Keyframe diamonds of an object's clip (drag to retime, click to jump). */
   const renderKeyDiamonds = (kind: AnimKind, obj: Animated & { id: string }, layerId: string) =>
-    actorKeyframes(obj).map((f) => (
+    keysOf(kind, obj).map((f) => (
       <button
         key={f}
         style={{ left: `${((f - 1) / totalFrames) * 100}%` }}
@@ -442,14 +460,14 @@ export const Timeline: React.FC<TimelineProps> = ({
       const to = e.altKey ? raw : snapFrame(raw, snapRef.current.markers, snapThreshold(drag.trackWidth));
       if (to === drag.toFrame) return;
       drag.toFrame = to;
-      updateAnimated(drag.kind, moveActorKeys(drag.obj, drag.fromFrame, to));
+      updateAnimated(drag.kind, moveKeys(drag.kind, drag.obj, drag.fromFrame, to));
       setCurrentFrame(to);
     };
     const onUp = () => {
       if (drag.toFrame !== drag.fromFrame && drag.baseSnapshot) {
         commitAnimated(
           drag.kind,
-          moveActorKeys(drag.obj, drag.fromFrame, drag.toFrame),
+          moveKeys(drag.kind, drag.obj, drag.fromFrame, drag.toFrame),
           t('timeline.history.moveKey', { from: drag.fromFrame, to: drag.toFrame }),
           drag.baseSnapshot
         );
@@ -606,7 +624,9 @@ export const Timeline: React.FC<TimelineProps> = ({
             ? charts.find((c) => c.id === id)
             : type === 'text'
               ? texts.find((x) => x.id === id)
-              : undefined,
+              : type === 'stick'
+                ? sticks.find((x) => x.id === id)
+                : undefined,
       trackWidth: trackWidth(),
       baseSnapshot,
       hasMoved: false,
@@ -653,7 +673,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         // Actor, chart or text: moving the clip moves its keys too; trimming only changes the span
         const moved =
           drag.mode === 'move'
-            ? shiftActorTime(drag.initialObj, span.startFrame - drag.initialStartFrame)
+            ? shiftTime(drag.type, drag.initialObj, span.startFrame - drag.initialStartFrame)
             : { ...drag.initialObj, ...span };
         updateAnimated(drag.type, moved);
       }
@@ -671,6 +691,15 @@ export const Timeline: React.FC<TimelineProps> = ({
         } else if (drag.type === 'path') {
           const path = paths.find((p) => p.id === drag.id);
           if (path) onCommitPath(path, moving ? t('timeline.history.movePath') : t('timeline.history.trimPath'), drag.baseSnapshot);
+        } else if (drag.type === 'stick') {
+          const stick = sticks.find((x) => x.id === drag.id);
+          if (stick) onCommitStick(
+              stick,
+              moving
+                ? t('timeline.history.moveActor', { name: stick.name })
+                : t('timeline.history.trimActor', { name: stick.name }),
+              drag.baseSnapshot
+            );
         } else if (drag.type === 'actor') {
           const actor = actors.find((a) => a.id === drag.id);
           if (actor) onCommitActor(
@@ -697,6 +726,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     charts,
     texts,
     actors,
+    sticks,
     paths,
     totalFrames,
     onUpdateChart,
@@ -705,6 +735,8 @@ export const Timeline: React.FC<TimelineProps> = ({
     onCommitChart,
     onCommitText,
     onCommitActor,
+    onUpdateStick,
+    onCommitStick,
     onUpdatePath,
     onCommitPath,
     t,
@@ -1377,6 +1409,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                 layer.type === 'path'
                   ? paths.find((p) => p.id === layer.targetId)
                   : null;
+              const stick =
+                layer.type === 'group'
+                  ? sticks.find((x) => x.id === layer.targetId)
+                  : null;
 
               return (
                 <div
@@ -1648,43 +1684,47 @@ export const Timeline: React.FC<TimelineProps> = ({
                     </>
                   )}
 
-                  {/* 2C. STICK FIGURE KEYFRAME DIAMONDS AND SPANS */}
-                  {layer.type === 'group' && (
-                    <div className="absolute inset-0 flex items-center pointer-events-none">
-                      {Array.from({ length: totalFrames }).map((_, i) => {
-                        const fNum = i + 1;
-                        const frameData = frames[fNum];
-                        const sticksHere = (frameData?.stickFigures ?? []).filter(
-                          (s) => !layer.targetId || s.id === layer.targetId
-                        );
-                        if (sticksHere.length === 0) return null;
-                        // In-betweens generated by a pose tween are dots; hand-made poses are diamonds
-                        const onlyTweened = sticksHere.every((s) => s.tweened);
-
-                        return (
-                          <div
-                            key={fNum}
-                            style={{
-                              left: `${((fNum - 1) / totalFrames) * 100}%`,
-                              width: `${100 / totalFrames}%`,
-                            }}
-                            className="absolute flex items-center justify-center h-full"
-                          >
-                            {onlyTweened ? (
-                              <div
-                                title={t('timeline.tweenedPose', { frame: fNum })}
-                                className="w-1.5 h-1.5 rounded-full bg-amber-400/60 z-10"
-                              />
-                            ) : (
-                              <div
-                                title={t('timeline.keyPose', { frame: fNum })}
-                                className="w-3 h-3 rotate-45 bg-amber-400 border border-neutral-900 shadow-md shadow-amber-400/40 z-10"
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {/* 2C. STICK FIGURE CLIP SPAN + KEYFRAME DIAMONDS (pose and transform keys) */}
+                  {stick && (
+                    <>
+                      <div
+                        style={{
+                          left: `${((stick.startFrame - 1) / totalFrames) * 100}%`,
+                          width: `${Math.max(1, (stick.durationFrames / totalFrames) * 100)}%`,
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectLayer(layer.id);
+                          onSelectObject({ type: 'stick', id: stick.id });
+                        }}
+                        onMouseDown={(e) =>
+                          startClipDrag(e, 'stick', stick.id, 'move', stick.startFrame, stick.durationFrames)
+                        }
+                        title={t('timeline.actorClip', { name: stick.name, start: stick.startFrame, end: stick.startFrame + stick.durationFrames })}
+                        className={`absolute top-1 bottom-1 rounded z-10 flex items-center justify-between select-none border cursor-grab active:cursor-grabbing ${
+                          selectedObject?.type === 'stick' && selectedObject.id === stick.id
+                            ? 'bg-amber-600/40 border-amber-300 ring-1 ring-amber-400'
+                            : 'bg-amber-950/70 border-amber-500/50 hover:border-amber-400'
+                        }`}
+                      >
+                        <div
+                          onMouseDown={(e) =>
+                            startClipDrag(e, 'stick', stick.id, 'trim-start', stick.startFrame, stick.durationFrames)
+                          }
+                          className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-l"
+                        />
+                        <span className="text-[10px] font-bold text-amber-200 truncate px-1 mr-auto sticky left-3 pointer-events-none">
+                          {stick.name}
+                        </span>
+                        <div
+                          onMouseDown={(e) =>
+                            startClipDrag(e, 'stick', stick.id, 'trim-end', stick.startFrame, stick.durationFrames)
+                          }
+                          className="h-full w-2 cursor-col-resize hover:bg-white/30 rounded-r"
+                        />
+                      </div>
+                      {renderKeyDiamonds('stick', stick, layer.id)}
+                    </>
                   )}
 
                   {/* 2D. DRAWING KEYFRAME DOTS */}

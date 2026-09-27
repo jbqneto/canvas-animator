@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { retimeFrame, retimeScene, retimeSpan, retimeTrack, SceneData } from '../retime';
 import { createActor, sampleActor, setActorProperty, toggleAnimated } from '../actor';
 import { createChart } from '../overlays';
+import { createStickActor, togglePoseKey } from '../stickActor';
+import { createDefaultStickFigure } from '../../utils/stickFigurePresets';
 
 const seconds = (frame: number, fps: number) => (frame - 1) / fps;
 
@@ -47,6 +49,13 @@ describe('retiming to another frame rate', () => {
     expect(seconds(s.audio![0].startFrame, 30)).toBeCloseTo(2);
     expect(s.audio![0].offset).toBe(0.5);
     expect(seconds(s.markers![0].frame, 30)).toBeCloseTo(3);
+  });
+
+  it('moves pose keys of stick figures with the rest of the animation', () => {
+    const stick = togglePoseKey(togglePoseKey(createStickActor(createDefaultStickFigure('s', 's', 0, 0), 1, 72), 25), 49);
+    const { scene: s } = retimeScene({ ...scene(), sticks: [stick] }, 96, 24, 30);
+    expect(s.sticks![0].poses.map((k) => seconds(k.frame, 30))).toEqual([1, 2]);
+    expect(s.sticks![0].durationFrames).toBe(90);
   });
 
   it('resamples frame-by-frame content and survives a round trip', () => {

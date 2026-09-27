@@ -92,16 +92,6 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'easing.hold': 'Hold (jump cut)',
 
   // Stick figure pose animation
-  'stickAnim.title': 'Animate pose (classic tween)',
-  'stickAnim.help': '1) Pose it here. 2) Copy the figure to a later frame and change the pose there. 3) Interpolate: the in-between frames are generated. Dragging a joint rotates the bone; hold Alt to move it freely.',
-  'stickAnim.copyTo': 'Copy to frame',
-  'stickAnim.copyHint': 'Copies this figure (current pose) to that frame and jumps there',
-  'stickAnim.from': 'From',
-  'stickAnim.to': 'to',
-  'stickAnim.tweenHint': 'Generates the poses of frames {from} to {to}',
-  'stickAnim.tweenDisabled': 'Both frames need this figure posed by hand, with at least one frame between them',
-  'stickAnim.tween': 'Interpolate poses',
-  'stickAnim.keyPoses': 'Key poses:',
 
   // Actor inspector
   'actor.prop.position': 'Position',
@@ -348,8 +338,6 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'timeline.invisibleGuide': ' (invisible guide)',
   'timeline.actorClip': '{name} | F{start} ➔ F{end}\nDrag to move (keyframes move along); the edges adjust the duration',
   'timeline.keyframeHint': 'Keyframe at frame {frame} — drag to retime',
-  'timeline.tweenedPose': 'Interpolated pose at frame {frame}',
-  'timeline.keyPose': 'Stick figure key pose at frame {frame}',
   'timeline.drawingKey': 'Drawing at frame {frame}',
 
   // Properties inspector
@@ -397,15 +385,11 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'inspector.doc.subtitle': 'Stage and global settings',
   'inspector.doc.title': 'Document properties',
   'inspector.stick.color': 'Stroke color:',
-  'inspector.stick.scale': 'Figure scale:',
   'inspector.stick.poses': 'Ready-made poses',
   'inspector.ungroupHelp': 'Break apart splits the figure into 1 circle (head) and several independent sticks (lines).',
   'inspector.groupHint': 'Group selected objects (Ctrl+G)',
   'inspector.grouping': 'Grouping (Ctrl+G / Ctrl+B)',
-  'inspector.stick.clearAll': 'Clear all',
-  'inspector.stick.deleteAll': 'Delete this figure from the whole timeline (all frames)',
   'inspector.delete': 'Delete',
-  'inspector.stick.deleteHere': 'Delete this figure from the current frame (Del)',
   'inspector.group.subtitle': 'A single group of strokes and shapes',
   'inspector.stick.subtitle': 'Made of circles and jointed sticks',
   'inspector.group.title': 'Grouped object',
@@ -520,7 +504,6 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'app.newText': 'New animated text',
   'app.newCounter': 'Counter',
   'app.newStickNumbered': 'Stick figure {n}',
-  'app.newStick': 'New stick figure',
   'app.newGroup': 'Group {n}',
   'app.newPath': 'Path {n}',
   'app.newChart': 'New animated chart',
@@ -539,7 +522,6 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'app.confirm.openFileWithUnsaved': 'There are unsaved changes. Open the file anyway?',
   'app.missingVideo': 'This project used the video "{name}". Load it again under Background video.',
   'app.error.open': 'Could not open: {error}',
-  'app.error.stickMissing': 'The figure must exist in frames {from} and {to}.',
   'app.error.import': 'Could not import {name}: {error}',
   'app.error.export': 'Video export failed: {error}',
   'app.restore.message': 'We found unsaved changes to {name} ({date}). Restore them?',
@@ -550,8 +532,6 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'history.initial': 'Initial state',
   'history.projectOpened': 'Project opened',
   'history.editStage': 'Edit stage',
-  'history.deleteStickAll': 'Delete figure from all frames',
-  'history.deleteStickFrame': 'Delete figure from frame {frame}',
   'history.duplicateFrame': 'Duplicate frame {from} → {to}',
   'history.clearFrame': 'Clear frame {frame}',
   'history.breakStick': 'Break figure into strokes',
@@ -567,8 +547,6 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'history.deleteChart': 'Delete chart',
   'history.updateText': 'Update text "{name}"',
   'history.deleteText': 'Delete text',
-  'history.copyPose': 'Copy pose F{from} → F{to}',
-  'history.tweenPose': 'Interpolate pose F{from} → F{to}',
   'history.import': 'Import "{name}"',
   'history.edit': 'Edit "{name}"',
   'history.drawPath': 'Draw {name}',
@@ -730,4 +708,20 @@ export const enUS: Record<keyof typeof ptBR, string> = {
 
   // Frame rate change
   'history.changeFps': 'Frame rate {from} → {to} fps (same duration)',
+
+  // Stick figure pose track
+  'stickPose.label': 'Pose',
+  'stickPose.prevKey': 'Previous key pose',
+  'stickPose.nextKey': 'Next key pose',
+  'stickPose.helpStatic': 'Drag the joints on the stage to pose. Turn the stopwatch on to animate: each pose becomes a key at the current frame.',
+  'stickPose.helpAnimated': '{count} key pose(s). Between them the bones turn on their own; posing on another frame adds a key. Alt + drag stretches the bone.',
+  'stickPose.easing': 'To the next pose',
+  'stickPose.history.animate': 'Animate pose',
+  'stickPose.history.stop': 'Stop animating pose',
+  'stickPose.history.addKey': 'Key pose at frame {frame}',
+  'stickPose.history.removeKey': 'Remove key pose at frame {frame}',
+  'stickPose.history.preset': 'Pose: {pose}',
+  'stickPose.history.keyPreset': 'Pose {pose} at frame {frame}',
+  'inspector.stick.deleteHint': 'Delete this figure (Delete)',
+  'inspector.stick.thickness': 'Thickness',
 };

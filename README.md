@@ -26,8 +26,11 @@ qualquer editor.
   tamanho editáveis a qualquer momento, animadas como qualquer ator.
 - **Entradas e saídas prontas** (surgir, subir, descer, deslizar, pop) para qualquer objeto, gravadas como
   keyframes comuns.
-- **Boneco palito**: poses com cinemática direta (girar o osso leva o resto do membro), poses prontas e
-  interpolação de pose entre dois frames (tween clássico), onion skin.
+- **Boneco palito**: um objeto animado como os outros. Arraste as articulações para posar (girar o osso leva o
+  resto do membro; Alt estica); com o cronômetro da pose ligado, cada pose vira uma pose-chave e os ossos giram
+  sozinhos entre elas. Posição, tamanho, rotação e opacidade usam os mesmos keyframes dos atores (e ele pode
+  seguir um caminho). Poses prontas, F6 para repetir a pose no próximo frame, Ctrl+B para quebrar em traços,
+  onion skin.
 - **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto. Eles se movem
   como os atores: posição, escala, rotação e opacidade com keyframes, easing por key e "seguir caminho".
 - **Áudio de referência**: narração, música ou efeitos (ou o som de um vídeo) na timeline com forma de onda.
@@ -66,7 +69,7 @@ Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`).
 
 | Pasta | Conteúdo |
 |---|---|
-| `src/engine/` | Funções puras e testadas: keyframes, easing e caminhos (`keyframes.ts`), atores (`actor.ts`), rig do boneco (`stickRig.ts`), tempo dos clipes de áudio (`audio.ts`). |
+| `src/engine/` | Funções puras e testadas: keyframes, easing e caminhos (`keyframes.ts`), atores (`actor.ts`), rig do boneco (`stickRig.ts`) e poses-chave do boneco (`stickActor.ts`), tempo dos clipes de áudio (`audio.ts`). |
 | `src/audio/` | Web Audio: decodificação, playback, scrub, mixagem do export e importação de áudio/vídeo. |
 | `src/utils/exportVideo.ts` | `renderCompositeFrame` desenha um frame (preview e export usam a mesma função) e o export via mediabunny. |
 | `src/project/` | Formato `.fmproj`, abrir/salvar (File System Access API) e autosave (IndexedDB). |

@@ -66,6 +66,7 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
     ...scene,
     frames: resampleFrames(scene.frames, totalFrames, newTotal, k),
     actors: scene.actors.map((a) => retimeAnimated(a, k)),
+    sticks: scene.sticks?.map((st) => ({ ...retimeAnimated(st, k), poses: retimeTrack(st.poses, k) ?? [] })),
     charts: scene.charts.map((c) => retimeIntro(retimeAnimated(c, k), k)),
     texts: scene.texts.map((x) => retimeIntro(retimeAnimated(x, k), k)),
     paths: scene.paths.map((p) => ({ ...p, ...retimeSpan(p.startFrame, p.durationFrames, k) })),
