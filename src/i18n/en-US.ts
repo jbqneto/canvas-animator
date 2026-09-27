@@ -727,4 +727,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'marker.history.delete': 'Delete marker',
   'marker.history.fromAudio': '{count} markers from "{name}"',
   'marker.noneFound': 'No sound onsets found in the audible part of this track.',
+
+  // Frame rate change
+  'history.changeFps': 'Frame rate {from} → {to} fps (same duration)',
 };

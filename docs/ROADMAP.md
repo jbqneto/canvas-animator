@@ -41,12 +41,12 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   tamanho editáveis a qualquer momento; os modelos usam essas formas no lugar de imagens SVG
 - [x] T21 — Marcadores na timeline: tecla M (inclusive tocando), nome/cor, arrastar, Shift+←/→, snap de clipes,
   keys, áudio e cursor (Alt solta) e marcadores automáticos onde o som do áudio recomeça depois de uma pausa
+- [x] T22 — Trocar o FPS mantendo a duração em segundos: cena inteira reescalada num passo de desfazer
 
 ## Próximos passos sugeridos
 
-1. Trocar o FPS mantendo a duração em segundos (hoje os keys ficam nos mesmos quadros e a animação acelera).
-2. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
-3. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
+1. Boneco palito como ator com trilhas de pose (em vez de uma cópia por frame) — reduz o projeto e o undo.
+2. Chave própria da IA (BYOK) guardada localmente, para o app instalado funcionar sem o servidor.
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -143,6 +143,13 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   desliga. Aplicado em clipes (mover/cortar), losangos, áudio e régua. `detectOnsets(peaks)` acha onde o som
   volta acima de 20% do pico depois de ≥ 0,25 s abaixo; `clipOnsetFrames` converte o trecho audível do clipe.
   A régua agora mapeia o clique para a célula sob o ponteiro (antes arredondava e caía um quadro antes).
+- FPS (`engine/retime.ts`): `retimeScene(cena, total, deFps, paraFps)` reescala tudo que é medido em quadros
+  para o mesmo instante (`retimeFrame(f, k) = round(1 + (f − 1)·k)`): intervalos (bordas reescaladas), keys
+  (colisões ficam com o key mais tardio), progresso de "seguir caminho", `animDurationFrames`, caminhos,
+  imagens, início dos clipes de áudio (o resto do áudio já é em segundos), marcadores, e reamostra os quadros
+  desenhados/poses. O snapshot guarda `timing {fps, totalFrames}` para o desfazer restaurar FPS e duração
+  junto com a cena. Efeitos embutidos de texto/imagem (máquina de escrever, pop, pulso…) contam quadros de
+  24 fps (`SceneContent.fps` → `effectRate`), então duram os mesmos segundos em qualquer FPS.
 - Timeline: grade e régua por CSS (`frameGridStyle`), sem um elemento por quadro. Escala pura em
   `src/engine/timelineScale.ts`: `timelineScale(total, fps, pxPorQuadro, unidade)` escolhe passo das linhas
   fortes (rótulos ≥ 56 px) e fracas (≥ 6 px); em segundos usa tempos "redondos" (0,25 s, 1 s, 5 s, 1:00…) e,

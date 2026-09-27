@@ -150,6 +150,7 @@ function distToSegment(
 export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   currentFrame,
   totalFrames,
+  fps,
   frames,
   onUpdateFrameData,
   onTransientUpdateFrameData,
@@ -360,7 +361,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       canvasWidth,
       canvasHeight,
       currentFrame,
-      { frames, charts, texts, images, actors, paths, videoBg, videoElement, layers },
+      { frames, charts, texts, images, actors, paths, videoBg, videoElement, layers, fps },
       { showGrid: true }
     );
 
@@ -655,6 +656,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       }
     }
   }, [
+    fps,
     currentFrame,
     currentFrameData,
     onionSkinEnabled,

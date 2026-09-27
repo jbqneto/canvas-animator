@@ -65,6 +65,7 @@ const Preview: React.FC<{ output: TemplateOutput | null; width: number; height: 
       layers: [],
       videoBg: { type: 'color', color: '#0b1120', opacity: 1, playbackRate: 1 },
       videoElement: null,
+      fps,
     };
     // Play the whole template, rest half a second, repeat
     const loop = output.endFrame + Math.round(fps * 0.5);

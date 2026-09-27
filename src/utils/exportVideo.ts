@@ -34,7 +34,12 @@ export interface SceneContent {
   layers?: StudioLayer[];
   videoBg: VideoBackground;
   videoElement?: HTMLVideoElement | null;
+  /** Frame rate of the timeline; built-in effects are timed in seconds (default 24). */
+  fps?: number;
 }
+
+/** Built-in effect timings were designed at 24 fps: elapsed frames expressed at that rate. */
+const EFFECT_FPS = 24;
 
 export interface RenderOptions {
   /** Editor-only helper grid. Never part of an exported frame. */
@@ -74,6 +79,7 @@ export function renderCompositeFrame(
 ) {
   const { charts, texts, images, actors, paths, videoBg, videoElement, layers } = scene;
   const frameData = scene.frames[currentFrame];
+  const effectRate = EFFECT_FPS / (scene.fps ?? EFFECT_FPS);
   ctx.save();
   ctx.clearRect(0, 0, width, height);
 
@@ -153,7 +159,7 @@ export function renderCompositeFrame(
 
   images.forEach((img) => {
     if (currentFrame < img.startFrame || currentFrame > img.startFrame + img.durationFrames) return;
-    add(img.id, 'image', BACK, () => drawImageOverlay(ctx, img, currentFrame, width, height));
+    add(img.id, 'image', BACK, () => drawImageOverlay(ctx, img, currentFrame, width, height, effectRate));
   });
   paths.forEach((path) => {
     if (!path.style.visible || path.points.length < 2) return;
@@ -193,7 +199,7 @@ export function renderCompositeFrame(
   });
   texts.forEach((txt) => {
     if (!txt.visible) return;
-    const draw = withTransform(txt, () => drawText(ctx, txt, currentFrame));
+    const draw = withTransform(txt, () => drawText(ctx, txt, currentFrame, effectRate));
     if (draw) add(txt.id, 'text', FRONT, draw);
   });
 
@@ -209,12 +215,13 @@ function drawImageOverlay(
   img: ImageOverlay,
   currentFrame: number,
   width: number,
-  height: number
+  height: number,
+  effectRate = 1
 ) {
   const imgEl = getCachedImage(img.url);
   if (!isImageReady(imgEl)) return;
 
-  const elapsed = currentFrame - img.startFrame;
+  const elapsed = (currentFrame - img.startFrame) * effectRate;
   let alpha = 1;
   let scale = 1;
   let floatY = 0;
@@ -626,8 +633,11 @@ function drawChart(ctx: CanvasRenderingContext2D, chart: ChartOverlay, currentFr
   ctx.restore();
 }
 
-function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame: number) {
-  const elapsed = currentFrame - txt.startFrame;
+function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame: number, effectRate = 1) {
+  // Built-in effects count 24 fps frames, so they last the same seconds at any frame rate;
+  // the counter uses its own length in timeline frames
+  const rawElapsed = currentFrame - txt.startFrame;
+  const elapsed = rawElapsed * effectRate;
   // Already translated to the text anchor by the caller; effects work relative to it
   ctx.save();
   const parentAlpha = ctx.globalAlpha;
@@ -642,7 +652,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
     const startVal = txt.counterStart ?? 0;
     const endVal = txt.counterEnd ?? 1000;
     const animDuration = txt.animDurationFrames || txt.durationFrames || 30;
-    const progress = Math.min(1, elapsed / Math.max(1, animDuration));
+    const progress = Math.min(1, rawElapsed / Math.max(1, animDuration));
     const ease = calculateEasing(progress, txt.easing || 'easeOut');
     const currentVal = startVal + (endVal - startVal) * ease;
     const decimals = Math.max(0, txt.counterDecimals ?? 0);
