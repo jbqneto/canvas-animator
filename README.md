@@ -31,8 +31,8 @@ qualquer editor.
   sozinhos entre elas. Posição, tamanho, rotação e opacidade usam os mesmos keyframes dos atores (e ele pode
   seguir um caminho). Poses prontas, espelhar pose, "Minhas poses" (vão junto no arquivo do projeto), F6 para repetir a pose
   no próximo frame, Ctrl+B para quebrar em traços, onion skin.
-- **Girar no palco**: todo objeto selecionado tem uma alça redonda acima da caixa; arraste para girar (Shift =
-  passos de 15°).
+- **Girar e escalar no palco**: todo objeto selecionado tem uma alça redonda acima da caixa (girar; Shift =
+  passos de 15°) e quadrados nos cantos (escalar em volta da âncora; Shift = passos de 5%).
 - **Gráficos e textos animados**: barras, rosca, linha, métrica, contadores, efeitos de texto. Eles se movem
   como os atores: posição, escala, rotação e opacidade com keyframes, easing por key e "seguir caminho".
 - **Áudio de referência**: narração, música ou efeitos (ou o som de um vídeo) na timeline com forma de onda.

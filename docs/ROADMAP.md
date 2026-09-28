@@ -50,10 +50,11 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T25 — Girar no palco (alça redonda acima da seleção, para atores, formas, gráficos, textos e bonecos;
   Shift = 15°), espelhar pose do boneco e "Minhas poses" (salvas no navegador, valem em qualquer projeto)
 - [x] T26 — "Minhas poses" vão junto no arquivo do projeto e entram na lista de quem abre o arquivo
+- [x] T27 — Alças de escala nos cantos da seleção (qualquer objeto animado; Shift = passos de 5%)
 
 ## Próximos passos sugeridos
 
-1. Alças de escala no palco (cantos da seleção), como a de rotação.
+1. (vazio — próximos passos a decidir depois dos testes manuais)
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -120,6 +121,9 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - Alça de rotação (`FlashCanvas`): 26 px acima do meio da borda superior da caixa, em qualquer objeto animado
   selecionado; o ângulo é acumulado passo a passo (passa de meia volta sem pular) e grava pela regra do
   cronômetro (`setActorProperty('rotation')`); Shift arredonda para 15°.
+- Alças de escala (`FlashCanvas`, `scaleHandlesLocal`): quadrados nos cantos da caixa; a escala é a do início
+  × (distância do ponteiro à âncora ÷ distância no clique), mínimo 5%, pela regra do cronômetro; Shift arredonda
+  para 5%. No gráfico, o canto inferior direito continua sendo o redimensionar (largura/altura, texto nítido).
 - Projeto (`src/project/`): `.fmproj` = JSON versionado (`serializeProject`/`parseProject`, com defaults
   para campos novos). Vídeo de fundo não é embutido (só o nome, para avisar ao abrir). File System Access
   API quando existe (Ctrl+S sobrescreve o mesmo arquivo), senão download/input. Autosave em IndexedDB

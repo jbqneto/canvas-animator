@@ -763,4 +763,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'stickPose.save': 'Save',
   'stickPose.saveHint': 'Saves the pose at the current frame (the same name replaces the old one)',
   'stickPose.deletePose': 'Delete the pose "{name}"',
+
+  // Stage scale handles
+  'stage.history.scale': 'Scale at frame {frame}',
 };

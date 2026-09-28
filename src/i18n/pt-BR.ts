@@ -764,4 +764,7 @@ export const ptBR = {
   'stickPose.save': 'Salvar',
   'stickPose.saveHint': 'Salva a pose do frame atual (um nome igual substitui a anterior)',
   'stickPose.deletePose': 'Apagar a pose "{name}"',
+
+  // Stage scale handles
+  'stage.history.scale': 'Escalar no frame {frame}',
 };
