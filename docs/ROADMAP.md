@@ -53,10 +53,17 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T27 — Alças de escala nos cantos da seleção (qualquer objeto animado; Shift = passos de 5%)
 - [x] T28 — Legendas a partir do roteiro (uma por linha, no tempo dos marcadores) + texto centralizado e com fundo
 - [x] T29 — Legendas: importar .srt/.vtt (tempo exato do arquivo) e baixar as legendas do projeto em .srt
+- [x] T30 — Todas as legendas numa camada só ("Legendas"): vários clipes na mesma linha, como no Flash
 
 ## Próximos passos sugeridos
 
-1. (vazio — próximos passos a decidir depois dos testes manuais)
+Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
+
+1. Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis
+2. Câmera com keyframes (pan/zoom/rotação da cena) + camadas presas à câmera (base para parallax)
+3. Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir
+4. Repetir/ciclo e tremida por propriedade
+5. Máscara; revelar traços e contornos (quadro branco)
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
@@ -71,6 +78,13 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   for maior, e a timeline cresce se preciso. Cada legenda ganha uma camada; um passo de desfazer.
 - Texto: `align` ('left' padrão | 'center') diz onde a âncora fica na linha (o `textBox` segue);
   `bgColor` desenha uma caixa arredondada medida com `measureText` atrás do texto. Os dois no inspetor.
+- Camadas com vários objetos (`engine/layers.ts`): `StudioLayer.targetIds` (além de `targetId`), hoje só
+  para textos. A trilha de legendas é a camada `layer-captions` (criada no topo na primeira vez; as novas
+  legendas entram nela com `addToSharedLayer`). Visível/travada/ordem valem para todos os objetos dela
+  (`resolveObjectLayer` usa `layerHolds`). Na timeline, cada texto da camada é um clipe na mesma linha;
+  clicar na linha seleciona o primeiro. Excluir a camada exclui os textos dela; excluir um texto usa
+  `withoutTarget` (tira o id; a camada some quando fica vazia; uma camada de um objeto só também some,
+  o que antes deixava uma linha vazia).
 - Arquivos de legenda (`engine/captions.ts`): `parseSubtitles(text, fps)` lê SRT e WebVTT (BOM, CRLF,
   números/ids, cabeçalho e NOTE do VTT, tempo sem hora, `,` ou `.` nos ms, configurações da cue, tags
   `<i>`/`<c.x>`/`{\an8}` fora; cue de várias linhas vira uma linha; cue sem tempo válido ou sem texto é

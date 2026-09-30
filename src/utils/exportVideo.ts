@@ -22,6 +22,7 @@ import { sampleTrack, Vec2 } from '../engine/keyframes';
 import { t } from '../i18n';
 import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtils';
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
+import { layerHolds } from '../engine/layers';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -62,7 +63,7 @@ export function resolveObjectLayer(
   type: LayerType
 ): { index: number; layer: StudioLayer } | undefined {
   if (!layers) return undefined;
-  let index = targetId ? layers.findIndex((l) => l.targetId === targetId) : -1;
+  let index = targetId ? layers.findIndex((l) => layerHolds(l, targetId)) : -1;
   if (index === -1) index = layers.findIndex((l) => l.type === type);
   return index === -1 ? undefined : { index, layer: layers[index] };
 }

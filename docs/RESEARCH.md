@@ -90,3 +90,72 @@ países, gráficos e números que crescem) para **enriquecer vídeos** ou virar 
 - [Rive vs Lottie 2026](https://www.pkgpulse.com/guides/lottie-vs-rive-vs-css-animations-web-animation-formats-2026) ·
   [ferramentas de motion design 2026](https://lottiefiles.com/blog/design-guides-and-tips/best-motion-design-tools-ranked-by-use-case)
 - [Travel Animator](https://www.travelanimator.com/) · [Mapanim: apps de mapa 2026](https://mapanim.com/blog/best-travel-map-animation-apps-and-tools-2026)
+
+---
+
+# Rodada 2 (set/2026): o que o Flash tinha e ainda falta, e o que as ferramentas de criador fazem
+
+Critério de prioridade: **vídeo narrado** (documentário com imagens e voz, explicativo com gráficos e
+bonecos) antes de ilustração ou interatividade. Esforço: P (dias de trabalho de um PR), M (2–3 PRs), G (mudança de
+arquitetura).
+
+## Já coberto (não repetir)
+
+Keyframes por propriedade com easing, caminho suave e "orientar ao caminho", motion guide (caminhos),
+onion skin, boneco com FK e poses-chave, formas editáveis, textos e gráficos animados, marcadores, áudio com
+forma de onda e scrub, legendas (roteiro, .srt/.vtt, trilha única), modelos, export MP4 e WebM com alfa,
+girar/escalar no palco.
+
+## Lacunas
+
+| Recurso | Quem tem | Valor para vídeo narrado | Esforço | Nota |
+|---|---|---|---|---|
+| **Câmera** (pan/zoom/rotação da cena inteira, com keyframes) + camadas presas à câmera | Animate (Camera tool, desde 2017), AE | **Alto**: é o "Ken Burns" dos documentários; zoom num gráfico ou no mapa | M | Genérico: um transform de cena antes dos objetos. Legendas e terço inferior ficam "presos à câmera" (não dão zoom). Base para parallax. |
+| **Filtros por objeto**: sombra, brilho (glow), desfoque; **efeito de cor** (tint, brilho, alfa) | Animate (filtros e color effect por instância), AE | **Alto**: legibilidade de texto sobre vídeo, destaque | P | `ctx.shadow*` e `ctx.filter` do canvas; animáveis como qualquer propriedade. |
+| **Legenda palavra por palavra** (karaokê: realça a palavra falada) | CapCut, Captions, Submagic | **Alto** em vídeo curto (Shorts/Reels) | M | O VTT do Whisper traz o tempo de cada palavra (`<00:00:01.200>` dentro da cue); hoje o leitor joga isso fora. Sem tempo por palavra, dá para distribuir pelo tamanho. |
+| **Máscara** (camada que recorta a de baixo) | Animate (mask layer), AE (track matte) | Médio: revelar mapa, foco/spotlight, texto saindo de trás de algo | M | Camada `mask` com `ctx.clip`/composição; a máscara pode ser animada. |
+| **Desenhar-se / revelar** traços, formas e texto (estilo quadro branco) | VideoScribe, Doodly | Médio: explicativos; caminhos já revelam | P | Estender o "revelar" dos caminhos para traços do lápis e contorno de formas; texto "escrito" letra a letra já existe (typewriter). |
+| **Repetir/ciclo e tremida** por propriedade (loopOut, wiggle) | AE (expressões), Animate (loop de símbolo gráfico) | Médio: fundo vivo, ícone pulsando, câmera na mão | P | Por trilha: `loop: 'cycle' \| 'pingpong'` depois do último key; `wiggle(freq, amp)` determinístico (semente por objeto). |
+| **Export GIF e sequência PNG** | Animate | Médio: GIF para web/redes; PNG para editores sem suporte a WebM alfa | P–M | PNG em ZIP é simples; GIF precisa de quantização (lib pequena). |
+| **Símbolos / instâncias** (desenha uma vez, reusa; editar o símbolo muda todas as cópias) | Animate (graphic/movie clip), Moho | Médio: personagem reusado, ícones | G | Mexe no modelo de dados; só vale com demanda real. |
+| **Shape tween** (uma forma vira outra) + dicas de forma | Animate | Baixo–médio: transições de ícone | M–G | Interpolar polígonos com reamostragem; as formas editáveis atuais são o ponto de partida. |
+| **Lip sync** (boca segue a voz) | Animate (Auto Lip-Sync, 12 visemas), Moho | Baixo para os canais atuais (sem personagem falando); alto se houver apresentador animado | M | Versão simples: abrir a boca pela amplitude do áudio (já temos a forma de onda). |
+| **Profundidade de camada / parallax** | Animate (Layer Depth), AE 3D | Baixo–médio | P depois da câmera | Cada camada anda uma fração do movimento da câmera. |
+| **Pincel com suavização, balde de tinta, gradiente** | Animate (fluid brush, gap closing) | Baixo: o foco não é ilustração | M | Suavização do lápis é o item barato dessa lista. |
+| **Smart bones / switch layers** | Moho | Baixo agora | G | Relevante só se o boneco virar personagem de verdade. |
+
+## Recomendação (ordem)
+
+1. **Filtros e efeito de cor por objeto** (P): o maior ganho visual por esforço, e deixa legenda e título legíveis
+   em qualquer fundo.
+2. **Câmera com keyframes** + "preso à câmera" (M): o recurso que mais falta para documentário com imagens
+   (Ken Burns) e o que mais aproxima do Animate moderno.
+3. **Legenda palavra por palavra** (M): aproveita o trabalho de legendas; decisivo para Shorts.
+4. **Repetir/tremida por propriedade** (P): barato e elimina keyframes repetidos.
+5. **Máscara** (M) e **revelar traços** (P): efeitos de explicativo.
+6. **GIF/PNG** quando alguém pedir; **símbolos, shape tween, lip sync** só com demanda.
+
+## Fontes (rodada 2)
+
+- Animate: [shape tweens e dicas de forma](https://helpx.adobe.com/animate/using/shape-tweening.html) ·
+  [máscaras (Classroom in a Book)](https://www.oreilly.com/library/view/adobe-animate-cc/9780134872292/ch08.xhtml) ·
+  [símbolos](https://helpx.adobe.com/animate/using/symbols.html) ·
+  [instâncias, color effect, frame picker e lip sync](https://helpx.adobe.com/animate/using/symbol-instances.html) ·
+  [filtros](https://helpx.adobe.com/animate/using/graphic-filters.html) ·
+  [Auto Lip-Sync](https://helpx.adobe.com/ee/animate/how-to/auto-lip-sync-sensei.html) ·
+  [câmera](https://helpx.adobe.com/animate/using/working-with-camera-in-animate.html) ·
+  [layer depth / parallax](https://helpx.adobe.com/animate/using/layer-depth.html) ·
+  [GIF](https://helpx.adobe.com/animate/using/export-for-web.html) ·
+  [sprite sheet / PNG](https://helpx.adobe.com/animate/desktop/workspace-and-workflow/create-sprite-sheet.html) ·
+  [traço, preenchimento, gradiente](https://helpx.adobe.com/animate/using/strokes-fills-gradients.html) ·
+  [fluid brushes](https://helpx.adobe.com/animate/using/fluid-brushes.html)
+- After Effects: [exemplos de expressões (wiggle, loopOut)](https://helpx.adobe.com/after-effects/desktop/work-with-expressions/expression-examples/expression-examples.html) ·
+  [wiggle (School of Motion)](https://schoolofmotion.com/blog/wiggle-expression)
+- Ken Burns: [Wikipedia](https://en.wikipedia.org/wiki/Ken_Burns_effect) ·
+  [no After Effects](https://www.macprovideo.com/article/after-effects/after-effects-animation-tips-ken-burns-effects)
+- Quadro branco: [VideoScribe — animação "Draw"](https://help.videoscribe.co/knowledge/draw) ·
+  [estilos de animação](https://blog.videoscribe.co/the-ultimate-guide-to-videoscribe-animation-styles)
+- Legendas de criador: [CapCut palavra por palavra](https://capcutguide.com/capcut-word-by-word-captions/) ·
+  [estilos de legenda do CapCut](https://www.kapwing.com/resources/how-to-get-capcut-caption-styles-and-best-alternatives/)
+- Moho: [Moho vs Animate (Bloop)](https://www.bloopanimation.com/moho-vs-animate-cc/) ·
+  [Moho (Wikipedia)](https://en.wikipedia.org/wiki/Moho_(software))
