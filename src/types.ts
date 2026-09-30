@@ -166,6 +166,8 @@ export interface TextOverlay extends Animated {
   bgColor?: string;
   /** Where the anchor sits on the text line: its start (default) or its middle (captions). */
   align?: 'left' | 'center';
+  /** Made by the captions dialog: exported to .srt with the other captions. */
+  role?: 'caption';
   effect: TextEffect;
   badge?: string;
   visible: boolean;

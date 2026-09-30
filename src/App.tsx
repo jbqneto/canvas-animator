@@ -53,7 +53,7 @@ import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
 import { CaptionsDialog, CaptionsRequest } from './components/CaptionsDialog';
-import { captionTexts } from './engine/captions';
+import { captionSpansOf, captionTexts } from './engine/captions';
 import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
 import { AiKeyDialog } from './components/AiKeyDialog';
 import type { AnimationTemplate, TemplateValues } from './templates/types';
@@ -2226,6 +2226,8 @@ export default function App() {
         timelineEnd={totalFrames}
         fps={fps}
         defaultFontSize={Math.round(canvasDimensions.height * 0.045)}
+        projectCaptions={captionSpansOf(texts)}
+        fileName={projectName}
       />
 
       <RouteDialog

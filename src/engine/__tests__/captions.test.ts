@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { captionSpans, captionTexts, readingFrames, scriptLines } from '../captions';
+import {
+  captionSpans,
+  captionSpansOf,
+  captionTexts,
+  parseSubtitles,
+  readingFrames,
+  scriptLines,
+  toSrt,
+} from '../captions';
 import { textBox } from '../overlays';
 
 describe('captions from a script', () => {
@@ -86,5 +94,53 @@ describe('reading time', () => {
   it('gives short lines a floor and long lines time by length', () => {
     expect(readingFrames(['Fim'], 24)).toBe(Math.ceil(1.2 * 24));
     expect(readingFrames(['x'.repeat(45)], 24)).toBe(72); // 3 s
+  });
+});
+
+describe('subtitle files', () => {
+  it('reads SRT: numbers dropped, multi-line cues joined, tags stripped, CRLF and BOM', () => {
+    const srt =
+      '﻿1\r\n00:00:00,000 --> 00:00:01,500\r\nOlá, <i>mundo</i>\r\nsegunda linha\r\n\r\n' +
+      '2\r\n00:00:02,000 --> 00:00:03,000\r\n{\\an8}Fim\r\n';
+    expect(parseSubtitles(srt, 24)).toEqual([
+      { text: 'Olá, mundo segunda linha', startFrame: 1, endFrame: 37 },
+      { text: 'Fim', startFrame: 49, endFrame: 73 },
+    ]);
+  });
+
+  it('reads WebVTT: header, notes, cue ids, times without hours and cue settings', () => {
+    const vtt =
+      'WEBVTT\n\nNOTE made by a tool\n\nintro\n00:01.000 --> 00:02.000 align:start position:10%\n<c.yellow>Oi</c>\n\n' +
+      '01:00:00.000 --> 01:00:01.000\nUma hora depois\n';
+    expect(parseSubtitles(vtt, 30)).toEqual([
+      { text: 'Oi', startFrame: 31, endFrame: 61 },
+      { text: 'Uma hora depois', startFrame: 1 + 3600 * 30, endFrame: 1 + 3601 * 30 },
+    ]);
+  });
+
+  it('skips broken cues and never returns an empty span', () => {
+    const spans = parseSubtitles('1\nnot a time --> x\nA\n\n2\n00:00:01,000 --> 00:00:01,000\nB\n\n3\n00:00:02,000 --> 00:00:03,000\n\n', 24);
+    expect(spans).toEqual([{ text: 'B', startFrame: 25, endFrame: 26 }]);
+  });
+
+  it('writes SRT that reads back to the same frames', () => {
+    const spans = [
+      { text: 'a', startFrame: 1, endFrame: 37 },
+      { text: 'b', startFrame: 37, endFrame: 1 + 3700 * 24 },
+    ];
+    const srt = toSrt(spans, 24);
+    expect(srt).toBe('1\n00:00:00,000 --> 00:00:01,500\na\n\n2\n00:00:01,500 --> 01:01:40,000\nb\n');
+    expect(parseSubtitles(srt, 24)).toEqual(spans);
+  });
+
+  it('gets the project captions back as spans, and only those', () => {
+    const style = { width: 1280, height: 720, position: 'bottom' as const, fontSize: 32, idPrefix: 'c' };
+    const spans = [
+      { text: 'b', startFrame: 30, endFrame: 50 },
+      { text: 'a', startFrame: 1, endFrame: 30 },
+    ];
+    const texts = captionTexts(spans, style);
+    const title = { ...texts[0], id: 'title', role: undefined };
+    expect(captionSpansOf([title, ...texts])).toEqual([spans[1], spans[0]]);
   });
 });

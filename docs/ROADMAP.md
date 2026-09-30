@@ -52,6 +52,7 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T26 — "Minhas poses" vão junto no arquivo do projeto e entram na lista de quem abre o arquivo
 - [x] T27 — Alças de escala nos cantos da seleção (qualquer objeto animado; Shift = passos de 5%)
 - [x] T28 — Legendas a partir do roteiro (uma por linha, no tempo dos marcadores) + texto centralizado e com fundo
+- [x] T29 — Legendas: importar .srt/.vtt (tempo exato do arquivo) e baixar as legendas do projeto em .srt
 
 ## Próximos passos sugeridos
 
@@ -70,6 +71,12 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   for maior, e a timeline cresce se preciso. Cada legenda ganha uma camada; um passo de desfazer.
 - Texto: `align` ('left' padrão | 'center') diz onde a âncora fica na linha (o `textBox` segue);
   `bgColor` desenha uma caixa arredondada medida com `measureText` atrás do texto. Os dois no inspetor.
+- Arquivos de legenda (`engine/captions.ts`): `parseSubtitles(text, fps)` lê SRT e WebVTT (BOM, CRLF,
+  números/ids, cabeçalho e NOTE do VTT, tempo sem hora, `,` ou `.` nos ms, configurações da cue, tags
+  `<i>`/`<c.x>`/`{\an8}` fora; cue de várias linhas vira uma linha; cue sem tempo válido ou sem texto é
+  ignorada). Tempo do arquivo conta do início do vídeo: t s → frame `1 + round(t·fps)`. `toSrt(spans, fps)`
+  escreve o inverso (volta aos mesmos frames). Legendas do projeto = textos com `role: 'caption'`
+  (`captionSpansOf`, fim = início + duração + 1); títulos e outros textos não entram no .srt.
 
 - IA (`src/ai/`): `prompts.ts` (puro) monta instrução de sistema, conversa e partes da imagem e lê a imagem da
   resposta; usado pelo servidor e pelo navegador. `aiClient.ts`: com chave própria (`aiKey.ts`,

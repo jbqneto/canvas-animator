@@ -42,7 +42,9 @@ qualquer editor.
   áudio grudam neles ao arrastar (Alt solta). Um clique na faixa de áudio cria marcadores onde cada fala começa.
 - **Legendas do roteiro** (Modelos › Títulos): cole o roteiro da narração, uma legenda por linha. Cada linha
   começa num marcador (crie-os com M ou com um clique na faixa de áudio); as que sobram dividem o tempo pelo
-  tamanho. Viram textos centralizados com fundo escuro, um por camada, editáveis como qualquer texto.
+  tamanho. Ou importe um **.srt/.vtt** (transcrição do YouTube, Whisper, CapCut…) e use o tempo do arquivo.
+  Viram textos centralizados com fundo escuro, um por camada, editáveis como qualquer texto. O mesmo diálogo
+  baixa as legendas do projeto em **.srt**, para subir junto com o vídeo.
 - **Trocar o FPS** (12/24/30/60) mantém tudo no mesmo segundo: keys, clipes, marcadores e áudio são
   reescalados, como no After Effects (e dá para desfazer).
 - **Timeline em segundos ou quadros**, com zoom (Ctrl + roda do mouse, ancorado no cursor) para ajustar

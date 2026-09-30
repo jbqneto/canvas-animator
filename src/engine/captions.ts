@@ -83,6 +83,7 @@ export function captionTexts(spans: CaptionSpan[], style: CaptionStyle): TextOve
         color: '#ffffff',
         bgColor: 'rgba(0,0,0,0.55)',
         align: 'center',
+        role: 'caption',
         effect: 'fadeRise',
         visible: true,
         startFrame: span.startFrame,
@@ -98,4 +99,66 @@ export function captionTexts(spans: CaptionSpan[], style: CaptionStyle): TextOve
 export function readingFrames(lines: string[], fps: number): number {
   const seconds = lines.reduce((sum, l) => sum + Math.max(MIN_LINE_SECONDS, l.length / READ_CHARS_PER_SECOND), 0);
   return Math.ceil(seconds * fps);
+}
+
+// ================= SUBTITLE FILES (.srt / .vtt) =================
+
+/** "01:02:03,450", "02:03.450" (VTT without hours) or with "." → seconds; NaN when not a time. */
+function parseTime(raw: string): number {
+  const m = raw.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2})[,.](\d{1,3})$/);
+  if (!m) return NaN;
+  const [, h, min, s, ms] = m;
+  return Number(h ?? 0) * 3600 + Number(min) * 60 + Number(s) + Number(ms.padEnd(3, '0')) / 1000;
+}
+
+/** Frame where a time lands (frame 1 = 0 s). */
+const secondsToFrame = (seconds: number, fps: number) => 1 + Math.round(seconds * fps);
+
+/**
+ * Cues of an SRT or WebVTT file, in file time (0 s = frame 1). Numbers, VTT headers/notes, styling
+ * tags (<i>, <c.x>, {\an8}) and cue settings are dropped; multi-line cues become one line.
+ */
+export function parseSubtitles(text: string, fps: number): CaptionSpan[] {
+  const blocks = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n').split(/\n\s*\n/);
+  const spans: CaptionSpan[] = [];
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const timing = lines.findIndex((l) => l.includes('-->'));
+    if (timing < 0) continue;
+    const [startRaw, rest] = lines[timing].split('-->');
+    // VTT cue settings ("align:start position:10%") follow the end time
+    const start = parseTime(startRaw);
+    const end = parseTime((rest ?? '').trim().split(/\s+/)[0] ?? '');
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    const cue = lines
+      .slice(timing + 1)
+      .map((l) => l.replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '').trim())
+      .filter(Boolean)
+      .join(' ');
+    if (!cue) continue;
+    const startFrame = secondsToFrame(start, fps);
+    spans.push({ text: cue, startFrame, endFrame: Math.max(startFrame + 1, secondsToFrame(end, fps)) });
+  }
+  return spans.sort((a, b) => a.startFrame - b.startFrame);
+}
+
+function srtTime(frame: number, fps: number): string {
+  const ms = Math.max(0, Math.round(((frame - 1) / fps) * 1000));
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`;
+}
+
+/** SRT file for the spans (end = first frame after the caption). */
+export function toSrt(spans: CaptionSpan[], fps: number): string {
+  return spans
+    .map((s, i) => `${i + 1}\n${srtTime(s.startFrame, fps)} --> ${srtTime(s.endFrame, fps)}\n${s.text}\n`)
+    .join('\n');
+}
+
+/** The project's captions (texts made by the captions dialog) back as spans, in time order. */
+export function captionSpansOf(texts: TextOverlay[]): CaptionSpan[] {
+  return texts
+    .filter((x) => x.role === 'caption')
+    .map((x) => ({ text: x.text, startFrame: x.startFrame, endFrame: x.startFrame + x.durationFrames + 1 }))
+    .sort((a, b) => a.startFrame - b.startFrame);
 }
