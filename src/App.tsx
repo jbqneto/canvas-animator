@@ -52,6 +52,8 @@ import { GeminiChatbot } from './components/GeminiChatbot';
 import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
+import { CaptionsDialog, CaptionsRequest } from './components/CaptionsDialog';
+import { captionTexts } from './engine/captions';
 import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
 import { AiKeyDialog } from './components/AiKeyDialog';
 import type { AnimationTemplate, TemplateValues } from './templates/types';
@@ -1411,6 +1413,41 @@ export default function App() {
     setTemplatesOpen(false);
   };
 
+  // ================= CAPTIONS FROM A SCRIPT =================
+  const [captionsOpen, setCaptionsOpen] = useState(false);
+
+  const handleCreateCaptions = ({ spans, position, fontSize }: CaptionsRequest) => {
+    const texts = captionTexts(spans, {
+      width: canvasDimensions.width,
+      height: canvasDimensions.height,
+      position,
+      fontSize,
+      idPrefix: `caption-${Date.now()}`,
+    });
+    if (texts.length === 0) return;
+    const newLayers: StudioLayer[] = texts.map((x) => ({
+      id: `layer-text-${x.id}`,
+      name: x.text.length > 28 ? `${x.text.slice(0, 27)}…` : x.text,
+      type: 'text',
+      visible: true,
+      locked: false,
+      color: '#10b981',
+      targetId: x.id,
+    }));
+    const present = history.presentRef.current;
+    history.pushSnapshot(t('history.captions', { count: texts.length }), {
+      ...present,
+      texts: [...present.texts, ...texts],
+      layers: [...newLayers, ...present.layers],
+    });
+    const last = texts[texts.length - 1];
+    const end = last.startFrame + last.durationFrames;
+    if (end > totalFrames) setTotalFrames(end);
+    setSelectedObject({ type: 'text', id: texts[0].id });
+    setSelectedLayerId(`layer-text-${texts[0].id}`);
+    setCaptionsOpen(false);
+  };
+
   // ================= MAP ROUTE TEMPLATE =================
   const [routeDialogOpen, setRouteDialogOpen] = useState(false);
 
@@ -2169,10 +2206,26 @@ export default function App() {
           setTemplatesOpen(false);
           setRouteDialogOpen(true);
         }}
+        onOpenCaptions={() => {
+          setTemplatesOpen(false);
+          setCaptionsOpen(true);
+        }}
         width={canvasDimensions.width}
         height={canvasDimensions.height}
         fps={fps}
         currentFrame={currentFrame}
+      />
+
+      <CaptionsDialog
+        isOpen={captionsOpen}
+        onClose={() => setCaptionsOpen(false)}
+        onCreate={handleCreateCaptions}
+        markerFrames={markers.map((m) => m.frame)}
+        fromFrame={currentFrame}
+        audioEndFrame={framesToFitAudio(audio, fps)}
+        timelineEnd={totalFrames}
+        fps={fps}
+        defaultFontSize={Math.round(canvasDimensions.height * 0.045)}
       />
 
       <RouteDialog

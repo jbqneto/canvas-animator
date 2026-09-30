@@ -24,10 +24,11 @@ export function chartBox(chart: Pick<ChartOverlay, 'width' | 'height'>): LocalBo
 }
 
 /** Approximate text box (measuring would need a canvas): the baseline starts at the anchor. */
-export function textBox(text: Pick<TextOverlay, 'text' | 'fontSize'>): LocalBox {
+export function textBox(text: Pick<TextOverlay, 'text' | 'fontSize' | 'align'>): LocalBox {
   const width = Math.max(160, text.text.length * (text.fontSize * 0.55));
   const height = text.fontSize * 1.5;
-  return { x: -8, y: -height + 6, width: width + 16, height: height + 8 };
+  const x = text.align === 'center' ? -width / 2 - 8 : -8;
+  return { x, y: -height + 6, width: width + 16, height: height + 8 };
 }
 
 const INTRO_TO_KEY_EASING: Record<IntroEasing, EasingName> = {

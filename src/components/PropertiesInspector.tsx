@@ -813,6 +813,38 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       />
                     </div>
                   </div>
+
+                  {/* Alignment & background box */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <span className="text-[10px] text-neutral-400">{t('inspector.text.align')}</span>
+                    {(['left', 'center'] as const).map((a) => (
+                      <button
+                        key={a}
+                        onClick={() => onUpdateText({ ...activeText, align: a === 'left' ? undefined : a })}
+                        className={`py-0.5 px-2 rounded text-[10px] border transition ${
+                          (activeText.align ?? 'left') === a
+                            ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/50 font-bold'
+                            : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-400 border-neutral-800'
+                        }`}
+                      >
+                        {t(`inspector.text.align.${a}`)}
+                      </button>
+                    ))}
+                    <label className="ml-auto flex items-center gap-1 text-[10px] text-neutral-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!activeText.bgColor}
+                        onChange={(e) =>
+                          onUpdateText({
+                            ...activeText,
+                            bgColor: e.target.checked ? 'rgba(0,0,0,0.55)' : undefined,
+                          })
+                        }
+                        className="accent-emerald-500"
+                      />
+                      {t('inspector.text.bgBox')}
+                    </label>
+                  </div>
                 </div>
 
                 {/* Movement: same keyframed transform as actors */}
