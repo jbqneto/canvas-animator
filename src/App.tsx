@@ -54,6 +54,7 @@ import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
 import { CaptionsDialog, CaptionsRequest } from './components/CaptionsDialog';
 import { captionSpansOf, captionTexts } from './engine/captions';
+import { addToSharedLayer, withoutTarget } from './engine/layers';
 import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
 import { AiKeyDialog } from './components/AiKeyDialog';
 import type { AnimationTemplate, TemplateValues } from './templates/types';
@@ -870,7 +871,11 @@ export default function App() {
     let updatedSticks = sticks;
     let updatedActors = actors;
 
-    if (layer.targetId) {
+    if (layer.targetIds && layer.type === 'text') {
+      // Shared track: its texts go with it
+      const held = new Set(layer.targetIds);
+      updatedTexts = texts.filter((x) => !held.has(x.id));
+    } else if (layer.targetId) {
       if (layer.type === 'chart') {
         updatedCharts = charts.filter((c) => c.id !== layer.targetId);
       } else if (layer.type === 'text') {
@@ -977,6 +982,7 @@ export default function App() {
     history.pushSnapshot(t('history.deleteText'), {
       ...history.present,
       texts: texts.filter((t) => t.id !== textId),
+      layers: withoutTarget(layers, textId),
     });
     if (selectedObject?.id === textId) setSelectedObject(null);
   };
@@ -1414,6 +1420,7 @@ export default function App() {
   };
 
   // ================= CAPTIONS FROM A SCRIPT =================
+  const CAPTIONS_LAYER_ID = 'layer-captions';
   const [captionsOpen, setCaptionsOpen] = useState(false);
 
   const handleCreateCaptions = ({ spans, position, fontSize }: CaptionsRequest) => {
@@ -1425,26 +1432,26 @@ export default function App() {
       idPrefix: `caption-${Date.now()}`,
     });
     if (texts.length === 0) return;
-    const newLayers: StudioLayer[] = texts.map((x) => ({
-      id: `layer-text-${x.id}`,
-      name: x.text.length > 28 ? `${x.text.slice(0, 27)}…` : x.text,
+    const present = history.presentRef.current;
+    // Every caption is a clip on one shared track (a 10-minute video has hundreds of them)
+    const track: StudioLayer = {
+      id: CAPTIONS_LAYER_ID,
+      name: t('captions.layerName'),
       type: 'text',
       visible: true,
       locked: false,
       color: '#10b981',
-      targetId: x.id,
-    }));
-    const present = history.presentRef.current;
+    };
     history.pushSnapshot(t('history.captions', { count: texts.length }), {
       ...present,
       texts: [...present.texts, ...texts],
-      layers: [...newLayers, ...present.layers],
+      layers: addToSharedLayer(present.layers, track, texts.map((x) => x.id)),
     });
     const last = texts[texts.length - 1];
     const end = last.startFrame + last.durationFrames;
     if (end > totalFrames) setTotalFrames(end);
     setSelectedObject({ type: 'text', id: texts[0].id });
-    setSelectedLayerId(`layer-text-${texts[0].id}`);
+    setSelectedLayerId(CAPTIONS_LAYER_ID);
     setCaptionsOpen(false);
   };
 

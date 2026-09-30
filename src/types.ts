@@ -347,6 +347,8 @@ export interface StudioLayer {
   color: string;
   opacity?: number;
   targetId?: string; // links to specific chart, text, stick, or group
+  /** Several objects on one layer, like a Flash layer with clips one after another (the captions track). */
+  targetIds?: string[];
 }
 
 export interface VideoBackground {

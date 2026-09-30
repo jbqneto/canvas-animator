@@ -65,6 +65,7 @@ import {
 } from '../engine/timelineScale';
 import { actorKeyframes, moveActorKeys, shiftActorTime } from '../engine/actor';
 import { moveStickKeys, shiftStickTime, stickKeyframes } from '../engine/stickActor';
+import { layerHolds } from '../engine/layers';
 
 // Stick figures carry a pose track besides the transform: their key operations include it
 const keysOf = (kind: AnimKind, obj: Animated) =>
@@ -1142,7 +1143,10 @@ export const Timeline: React.FC<TimelineProps> = ({
                   key={layer.id}
                   onClick={() => {
                     onSelectLayer(layer.id);
-                    if (layer.targetId) {
+                    if (layer.targetIds?.length && layer.type === 'text') {
+                      // Shared track: the row picks its first object; each clip picks its own
+                      onSelectObject({ type: 'text', id: layer.targetIds[0] });
+                    } else if (layer.targetId) {
                       if (layer.type === 'chart') {
                         onSelectObject({ type: 'chart', id: layer.targetId });
                       } else if (layer.type === 'text') {
@@ -1397,10 +1401,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                 layer.type === 'chart'
                   ? charts.find((c) => c.id === layer.targetId)
                   : null;
-              const text =
-                layer.type === 'text'
-                  ? texts.find((t) => t.id === layer.targetId)
-                  : null;
+              // A text layer can hold several texts (the captions track): one clip each on the same row
+              const layerTexts = layer.type === 'text' ? texts.filter((x) => layerHolds(layer, x.id)) : [];
               const actor =
                 layer.type === 'actor'
                   ? actors.find((a) => a.id === layer.targetId)
@@ -1516,7 +1518,8 @@ export const Timeline: React.FC<TimelineProps> = ({
                   {chart && renderKeyDiamonds('chart', chart, layer.id)}
 
                   {/* 2B. VISIBLE INTERACTIVE CLIP SPAN FOR TEXT OVERLAYS */}
-                  {text && (
+                  {layerTexts.map((text) => (
+                    <React.Fragment key={text.id}>
                     <div
                       style={{
                         left: `${((text.startFrame - 1) / totalFrames) * 100}%`,
@@ -1603,8 +1606,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                         ▐
                       </div>
                     </div>
-                  )}
-                  {text && renderKeyDiamonds('text', text, layer.id)}
+                  {renderKeyDiamonds('text', text, layer.id)}
+                    </React.Fragment>
+                  ))}
 
                   {/* 2C''. PATH CLIP SPAN (when the line is visible) */}
                   {path && (

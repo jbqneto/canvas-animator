@@ -629,6 +629,7 @@ export const ptBR = {
   'captions.fontSize': 'Tamanho',
   'captions.timing': 'De {from}s até {to}s, usando {markers} marcador(es).',
   'captions.create': 'Criar {count} legenda(s)',
+  'captions.layerName': 'Legendas',
   'captions.import': 'Importar .srt / .vtt',
   'captions.importError': 'Nenhuma legenda com tempo encontrada no arquivo.',
   'captions.file': 'Arquivo: {name}',
