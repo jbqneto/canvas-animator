@@ -31,6 +31,7 @@ import { parseProject, ProjectFileError, projectNameFromFile, serializeProject }
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
 import { loadImageFileAsActorSource } from './utils/importImage';
+import { mergeUserPoses, readUserPoses } from './utils/userPoses';
 import {
   createDefaultStickFigure,
   applyPoseToStickFigure,
@@ -51,6 +52,8 @@ import { GeminiChatbot } from './components/GeminiChatbot';
 import { ExportDialog, ExportRequest } from './components/ExportDialog';
 import { PwaStatus } from './components/PwaStatus';
 import { RouteDialog, RouteRequest } from './components/RouteDialog';
+import { CaptionsDialog, CaptionsRequest } from './components/CaptionsDialog';
+import { captionSpansOf, captionTexts } from './engine/captions';
 import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
 import { AiKeyDialog } from './components/AiKeyDialog';
 import type { AnimationTemplate, TemplateValues } from './templates/types';
@@ -298,8 +301,10 @@ export default function App() {
 
   const serializeCurrent = () => {
     const { description: _d, ...content } = history.presentRef.current;
+    // "My poses" go along with the file, so the project can be opened on another computer with them
+    const poses = readUserPoses();
     return serializeProject(
-      { name: projectName, fps, totalFrames, canvas: canvasDimensions, videoBg, content },
+      { name: projectName, fps, totalFrames, canvas: canvasDimensions, videoBg, content, ...(poses.length ? { poses } : {}) },
       videoFileName
     );
   };
@@ -332,8 +337,10 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [isDirty]);
 
-  const applyProjectText = (text: string, name?: string) => {
+  /** `importPoses`: add the file's saved poses to this browser (not when restoring our own autosave). */
+  const applyProjectText = (text: string, name?: string, importPoses = true) => {
     const project = parseProject(text);
+    if (importPoses && project.poses?.length) mergeUserPoses(project.poses);
     markSavedOnRenderRef.current = true;
     setFps(project.fps);
     setTotalFrames(project.totalFrames);
@@ -404,7 +411,7 @@ export default function App() {
   const handleRestoreAutosave = (restore: boolean) => {
     if (restore && pendingRestore) {
       try {
-        applyProjectText(pendingRestore.text, pendingRestore.name);
+        applyProjectText(pendingRestore.text, pendingRestore.name, false);
         markSavedOnRenderRef.current = false; // restored work still isn't in a file
       } catch {
         clearAutosave();
@@ -1406,6 +1413,41 @@ export default function App() {
     setTemplatesOpen(false);
   };
 
+  // ================= CAPTIONS FROM A SCRIPT =================
+  const [captionsOpen, setCaptionsOpen] = useState(false);
+
+  const handleCreateCaptions = ({ spans, position, fontSize }: CaptionsRequest) => {
+    const texts = captionTexts(spans, {
+      width: canvasDimensions.width,
+      height: canvasDimensions.height,
+      position,
+      fontSize,
+      idPrefix: `caption-${Date.now()}`,
+    });
+    if (texts.length === 0) return;
+    const newLayers: StudioLayer[] = texts.map((x) => ({
+      id: `layer-text-${x.id}`,
+      name: x.text.length > 28 ? `${x.text.slice(0, 27)}…` : x.text,
+      type: 'text',
+      visible: true,
+      locked: false,
+      color: '#10b981',
+      targetId: x.id,
+    }));
+    const present = history.presentRef.current;
+    history.pushSnapshot(t('history.captions', { count: texts.length }), {
+      ...present,
+      texts: [...present.texts, ...texts],
+      layers: [...newLayers, ...present.layers],
+    });
+    const last = texts[texts.length - 1];
+    const end = last.startFrame + last.durationFrames;
+    if (end > totalFrames) setTotalFrames(end);
+    setSelectedObject({ type: 'text', id: texts[0].id });
+    setSelectedLayerId(`layer-text-${texts[0].id}`);
+    setCaptionsOpen(false);
+  };
+
   // ================= MAP ROUTE TEMPLATE =================
   const [routeDialogOpen, setRouteDialogOpen] = useState(false);
 
@@ -2164,10 +2206,28 @@ export default function App() {
           setTemplatesOpen(false);
           setRouteDialogOpen(true);
         }}
+        onOpenCaptions={() => {
+          setTemplatesOpen(false);
+          setCaptionsOpen(true);
+        }}
         width={canvasDimensions.width}
         height={canvasDimensions.height}
         fps={fps}
         currentFrame={currentFrame}
+      />
+
+      <CaptionsDialog
+        isOpen={captionsOpen}
+        onClose={() => setCaptionsOpen(false)}
+        onCreate={handleCreateCaptions}
+        markerFrames={markers.map((m) => m.frame)}
+        fromFrame={currentFrame}
+        audioEndFrame={framesToFitAudio(audio, fps)}
+        timelineEnd={totalFrames}
+        fps={fps}
+        defaultFontSize={Math.round(canvasDimensions.height * 0.045)}
+        projectCaptions={captionSpansOf(texts)}
+        fileName={projectName}
       />
 
       <RouteDialog

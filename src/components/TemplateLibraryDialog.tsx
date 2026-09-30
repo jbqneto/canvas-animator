@@ -23,13 +23,19 @@ interface TemplateLibraryDialogProps {
   onInsert: (template: AnimationTemplate, values: TemplateValues) => void;
   /** The map route has its own dialog (country search); the library just opens it. */
   onOpenMapRoute: () => void;
+  /** Captions from a narration script also have their own dialog. */
+  onOpenCaptions: () => void;
   width: number;
   height: number;
   fps: number;
   currentFrame: number;
 }
 
-const MAP_ROUTE_ID = 'mapRoute';
+/** Entries that open their own dialog instead of the parameter form. */
+const SPECIAL = [
+  { id: 'captions', category: 'titles', titleKey: 'captions.title', descriptionKey: 'captions.description', openKey: 'templates.captions.open' },
+  { id: 'mapRoute', category: 'maps', titleKey: 'route.title', descriptionKey: 'route.description', openKey: 'templates.mapRoute.open' },
+] as const;
 const CATEGORIES: { id: TemplateCategory; icon: React.ReactNode }[] = [
   { id: 'titles', icon: <Type size={13} /> },
   { id: 'data', icon: <BarChart3 size={13} /> },
@@ -96,6 +102,7 @@ export const TemplateLibraryDialog: React.FC<TemplateLibraryDialogProps> = ({
   onClose,
   onInsert,
   onOpenMapRoute,
+  onOpenCaptions,
   width,
   height,
   fps,
@@ -108,6 +115,7 @@ export const TemplateLibraryDialog: React.FC<TemplateLibraryDialogProps> = ({
   useEffect(() => setEdited({}), [locale]);
 
   const template = TEMPLATES.find((tpl) => tpl.id === selectedId) ?? null;
+  const special = SPECIAL.find((sp) => sp.id === selectedId);
   const values = template ? (edited[template.id] ?? defaultValues(template, t)) : {};
   const setValue = (key: string, value: string | number) =>
     template && setEdited((prev) => ({ ...prev, [template.id]: { ...values, [key]: value } }));
@@ -241,13 +249,18 @@ export const TemplateLibraryDialog: React.FC<TemplateLibraryDialogProps> = ({
                     {t(tpl.nameKey)}
                   </button>
                 ))}
-                {cat.id === 'maps' && (
-                  <button data-template={MAP_ROUTE_ID} onClick={() => setSelectedId(MAP_ROUTE_ID)} className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition border ${
-                      selectedId === MAP_ROUTE_ID ? 'bg-sky-500/20 text-white border-sky-500/50' : 'text-neutral-300 hover:bg-neutral-800 border-transparent'
-                    }`}>
-                    {t('route.title')}
+                {SPECIAL.filter((sp) => sp.category === cat.id).map((sp) => (
+                  <button
+                    key={sp.id}
+                    data-template={sp.id}
+                    onClick={() => setSelectedId(sp.id)}
+                    className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition border ${
+                      selectedId === sp.id ? 'bg-sky-500/20 text-white border-sky-500/50' : 'text-neutral-300 hover:bg-neutral-800 border-transparent'
+                    }`}
+                  >
+                    {t(sp.titleKey)}
                   </button>
-                )}
+                ))}
               </div>
             ))}
           </nav>
@@ -271,18 +284,19 @@ export const TemplateLibraryDialog: React.FC<TemplateLibraryDialogProps> = ({
                   {t('templates.insert', { frame: currentFrame })}
                 </button>
               </>
-            ) : (
+            ) : special ? (
               <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-white">{t('route.title')}</h4>
-                <p className="text-[11px] text-neutral-400">{t('route.description')}</p>
+                <h4 className="text-sm font-semibold text-white">{t(special.titleKey)}</h4>
+                <p className="text-[11px] text-neutral-400">{t(special.descriptionKey)}</p>
                 <button
-                  onClick={onOpenMapRoute}
+                  id={`template-open-${special.id}`}
+                  onClick={special.id === 'captions' ? onOpenCaptions : onOpenMapRoute}
                   className="w-full py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
                 >
-                  {t('templates.mapRoute.open')}
+                  {t(special.openKey)}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

@@ -708,9 +708,20 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   }
 
   // Main Text
-  ctx.textAlign = 'left';
-  ctx.fillStyle = txt.color || '#ffffff';
+  ctx.textAlign = txt.align === 'center' ? 'center' : 'left';
   ctx.font = `800 ${txt.fontSize}px Plus Jakarta Sans, sans-serif`;
+
+  // Optional box behind the text (e.g. captions over video), sized to what is shown
+  if (txt.bgColor && displayedText) {
+    const w = ctx.measureText(displayedText).width;
+    const padX = txt.fontSize * 0.4;
+    const padY = txt.fontSize * 0.25;
+    const left = txt.align === 'center' ? -w / 2 : 0;
+    ctx.fillStyle = txt.bgColor;
+    roundRect(ctx, left - padX, offsetY - txt.fontSize * 0.85 - padY, w + padX * 2, txt.fontSize * 1.1 + padY * 2, padY * 1.5);
+    ctx.fill();
+  }
+  ctx.fillStyle = txt.color || '#ffffff';
 
   // Text glow shadow for legibility over video
   ctx.shadowColor = 'rgba(0,0,0,0.85)';

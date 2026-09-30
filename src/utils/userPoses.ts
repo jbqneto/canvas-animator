@@ -40,4 +40,24 @@ export function saveUserPose(name: string, joints: StickPose): boolean {
   return write([...list, { id: `pose-${Date.now()}`, name: clean, joints }]);
 }
 
+/**
+ * Adds poses that came with an opened project. A pose whose name is already in this browser's list is
+ * skipped, so opening a file never overwrites or duplicates the user's own poses. Returns how many were
+ * added.
+ */
+export function mergeUserPoses(incoming: UserPose[]): number {
+  const list = readUserPoses();
+  const names = new Set(list.map((p) => p.name.toLowerCase()));
+  const added = incoming.filter((p) => {
+    const key = p.name.trim().toLowerCase();
+    if (!key || names.has(key)) return false;
+    names.add(key);
+    return true;
+  });
+  if (added.length === 0) return 0;
+  return write([...list, ...added.map((p, i) => ({ ...p, id: `pose-${Date.now()}-${i}`, name: p.name.trim() }))])
+    ? added.length
+    : 0;
+}
+
 export const deleteUserPose = (id: string) => write(readUserPoses().filter((p) => p.id !== id));

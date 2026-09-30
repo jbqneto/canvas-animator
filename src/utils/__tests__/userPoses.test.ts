@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { deleteUserPose, readUserPoses, saveUserPose } from '../userPoses';
+import { deleteUserPose, mergeUserPoses, readUserPoses, saveUserPose } from '../userPoses';
 
 beforeEach(() => {
   const data = new Map<string, string>();
@@ -28,5 +28,20 @@ describe('my poses', () => {
     expect(readUserPoses()).toEqual([]);
     localStorage.setItem('flashmotion.userPoses', JSON.stringify([{ name: 'x' }, null, { name: 'ok', joints: {} }]));
     expect(readUserPoses().map((p) => p.name)).toEqual(['ok']);
+  });
+
+  it('merges poses from an opened project without overwriting or duplicating', () => {
+    saveUserPose('Salto', { head: { id: 'head', x: 1, y: 1 } });
+    const added = mergeUserPoses([
+      { id: 'a', name: 'salto', joints: { head: { id: 'head', x: 9, y: 9 } } },
+      { id: 'b', name: 'Chute', joints: { head: { id: 'head', x: 2, y: 2 } } },
+      { id: 'c', name: 'chute ', joints: { head: { id: 'head', x: 3, y: 3 } } },
+    ]);
+    expect(added).toBe(1);
+    expect(readUserPoses().map((p) => [p.name, p.joints.head.x])).toEqual([
+      ['Salto', 1],
+      ['Chute', 2],
+    ]);
+    expect(mergeUserPoses([])).toBe(0);
   });
 });

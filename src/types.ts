@@ -162,7 +162,12 @@ export interface TextOverlay extends Animated {
   subtitle?: string;
   fontSize: number;
   color: string;
+  /** Box behind the text (captions over video); none when unset. */
   bgColor?: string;
+  /** Where the anchor sits on the text line: its start (default) or its middle (captions). */
+  align?: 'left' | 'center';
+  /** Made by the captions dialog: exported to .srt with the other captions. */
+  role?: 'caption';
   effect: TextEffect;
   badge?: string;
   visible: boolean;

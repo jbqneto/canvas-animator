@@ -45,6 +45,15 @@ const PATH_KEY_HIT_RADIUS = 9;
 const ROTATE_HANDLE_OFFSET = 26;
 const ROTATE_HANDLE_HIT = 10;
 /** Local (object space) point of the rotation handle, above the middle of the box's top edge. */
+/** Corners of the selection box (local space) that scale the object; a chart's bottom-right one resizes it. */
+const scaleHandlesLocal = (box: LocalBox, kind: AnimKind) =>
+  [
+    { x: box.x - 3, y: box.y - 3 },
+    { x: box.x + box.width + 3, y: box.y - 3 },
+    { x: box.x - 3, y: box.y + box.height + 3 },
+    { x: box.x + box.width + 3, y: box.y + box.height + 3 },
+  ].slice(0, kind === 'chart' ? 3 : 4);
+const SCALE_HANDLE_HIT = 9;
 const rotateHandleLocal = (box: LocalBox, scale: number) => ({
   x: box.x + box.width / 2,
   y: box.y - 3 - ROTATE_HANDLE_OFFSET / (scale || 1),
@@ -270,6 +279,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       | 'chart'
       | 'chart-resize'
       | 'rotate'
+      | 'scale'
       | 'text'
       | 'actor'
       | 'path-key'
@@ -278,6 +288,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     /** For 'path-anchor': index of the dragged point. */
     anchorIndex?: number;
     initialPath?: MotionPath;
+    /** For 'scale': scale at drag start and the pointer's distance to the anchor. */
+    initialScale?: number;
+    startDistance?: number;
     /** For 'rotate': rotation at drag start and the pointer's angle around the anchor. */
     initialRotation?: number;
     startAngle?: number;
@@ -675,6 +688,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         ctx.arc(knob.x, knob.y, dot * 1.3, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
+        // Scale handles (corners): drag to scale around the anchor, Shift = 5% steps
+        ctx.fillStyle = color;
+        scaleHandlesLocal(box, sel.kind).forEach((c) => ctx.fillRect(c.x - dot, c.y - dot, dot * 2, dot * 2));
         if (sel.kind === 'chart') {
           // Resize handle (bottom-right corner)
           ctx.fillStyle = '#ffffff';
@@ -768,6 +784,15 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         const raw = session.initialRotation;
         const rotation = e.shiftKey ? Math.round(raw / 15) * 15 : Math.round(raw * 10) / 10;
         transientAnimated(session.objectKind, setActorProperty(session.initialObj, 'rotation', currentFrame, rotation));
+      }
+
+      // Scale handle: the pointer's distance to the anchor, relative to where the drag started
+      else if (session.targetType === 'scale' && session.initialObj && session.objectKind) {
+        const st = sampleActor(session.initialObj, currentFrame, paths);
+        const ratio = Math.hypot(pt.x - st.x, pt.y - st.y) / (session.startDistance || 1);
+        const raw = Math.max(0.05, (session.initialScale ?? 1) * ratio);
+        const scale = e.shiftKey ? Math.max(0.05, Math.round(raw * 20) / 20) : Math.round(raw * 1000) / 1000;
+        transientAnimated(session.objectKind, setActorProperty(session.initialObj, 'scale', currentFrame, scale));
       }
 
       // Chart resize (corner handle): the card grows around its center, so the mouse movement is
@@ -888,9 +913,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
               session.baseSnapshot
             );
           }
-        } else if (session.targetType === 'rotate' && session.objectKind) {
+        } else if ((session.targetType === 'rotate' || session.targetType === 'scale') && session.objectKind) {
           const obj = findAnimated(session.objectKind, session.targetId, latest);
-          const description = t('stage.history.rotate', { frame: currentFrame });
+          const description =
+            session.targetType === 'rotate'
+              ? t('stage.history.rotate', { frame: currentFrame })
+              : t('stage.history.scale', { frame: currentFrame });
           if (obj && session.objectKind === 'actor') onCommitActor(obj as ActorOverlay, description, session.baseSnapshot);
           if (obj && session.objectKind === 'chart') onCommitChart(obj as ChartOverlay, description, session.baseSnapshot);
           if (obj && session.objectKind === 'text') onCommitText(obj as TextOverlay, description, session.baseSnapshot);
@@ -1005,6 +1033,34 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           initialObj: selected.obj,
           initialRotation: actorPropertyValue(selected.obj, 'rotation', currentFrame),
           startAngle: Math.atan2(pt.y - st.y, pt.x - st.x),
+          startCanvasPt: pt,
+          baseSnapshot,
+          hasMoved: false,
+          offsetX: 0,
+          offsetY: 0,
+        };
+        window.addEventListener('mousemove', onWindowMouseMove);
+        window.addEventListener('mouseup', onWindowMouseUp);
+        return;
+      }
+    }
+
+    // 2A'. Scale handles (box corners): drag scales the object around its anchor
+    if (selected && isEditable(selectedObject!.id, layerTypeOf(selected.kind))) {
+      const st = sampleActor(selected.obj, currentFrame, paths);
+      const local = toActorLocal(st, pt);
+      const onCorner = scaleHandlesLocal(selected.box, selected.kind).some(
+        (c) => Math.hypot(local.x - c.x, local.y - c.y) * (st.scale || 1) <= SCALE_HANDLE_HIT
+      );
+      const distance = Math.hypot(pt.x - st.x, pt.y - st.y);
+      if (st.visible && onCorner && distance > 1) {
+        dragSessionRef.current = {
+          targetType: 'scale',
+          targetId: selectedObject!.id,
+          objectKind: selected.kind,
+          initialObj: selected.obj,
+          initialScale: actorPropertyValue(selected.obj, 'scale', currentFrame),
+          startDistance: distance,
           startCanvasPt: pt,
           baseSnapshot,
           hasMoved: false,

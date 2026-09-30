@@ -49,13 +49,34 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   e as imagens falam direto com o Google (app instalado/site estático sem servidor); sem ela, usa o servidor
 - [x] T25 — Girar no palco (alça redonda acima da seleção, para atores, formas, gráficos, textos e bonecos;
   Shift = 15°), espelhar pose do boneco e "Minhas poses" (salvas no navegador, valem em qualquer projeto)
+- [x] T26 — "Minhas poses" vão junto no arquivo do projeto e entram na lista de quem abre o arquivo
+- [x] T27 — Alças de escala nos cantos da seleção (qualquer objeto animado; Shift = passos de 5%)
+- [x] T28 — Legendas a partir do roteiro (uma por linha, no tempo dos marcadores) + texto centralizado e com fundo
+- [x] T29 — Legendas: importar .srt/.vtt (tempo exato do arquivo) e baixar as legendas do projeto em .srt
 
 ## Próximos passos sugeridos
 
-1. Levar "Minhas poses" junto no arquivo do projeto (hoje ficam só no navegador).
-2. Alças de escala no palco (cantos da seleção), como a de rotação.
+1. (vazio — próximos passos a decidir depois dos testes manuais)
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- Legendas (`engine/captions.ts`): `scriptLines` (uma legenda por linha, vazias fora) e
+  `captionSpans(lines, markerFrames, from, to)` (`to` exclusivo): a linha i começa no i-ésimo marcador em
+  [from, to); linhas sem marcador dividem o resto (do último marcador usado até `to`) pelo tamanho, com piso
+  de 18 caracteres (1,2 s de leitura); a última termina no próximo marcador livre ou em `to`. `captionTexts`
+  cria um `TextOverlay` por trecho (`align: 'center'`, `bgColor` escuro, `fadeRise`, x no centro, y a 88%
+  ou 12% da altura), com `durationFrames = fim − início − 1` porque o span de um objeto inclui o último
+  frame. O diálogo (entrada especial "Legendas do roteiro" em Modelos › Títulos) vai do cursor até o fim do
+  áudio; sem áudio, até o fim da timeline ou o tempo de leitura (`readingFrames`, 15 caracteres/s), o que
+  for maior, e a timeline cresce se preciso. Cada legenda ganha uma camada; um passo de desfazer.
+- Texto: `align` ('left' padrão | 'center') diz onde a âncora fica na linha (o `textBox` segue);
+  `bgColor` desenha uma caixa arredondada medida com `measureText` atrás do texto. Os dois no inspetor.
+- Arquivos de legenda (`engine/captions.ts`): `parseSubtitles(text, fps)` lê SRT e WebVTT (BOM, CRLF,
+  números/ids, cabeçalho e NOTE do VTT, tempo sem hora, `,` ou `.` nos ms, configurações da cue, tags
+  `<i>`/`<c.x>`/`{\an8}` fora; cue de várias linhas vira uma linha; cue sem tempo válido ou sem texto é
+  ignorada). Tempo do arquivo conta do início do vídeo: t s → frame `1 + round(t·fps)`. `toSrt(spans, fps)`
+  escreve o inverso (volta aos mesmos frames). Legendas do projeto = textos com `role: 'caption'`
+  (`captionSpansOf`, fim = início + duração + 1); títulos e outros textos não entram no .srt.
 
 - IA (`src/ai/`): `prompts.ts` (puro) monta instrução de sistema, conversa e partes da imagem e lê a imagem da
   resposta; usado pelo servidor e pelo navegador. `aiClient.ts`: com chave própria (`aiKey.ts`,
@@ -114,10 +135,15 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
   prontas) + `MotionInspector`. `mirrorPose` nega x e troca juntas l*/r* (como "colar pose espelhada"); a
   cabeça ganha `facing` (-1 = olho à esquerda), que troca no meio do trecho ao interpolar. "Minhas poses":
   `utils/userPoses.ts`, `localStorage['flashmotion.userPoses']`, aplicadas com `applyPose` (só juntas que o
-  boneco tem).
+  boneco tem). Salvar o projeto grava a lista em `project.poses` (fora do histórico, não entra no desfazer);
+  abrir um arquivo chama `mergeUserPoses`: entram só nomes que o navegador ainda não tem (nunca sobrescreve
+  nem duplica). Restaurar o autosave não importa poses (senão uma pose apagada voltaria).
 - Alça de rotação (`FlashCanvas`): 26 px acima do meio da borda superior da caixa, em qualquer objeto animado
   selecionado; o ângulo é acumulado passo a passo (passa de meia volta sem pular) e grava pela regra do
   cronômetro (`setActorProperty('rotation')`); Shift arredonda para 15°.
+- Alças de escala (`FlashCanvas`, `scaleHandlesLocal`): quadrados nos cantos da caixa; a escala é a do início
+  × (distância do ponteiro à âncora ÷ distância no clique), mínimo 5%, pela regra do cronômetro; Shift arredonda
+  para 5%. No gráfico, o canto inferior direito continua sendo o redimensionar (largura/altura, texto nítido).
 - Projeto (`src/project/`): `.fmproj` = JSON versionado (`serializeProject`/`parseProject`, com defaults
   para campos novos). Vídeo de fundo não é embutido (só o nome, para avisar ao abrir). File System Access
   API quando existe (Ctrl+S sobrescreve o mesmo arquivo), senão download/input. Autosave em IndexedDB

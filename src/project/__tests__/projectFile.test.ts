@@ -109,6 +109,17 @@ describe('project file', () => {
     expect(content.sticks!.map((s) => [s.id, s.startFrame, s.poses.length])).toEqual([['s1', 1, 2]]);
   });
 
+  it('carries the saved poses and drops broken ones', () => {
+    const base = state();
+    const poses = [
+      { id: 'p1', name: 'Salto', joints: { head: { id: 'head', x: 0, y: -90 } } },
+      { id: 'p2', name: 'Sem juntas', joints: { head: { id: 'head', x: 'a', y: 0 } } },
+    ] as any;
+    const parsed = parseProject(serializeProject({ ...base, poses }));
+    expect(parsed.poses).toEqual([{ id: 'p1', name: 'Salto', joints: { head: { id: 'head', x: 0, y: -90 } } }]);
+    expect(parseProject(serializeProject(base)).poses).toEqual([]);
+  });
+
   it('rejects files that are not projects', () => {
     expect(() => parseProject('not json')).toThrow(ProjectFileError);
     expect(() => parseProject('{"hello":1}')).toThrow(ProjectFileError);
