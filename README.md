@@ -50,8 +50,14 @@ qualquer editor.
 - **Timeline em segundos ou quadros**, com zoom (Ctrl + roda do mouse, ancorado no cursor) para ajustar
   quadro a quadro ou ver minutos inteiros; a vista acompanha o cursor durante o play.
 - **Projeto em arquivo** `.fmproj` (Ctrl+S / Ctrl+O), autosave com recuperação, e o app instalado abre
-  `.fmproj` direto do sistema.
+  `.fmproj` direto do sistema. O cabeçalho mostra se a cópia no navegador está pendente, salvando,
+  salva ou falhou, com nova tentativa em caso de erro. Ela é gravada após 1,5 s sem alterações e o
+  salvamento é antecipado ao colocar a aba em segundo plano. Use Ctrl+S para guardar um arquivo:
+  a cópia de recuperação pertence a este navegador e depende do armazenamento local disponível.
+  Uma falha ao ler ou restaurar essa cópia não a apaga nem permite que seja sobrescrita automaticamente.
 - **Export** MP4 (H.264) ou WebM transparente, com trecho de frames, codificado via WebCodecs com tempo exato.
+  Imagens ausentes ou inválidas interrompem a exportação de vídeo/PNG com um aviso para reimportá-las,
+  em vez de produzir uma cena incompleta.
 - IA opcional (Gemini) para imagens e um copiloto de roteiro, com a chave do servidor ou a sua própria chave
   (ícone de chave no copiloto ou no gerador de imagens), que fica só no navegador e fala direto com o Google.
 - Interface em **português (BR)** e **inglês (US)**, escolhida no canto superior direito e lembrada no navegador.
@@ -70,6 +76,11 @@ npm run build && NODE_ENV=production npm start   # build de produção (necessá
 ```
 
 O CI (`.github/workflows/ci.yml`) roda typecheck, testes, `i18n:scan` e build em todo PR.
+
+Ao abrir `.fmproj`, configurações fornecidas devem ter FPS inteiro de 1 a 120, dimensões inteiras
+de 2 a 8192 px por lado e duração de 1 a 1.000.000 de quadros. Campos ausentes em projetos antigos
+continuam recebendo os valores padrão; configurações inválidas e estruturas de conteúdo incompatíveis
+são rejeitadas antes de substituir a cena atual.
 
 Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`) ou deixe cada usuário colar a
 própria chave no app (ícone de chave): assim o app instalado ou hospedado só como site estático também usa a IA.
