@@ -31,6 +31,8 @@ import { parseProject, ProjectFileError, projectNameFromFile, serializeProject }
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
 import { useAutosave } from './project/useAutosave';
+import { isAbortError, throwIfAborted } from './utils/abort';
+import type { ExportPhase } from './utils/exportVideo';
 import { loadImageFileAsActorSource } from './utils/importImage';
 import { mergeUserPoses, readUserPoses } from './utils/userPoses';
 import {
@@ -1790,18 +1792,9 @@ export default function App() {
   };
 
   const handleResetProject = () => {
-    const emptyFrames: Record<number, FrameData> = {};
-    for (let f = 1; f <= totalFrames; f++) {
-      emptyFrames[f] = {
-        frameNumber: f,
-        stickFigures: [],
-        drawings: [],
-        groups: [],
-      };
-    }
     history.pushSnapshot(t('history.resetProject'), {
       ...history.present,
-      frames: emptyFrames,
+      frames: {},
       charts: [],
       texts: [],
       images: [],
@@ -1831,27 +1824,42 @@ export default function App() {
 
   // Export Video
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportPhase, setExportPhase] = useState<ExportPhase>('preparing');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportCancelled, setExportCancelled] = useState(false);
+  const exportControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => exportControllerRef.current?.abort(), []);
 
   const handleExportVideo = async (request: ExportRequest) => {
+    if (exportControllerRef.current) return;
+    const controller = new AbortController();
+    exportControllerRef.current = controller;
+    setExportError(null);
+    setExportCancelled(false);
+    setExportPhase('preparing');
     setIsExporting(true);
     setExportProgress(0);
     setIsPlaying(false);
 
     try {
       const sound = request.includeAudio
-        ? await mixdown(audio, fps, request.startFrame, request.endFrame)
+        ? await mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal)
         : null;
+      throwIfAborted(controller.signal);
       const { blob, extension, audioDropped } = await exportVideoSequence(sceneContent(), {
         totalFrames,
         fps,
         width: canvasDimensions.width,
         height: canvasDimensions.height,
         onProgress: (progress) => setExportProgress(progress),
+        onPhase: setExportPhase,
+        signal: controller.signal,
         format: request.format,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
         audio: sound,
       });
+      throwIfAborted(controller.signal);
       if (audioDropped) alert(t('app.audioDropped'));
 
       const url = URL.createObjectURL(blob);
@@ -1864,9 +1872,13 @@ export default function App() {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       setExportDialogOpen(false);
     } catch (err) {
-      console.error('Export error:', err);
-      alert(t('app.error.export', { error: err instanceof Error ? err.message : String(err) }));
+      if (isAbortError(err)) setExportCancelled(true);
+      else {
+        console.error('Export error:', err);
+        setExportError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
+      exportControllerRef.current = null;
       setIsExporting(false);
       setExportProgress(0);
     }
@@ -1928,7 +1940,7 @@ export default function App() {
 
       {/* Top Flash Studio Header with History & Grouping controls */}
       <StudioHeader
-        onExportVideo={() => setExportDialogOpen(true)}
+        onExportVideo={() => { setExportError(null); setExportCancelled(false); setExportDialogOpen(true); }}
         isExporting={isExporting}
         exportProgress={exportProgress}
         onSnapshot={handleSnapshot}
@@ -2230,6 +2242,10 @@ export default function App() {
         onExport={handleExportVideo}
         isExporting={isExporting}
         progress={exportProgress}
+        phase={exportPhase}
+        error={exportError}
+        cancelled={exportCancelled}
+        onCancel={() => exportControllerRef.current?.abort()}
         totalFrames={totalFrames}
         fps={fps}
         width={canvasDimensions.width}

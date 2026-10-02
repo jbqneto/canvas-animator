@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Globe2, Loader2, Plane, X } from 'lucide-react';
 import type { ActorOverlay } from '../types';
-import { Country, loadWorld, MapFraming } from '../map/worldMap';
+import type { Country, MapFraming } from '../map/worldMap';
 import { routeDurationFrames } from '../map/routeTemplate';
 import { useI18n } from '../i18n';
 
@@ -42,18 +42,24 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
   const [arc, setArc] = useState(true);
   const [vehicleActorId, setVehicleActorId] = useState<string>('');
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Country names follow the interface language
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    loadWorld(locale).then((w) => {
+    setCountries(null);
+    setLoadError(false);
+    import('../map/worldMap').then(({ loadWorld }) => loadWorld(locale)).then((w) => {
       if (!cancelled) setCountries(w.countries);
+    }).catch(() => {
+      if (!cancelled) setLoadError(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, locale]);
+  }, [isOpen, locale, loadAttempt]);
 
   const matches = useMemo(() => {
     if (!countries || !query.trim()) return [];
@@ -94,6 +100,15 @@ export const RouteDialog: React.FC<RouteDialogProps> = ({ isOpen, onClose, onCre
         <p className="text-[11px] text-neutral-500">
           {t('route.description')}
         </p>
+
+        {loadError && (
+          <div role="alert" className="flex items-center gap-2 text-amber-300">
+            <span className="flex-1">{t('route.loadError')}</span>
+            <button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)} className="underline">
+              {t('route.retry')}
+            </button>
+          </div>
+        )}
 
         <div className="space-y-1.5 relative">
           <input
