@@ -23,6 +23,17 @@ export const ptBR = {
   'project.error.invalidContent': 'O projeto contém uma estrutura de conteúdo inválida.',
   'exportVideo.error.imagesFailed': 'Não foi possível carregar {count} imagem(ns). Reimporte as imagens ausentes antes de exportar.',
 
+  'export.close': 'Fechar exportação',
+  'export.preparing': 'Preparando imagens, fontes e áudio…',
+  'export.finalizing': 'Finalizando o arquivo…',
+  'export.cancel': 'Cancelar exportação',
+  'export.cancelled': 'Exportação cancelada. Você pode ajustar as opções e tentar novamente.',
+  'exportVideo.error.videoSeek': 'Não foi possível carregar um frame do vídeo de fundo. Verifique o vídeo e tente novamente.',
+  'exportVideo.error.invalidSettings': 'As configurações de exportação são inválidas.',
+
+  'route.loadError': 'Não foi possível carregar o mapa. Verifique a conexão e tente novamente.',
+  'route.retry': 'Tentar novamente',
+
   // Header
   'header.unsaved': 'Alterações não salvas',
   'header.allSaved': 'Tudo salvo',

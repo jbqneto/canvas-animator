@@ -5,6 +5,7 @@
 import type { AudioClip } from '../types';
 import { t } from '../i18n';
 import { clipPlayback, computePeaks, frameTime, PEAKS_PER_SECOND } from '../engine/audio';
+import { throwIfAborted, withAbort } from '../utils/abort';
 
 let context: AudioContext | null = null;
 
@@ -154,8 +155,10 @@ export async function mixdown(
   fps: number,
   firstFrame: number,
   lastFrame: number,
-  sampleRate = 48000
+  sampleRate = 48000,
+  signal?: AbortSignal
 ): Promise<AudioBuffer | null> {
+  throwIfAborted(signal);
   const from = frameTime(firstFrame, fps);
   const to = frameTime(lastFrame + 1, fps);
   const audible = clips.filter((c) => !c.muted && c.volume > 0 && clipPlayback(c, fps, from, to));
@@ -163,7 +166,8 @@ export async function mixdown(
 
   const offline = new OfflineAudioContext(2, Math.ceil((to - from) * sampleRate), sampleRate);
   for (const clip of audible) {
-    const { buffer } = await decodeClip(clip);
+    const { buffer } = await withAbort(decodeClip(clip), signal);
+    throwIfAborted(signal);
     const p = clipPlayback(clip, fps, from, to)!;
     const source = offline.createBufferSource();
     source.buffer = buffer;
@@ -172,7 +176,8 @@ export async function mixdown(
     source.connect(gain).connect(offline.destination);
     source.start(p.at, p.offset, p.duration);
   }
-  return offline.startRendering();
+  throwIfAborted(signal);
+  return withAbort(offline.startRendering(), signal);
 }
 
 function readAsDataURL(blob: Blob): Promise<string> {

@@ -58,6 +58,11 @@ qualquer editor.
 - **Export** MP4 (H.264) ou WebM transparente, com trecho de frames, codificado via WebCodecs com tempo exato.
   Imagens ausentes ou inválidas interrompem a exportação de vídeo/PNG com um aviso para reimportá-las,
   em vez de produzir uma cena incompleta.
+  O diálogo mostra preparação, renderização e finalização do arquivo; chega a 100% apenas quando
+  o arquivo está pronto. A preparação/renderização pode ser cancelada, sem baixar um arquivo parcial,
+  e as opções ficam disponíveis para tentar novamente. O cancelamento fica indisponível na finalização.
+  Erros aparecem no próprio diálogo; um vídeo de fundo que não consegue carregar o frame solicitado
+  interrompe a exportação em vez de repetir o frame anterior silenciosamente.
 - IA opcional (Gemini) para imagens e um copiloto de roteiro, com a chave do servidor ou a sua própria chave
   (ícone de chave no copiloto ou no gerador de imagens), que fica só no navegador e fala direto com o Google.
 - Interface em **português (BR)** e **inglês (US)**, escolhida no canto superior direito e lembrada no navegador.
@@ -96,6 +101,11 @@ própria chave no app (ícone de chave): assim o app instalado ou hospedado só 
 | `src/project/` | Formato `.fmproj`, abrir/salvar (File System Access API) e autosave (IndexedDB). |
 | `src/map/` | Mapa-múndi (world-atlas / Natural Earth) e o template de rota. |
 | `src/components/` | Interface (palco, timeline, inspectors, diálogos). |
+
+O código de projeção e os dados do mapa são carregados apenas ao abrir a configuração de rota,
+com aviso e nova tentativa se falharem. A timeline calcula os indicadores de desenho a partir dos
+quadros com conteúdo e os reutiliza durante a reprodução; limpar o projeto não cria quadros vazios
+para toda a duração. A exportação aceita um `AbortSignal` para cancelar esperas e liberar os encoders.
 
 A pesquisa que orientou o projeto está em [`docs/RESEARCH.md`](docs/RESEARCH.md) e o plano/decisões em
 [`docs/ROADMAP.md`](docs/ROADMAP.md).

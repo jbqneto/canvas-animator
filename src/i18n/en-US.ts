@@ -22,6 +22,17 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'project.error.invalidContent': 'The project contains an invalid content structure.',
   'exportVideo.error.imagesFailed': 'Could not load {count} image(s). Reimport the missing images before exporting.',
 
+  'export.close': 'Close export',
+  'export.preparing': 'Preparing images, fonts and audio…',
+  'export.finalizing': 'Finalizing file…',
+  'export.cancel': 'Cancel export',
+  'export.cancelled': 'Export canceled. You can adjust the options and try again.',
+  'exportVideo.error.videoSeek': 'Could not load a background video frame. Check the video and try again.',
+  'exportVideo.error.invalidSettings': 'The export settings are invalid.',
+
+  'route.loadError': 'Could not load the map. Check your connection and try again.',
+  'route.retry': 'Try again',
+
   // Header
   'header.unsaved': 'Unsaved changes',
   'header.allSaved': 'All changes saved',

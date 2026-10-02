@@ -44,7 +44,10 @@ export function loadWorld(locale: Locale = getLocale()): Promise<World> {
       })
       .sort((a, b) => a.name.localeCompare(b.name, locale));
     return { countries };
-  })();
+  })().catch((error) => {
+    delete worldPromises[locale];
+    throw error;
+  });
   return worldPromises[locale]!;
 }
 
