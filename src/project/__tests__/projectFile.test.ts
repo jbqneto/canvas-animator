@@ -131,4 +131,32 @@ describe('project file', () => {
   it('derives the project name from the file name', () => {
     expect(projectNameFromFile('Aula 3.fmproj')).toBe('Aula 3');
   });
+
+  it.each([
+    { fps: 0 }, { fps: -24 }, { fps: 24.5 }, { fps: '30' }, { fps: 121 },
+    { totalFrames: 0 }, { totalFrames: 1.5 }, { totalFrames: 1_000_001 }, { totalFrames: Number.MAX_SAFE_INTEGER + 1 },
+    { canvas: { width: 1, height: 720 } }, { canvas: { width: 1920, height: 0 } },
+    { canvas: { width: 9000, height: 720 } }, { canvas: { width: '1920', height: 1080 } },
+  ])('rejects invalid settings without loading them into the editor: %j', (settings) => {
+    const data = JSON.parse(serializeProject(state()));
+    Object.assign(data.project, settings);
+    expect(() => parseProject(JSON.stringify(data))).toThrow(ProjectFileError);
+  });
+
+  it.each([
+    { content: [] }, { content: { actors: [null] } }, { content: { paths: 'bad' } },
+    { content: { frames: [] } }, { content: { frames: { 1: { drawings: [null] } } } },
+    { canvas: 'bad' },
+  ])('rejects invalid content containers: %j', (fields) => {
+    expect(() => parseProject(JSON.stringify({ format: 'flashmotion-project', version: 1, project: fields })))
+      .toThrow(ProjectFileError);
+  });
+
+  it('uses custom for unknown or mismatched canvas presets', () => {
+    const data = JSON.parse(serializeProject(state()));
+    data.project.canvas.preset = 'unknown';
+    expect(parseProject(JSON.stringify(data)).canvas.preset).toBe('custom');
+    data.project.canvas.preset = 'youtube-720p';
+    expect(parseProject(JSON.stringify(data)).canvas.preset).toBe('custom');
+  });
 });

@@ -8,6 +8,21 @@ export const ptBR = {
   'lang.pt-BR': 'Português (BR)',
   'lang.en-US': 'English (US)',
 
+  // Autosave and project reliability
+  'autosave.pending': 'Autosave pendente',
+  'autosave.saving': 'Salvando no navegador…',
+  'autosave.saved': 'Salvo no navegador',
+  'autosave.error': 'Falha no autosave',
+  'autosave.retry': 'Tentar novamente',
+  'autosave.hint': 'Cópia de recuperação neste navegador. Use Ctrl+S para salvar em arquivo.',
+  'autosave.savedHint': 'Cópia de recuperação salva às {time} neste navegador. Use Ctrl+S para salvar em arquivo.',
+  'autosave.errorHint': 'Não foi possível salvar a cópia de recuperação. Tente novamente ou use Ctrl+S para salvar em arquivo.',
+  'autosave.readError': 'Não foi possível verificar a cópia de recuperação. O autosave está pausado para preservá-la. Tente novamente; use Ctrl+S para salvar o trabalho atual em arquivo.',
+  'autosave.restoreError': 'Não foi possível restaurar ou descartar a cópia de recuperação. Ela foi preservada. Use Ctrl+S para salvar o trabalho atual em arquivo.',
+  'project.error.invalidSettings': 'O projeto contém configurações inválidas de tempo ou tamanho do palco.',
+  'project.error.invalidContent': 'O projeto contém uma estrutura de conteúdo inválida.',
+  'exportVideo.error.imagesFailed': 'Não foi possível carregar {count} imagem(ns). Reimporte as imagens ausentes antes de exportar.',
+
   // Header
   'header.unsaved': 'Alterações não salvas',
   'header.allSaved': 'Tudo salvo',

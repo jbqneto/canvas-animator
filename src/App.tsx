@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   FrameData,
   ChartOverlay,
@@ -29,7 +29,8 @@ import { isTypingTarget } from './utils/keyboard';
 import { LOCALES, shortMonth, translate, useI18n } from './i18n';
 import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
-import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
+import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
+import { useAutosave } from './project/useAutosave';
 import { loadImageFileAsActorSource } from './utils/importImage';
 import { mergeUserPoses, readUserPoses } from './utils/userPoses';
 import {
@@ -273,11 +274,18 @@ export default function App() {
   const [videoFileName, setVideoFileName] = useState<string | undefined>();
   const [pendingRestore, setPendingRestore] = useState<AutosaveEntry | null>(null);
   const fileHandleRef = useRef<ProjectFileHandle | undefined>(undefined);
-  const autosaveReadyRef = useRef(false);
+  const [autosaveReady, setAutosaveReady] = useState(false);
+  const [autosaveReadError, setAutosaveReadError] = useState(false);
+  const [resolvingRestore, setResolvingRestore] = useState(false);
+  const recoveryResolvedRef = useRef(false);
+  const recoveryReadRef = useRef(0);
 
   // Unsaved-changes tracking: state is immutable, so comparing references with the values at the
   // last save/open is exact (and immune to effects running twice in StrictMode).
-  const currentMarker = { present: history.present, fps, totalFrames, canvasDimensions, videoBg, projectName };
+  const currentMarker = useMemo(
+    () => ({ present: history.present, fps, totalFrames, canvasDimensions, videoBg, projectName }),
+    [history.present, fps, totalFrames, canvasDimensions, videoBg, projectName]
+  );
   const [savedMarker, setSavedMarker] = useState(currentMarker);
   // When set, the state rendered next becomes the "saved" reference (after open/restore)
   const markSavedOnRenderRef = useRef(false);
@@ -309,23 +317,31 @@ export default function App() {
     );
   };
 
-  // Any content/settings change schedules an autosave
-  useEffect(() => {
-    if (!autosaveReadyRef.current) return;
-    const timer = setTimeout(() => {
-      writeAutosave({ text: serializeCurrent(), savedAt: Date.now(), name: projectName });
-    }, 1500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history.present, fps, totalFrames, canvasDimensions, videoBg, projectName]);
+  const autosave = useAutosave(autosaveReady, currentMarker, () => ({
+    text: serializeCurrent(), savedAt: Date.now(), name: projectName,
+  }));
 
-  // On startup, offer to restore work that was never saved to a file
-  useEffect(() => {
-    readAutosave().then((entry) => {
+  // Do not overwrite the recovery slot until it was read and the user has decided what to do.
+  const loadRecovery = useCallback(async () => {
+    const request = ++recoveryReadRef.current;
+    setAutosaveReadError(false);
+    try {
+      const entry = await readAutosave();
+      if (request !== recoveryReadRef.current || recoveryResolvedRef.current) return;
       if (entry) setPendingRestore(entry);
-      else autosaveReadyRef.current = true;
-    });
+      else {
+        recoveryResolvedRef.current = true;
+        setAutosaveReady(true);
+      }
+    } catch {
+      if (request === recoveryReadRef.current && !recoveryResolvedRef.current) setAutosaveReadError(true);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadRecovery();
+    return () => { recoveryReadRef.current++; };
+  }, [loadRecovery]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -377,6 +393,10 @@ export default function App() {
       if (!opened) return;
       const project = applyProjectText(opened.text, projectNameFromFile(opened.fileName));
       fileHandleRef.current = opened.handle;
+      recoveryResolvedRef.current = true;
+      setPendingRestore(null);
+      setAutosaveReadError(false);
+      setAutosaveReady(true);
       if (project.missingVideo) {
         alert(t('app.missingVideo', { name: project.missingVideo }));
       }
@@ -393,8 +413,10 @@ export default function App() {
       const file = await handle.getFile();
       applyProjectText(await file.text(), projectNameFromFile(file.name));
       fileHandleRef.current = handle;
+      recoveryResolvedRef.current = true;
       setPendingRestore(null);
-      autosaveReadyRef.current = true;
+      setAutosaveReadError(false);
+      setAutosaveReady(true);
     } catch (err) {
       alert(err instanceof ProjectFileError ? err.message : t('app.error.open', { error: String(err) }));
     }
@@ -408,19 +430,25 @@ export default function App() {
     });
   }, []);
 
-  const handleRestoreAutosave = (restore: boolean) => {
-    if (restore && pendingRestore) {
-      try {
+  const handleRestoreAutosave = async (restore: boolean) => {
+    setResolvingRestore(true);
+    try {
+      if (restore && pendingRestore) {
         applyProjectText(pendingRestore.text, pendingRestore.name, false);
         markSavedOnRenderRef.current = false; // restored work still isn't in a file
-      } catch {
-        clearAutosave();
+      } else {
+        await clearAutosave();
       }
-    } else {
-      clearAutosave();
+      recoveryResolvedRef.current = true;
+      setPendingRestore(null);
+      setAutosaveReadError(false);
+      setAutosaveReady(true);
+    } catch {
+      // A failed restore must never delete the only recovery copy.
+      alert(t('autosave.restoreError'));
+    } finally {
+      setResolvingRestore(false);
     }
-    setPendingRestore(null);
-    autosaveReadyRef.current = true;
   };
 
   // Sync hidden video currentTime with timeline scrubber (while paused; playback drives itself)
@@ -1921,9 +1949,21 @@ export default function App() {
         onUpdateCanvasDimensions={setCanvasDimensions}
         projectName={projectName}
         isDirty={isDirty}
+        autosaveStatus={autosave.status}
+        autosaveSavedAt={autosave.savedAt}
+        onRetryAutosave={autosave.retry}
         onOpenProject={handleOpenProject}
         onSaveProject={() => handleSaveProject(false)}
       />
+
+      {autosaveReadError && (
+        <div role="alert" className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
+          <span className="flex-1">{t('autosave.readError')}</span>
+          <button onClick={() => void loadRecovery()} className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10">
+            {t('autosave.retry')}
+          </button>
+        </div>
+      )}
 
       {pendingRestore && (
         <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
@@ -1935,12 +1975,14 @@ export default function App() {
           </span>
           <button
             onClick={() => handleRestoreAutosave(true)}
+            disabled={resolvingRestore}
             className="px-3 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400"
           >
             {t('app.restore.restore')}
           </button>
           <button
             onClick={() => handleRestoreAutosave(false)}
+            disabled={resolvingRestore}
             className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10"
           >
             {t('app.restore.discard')}
