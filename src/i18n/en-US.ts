@@ -24,6 +24,8 @@ export const enUS: Record<keyof typeof ptBR, string> = {
 
   'export.close': 'Close export',
   'export.preparing': 'Preparing images, fonts and audio…',
+  'export.directToFile': 'Save directly to a file',
+  'export.directToFileHint': 'Uses less memory for long videos. Choose the destination before rendering.',
   'export.finalizing': 'Finalizing file…',
   'export.cancel': 'Cancel export',
   'export.cancelled': 'Export canceled. You can adjust the options and try again.',

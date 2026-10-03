@@ -7,8 +7,9 @@ import { t } from '../i18n';
 
 // Minimal typings: the File System Access API is not in TypeScript's DOM lib yet
 interface WritableFileStream {
-  write(data: Blob | string): Promise<void>;
+  write(data: Blob | string | import('mediabunny').StreamTargetChunk): Promise<void>;
   close(): Promise<void>;
+  abort(): Promise<void>;
 }
 export interface ProjectFileHandle {
   name: string;
