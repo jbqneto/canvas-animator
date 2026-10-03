@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { openVideoFile } from './utils/videoFile';
 import {
   FrameData,
   ChartOverlay,
@@ -1842,10 +1843,6 @@ export default function App() {
     setIsPlaying(false);
 
     try {
-      const sound = request.includeAudio
-        ? await mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal)
-        : null;
-      throwIfAborted(controller.signal);
       const { blob, extension, audioDropped } = await exportVideoSequence(sceneContent(), {
         totalFrames,
         fps,
@@ -1857,19 +1854,26 @@ export default function App() {
         format: request.format,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
-        audio: sound,
+        prepareAudio: () => request.includeAudio
+          ? mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal)
+          : Promise.resolve(null),
+        openFile: request.directToFile
+          ? (extension) => openVideoFile(`${projectName}${request.format === 'webm-alpha' ? '-transparente' : ''}`, extension)
+          : undefined,
       });
       throwIfAborted(controller.signal);
       if (audioDropped) alert(t('app.audioDropped'));
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const suffix = request.format === 'webm-alpha' ? '-transparente' : '';
-      a.download = `${projectName}${suffix}.${extension}`;
-      a.click();
-      // Revoking synchronously can cancel the download before the browser starts it
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const suffix = request.format === 'webm-alpha' ? '-transparente' : '';
+        a.download = `${projectName}${suffix}.${extension}`;
+        a.click();
+        // Revoking synchronously can cancel the download before the browser starts it
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
       setExportDialogOpen(false);
     } catch (err) {
       if (isAbortError(err)) setExportCancelled(true);

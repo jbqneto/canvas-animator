@@ -25,6 +25,8 @@ export const ptBR = {
 
   'export.close': 'Fechar exportação',
   'export.preparing': 'Preparando imagens, fontes e áudio…',
+  'export.directToFile': 'Salvar diretamente em arquivo',
+  'export.directToFileHint': 'Usa menos memória em vídeos longos. Escolha o destino antes da renderização.',
   'export.finalizing': 'Finalizando o arquivo…',
   'export.cancel': 'Cancelar exportação',
   'export.cancelled': 'Exportação cancelada. Você pode ajustar as opções e tentar novamente.',

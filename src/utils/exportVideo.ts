@@ -793,11 +793,17 @@ export function seekVideo(video: HTMLVideoElement, time: number, timeoutMs = 300
   });
 }
 
+export interface VideoFileWriter {
+  write(chunk: import('mediabunny').StreamTargetChunk): Promise<void>;
+  close(): Promise<void>;
+  abort(): Promise<void>;
+}
+
 export type ExportFormat = 'mp4' | 'webm-alpha';
 export type ExportPhase = 'preparing' | 'rendering' | 'finalizing';
 
 export interface ExportedVideo {
-  blob: Blob;
+  blob: Blob | null;
   /** File extension matching the container that was actually produced ('mp4' or 'webm'). */
   extension: 'mp4' | 'webm';
   /** Audio was requested but the browser can't encode it for this container, so it was left out. */
@@ -819,14 +825,14 @@ async function pickAudioCodec(format: { getSupportedAudioCodecs(): string[] }, a
  * Picks the container/codec. Opaque: MP4/H.264 first (every editor opens it), then WebM.
  * Transparent: only VP9/VP8 in WebM carry alpha (same constraint Remotion documents).
  */
-async function pickOutputFormat(width: number, height: number, transparent: boolean) {
+async function pickOutputFormat(width: number, height: number, transparent: boolean, streaming = false) {
   const { Mp4OutputFormat, WebMOutputFormat, getFirstEncodableVideoCodec } = await loadMediabunny();
   if (transparent) {
     const webm = new WebMOutputFormat();
     const codec = await getFirstEncodableVideoCodec(['vp9', 'vp8'], { width, height });
     return codec ? { format: webm, codec, extension: 'webm' as const } : null;
   }
-  const mp4 = new Mp4OutputFormat({ fastStart: 'in-memory' });
+  const mp4 = new Mp4OutputFormat({ fastStart: streaming ? false : 'in-memory' });
   const mp4Codec = await getFirstEncodableVideoCodec(
     mp4.getSupportedVideoCodecs().filter((c) => c === 'avc' || c === 'hevc'),
     { width, height }
@@ -865,6 +871,10 @@ export async function exportVideoSequence(
     endFrame?: number;
     /** Sound for the exported range (already mixed and exactly as long as it). */
     audio?: AudioBuffer | null;
+    /** Prepare audio after choosing the destination, while the picker still has user activation. */
+    prepareAudio?: () => Promise<AudioBuffer | null>;
+    /** Transactional file: close commits the completed video; abort discards partial writes. */
+    openFile?: (extension: 'mp4' | 'webm') => Promise<VideoFileWriter>;
   }
 ): Promise<ExportedVideo> {
   const { totalFrames, fps, onProgress, onPhase, signal } = options;
@@ -890,7 +900,7 @@ export async function exportVideoSequence(
   exportCanvas.height = height;
   const ctx = exportCanvas.getContext('2d')!;
 
-  const picked = await withAbort(pickOutputFormat(width, height, transparent), signal);
+  const picked = await withAbort(pickOutputFormat(width, height, transparent, !!options.openFile), signal);
   if (!picked) {
     throw new Error(
       transparent
@@ -899,76 +909,91 @@ export async function exportVideoSequence(
     );
   }
 
-  // Everything the frames depend on must be ready before encoding starts
-  await withAbort(document.fonts.ready, signal);
-  await withAbort(preloadSceneImages(scene), signal);
-  throwIfAborted(signal);
-
-  // A transparent export never shows the background video, so there's nothing to seek
-  const video = !transparent && scene.videoBg.type !== 'color' ? scene.videoElement ?? null : null;
-  const restoreVideoTime = video?.currentTime ?? 0;
-
-  const { Output, BufferTarget, CanvasSource, AudioBufferSource, QUALITY_HIGH } = await withAbort(loadMediabunny(), signal);
-  const output = new Output({ format: picked.format, target: new BufferTarget() });
-  const source = new CanvasSource(exportCanvas, {
-    codec: picked.codec,
-    bitrate: QUALITY_HIGH,
-    keyFrameInterval: 2,
-    alpha: transparent ? 'keep' : 'discard',
-  });
-  let audioDropped = false;
-  let finalized = false;
-  const frameDuration = 1 / fps;
+  // Do not race the picker/createWritable with abort: a late result would leak a file writer.
+  const file = options.openFile ? await options.openFile(picked.extension) : null;
   try {
-    video?.pause();
-    output.addVideoTrack(source, { frameRate: fps });
-    const audio = options.audio ?? null;
-    const audioCodec = audio ? await withAbort(pickAudioCodec(picked.format, audio), signal) : null;
-    const audioSource = audio && audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: QUALITY_HIGH }) : null;
-    audioDropped = !!audio && !audioSource;
-    if (audioSource) output.addAudioTrack(audioSource);
-    await withAbort(output.start(), signal);
-    // Observe audio failures immediately; the result is checked before finalization.
-    const audioDone = audio && audioSource ? audioSource.add(audio).then(() => audioSource.close()) : Promise.resolve();
-    void audioDone.catch(() => undefined);
-    onPhase?.('rendering');
-    for (let f = first; f <= last; f++) {
+    throwIfAborted(signal);
+    // Everything the frames depend on must be ready before encoding starts
+    await withAbort(document.fonts.ready, signal);
+    await withAbort(preloadSceneImages(scene), signal);
+    throwIfAborted(signal);
+
+    // A transparent export never shows the background video, so there's nothing to seek
+    const video = !transparent && scene.videoBg.type !== 'color' ? scene.videoElement ?? null : null;
+    const restoreVideoTime = video?.currentTime ?? 0;
+
+    const { Output, BufferTarget, StreamTarget, CanvasSource, AudioBufferSource, QUALITY_HIGH } = await withAbort(loadMediabunny(), signal);
+    const buffer = file ? null : new BufferTarget();
+    const target = file ? new StreamTarget(new WritableStream({
+      write: (chunk) => file.write(chunk),
+      // mediabunny closes its stream on cancellation too; only commit explicitly on success.
+      close: () => {},
+    }), { chunked: true, chunkSize: 1024 * 1024 }) : buffer!;
+    const output = new Output({ format: picked.format, target });
+    const source = new CanvasSource(exportCanvas, {
+      codec: picked.codec,
+      bitrate: QUALITY_HIGH,
+      keyFrameInterval: 2,
+      alpha: transparent ? 'keep' : 'discard',
+    });
+    let audioDropped = false;
+    let finalized = false;
+    const frameDuration = 1 / fps;
+    try {
+      video?.pause();
+      output.addVideoTrack(source, { frameRate: fps });
+      const audio = options.prepareAudio ? await withAbort(options.prepareAudio(), signal) : options.audio ?? null;
+      const audioCodec = audio ? await withAbort(pickAudioCodec(picked.format, audio), signal) : null;
+      const audioSource = audio && audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: QUALITY_HIGH }) : null;
+      audioDropped = !!audio && !audioSource;
+      if (audioSource) output.addAudioTrack(audioSource);
+      await withAbort(output.start(), signal);
+      // Observe audio failures immediately; the result is checked before finalization.
+      const audioDone = audio && audioSource ? audioSource.add(audio).then(() => audioSource.close()) : Promise.resolve();
+      void audioDone.catch(() => undefined);
+      onPhase?.('rendering');
+      for (let f = first; f <= last; f++) {
+        throwIfAborted(signal);
+        if (video) {
+          await seekVideo(video, videoTimeForFrame(f, fps, video.duration), 3000, signal);
+        }
+
+        renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
+        await withAbort(source.add((f - first) * frameDuration, frameDuration), signal);
+
+        if (onProgress) {
+          onProgress(Math.min(99, Math.round(((f - first + 1) / (last - first + 1)) * 100)));
+        }
+        // Give input events a turn even when small frames encode synchronously.
+        if ((f - first + 1) % 8 === 0) await withAbort(new Promise<void>((resolve) => setTimeout(resolve, 0)), signal);
+      }
+      source.close();
+      await withAbort(audioDone, signal);
       throwIfAborted(signal);
-      if (video) {
-        await seekVideo(video, videoTimeForFrame(f, fps, video.duration), 3000, signal);
-      }
-
-      renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
-      await withAbort(source.add((f - first) * frameDuration, frameDuration), signal);
-
-      if (onProgress) {
-        onProgress(Math.min(99, Math.round(((f - first + 1) / (last - first + 1)) * 100)));
-      }
-      // Give input events a turn even when small frames encode synchronously.
-      if ((f - first + 1) % 8 === 0) await withAbort(new Promise<void>((resolve) => setTimeout(resolve, 0)), signal);
+      onPhase?.('finalizing');
+      // mediabunny cannot cancel finalization. Wait for its cleanup, then check cancellation.
+      await output.finalize();
+      finalized = true;
+      throwIfAborted(signal);
+      if (file) await file.close();
+      onProgress?.(100);
+    } catch (err) {
+      if (!finalized) await output.cancel().catch(() => undefined);
+      throw err;
+    } finally {
+      if (video) await seekVideo(video, restoreVideoTime).catch(() => undefined);
     }
-    source.close();
-    await withAbort(audioDone, signal);
-    throwIfAborted(signal);
-    onPhase?.('finalizing');
-    // mediabunny cannot cancel finalization. Wait for its cleanup, then check cancellation.
-    await output.finalize();
-    finalized = true;
-    throwIfAborted(signal);
-    onProgress?.(100);
-  } catch (err) {
-    if (!finalized) await output.cancel().catch(() => undefined);
-    throw err;
-  } finally {
-    if (video) await seekVideo(video, restoreVideoTime).catch(() => undefined);
-  }
 
-  const mimeType = picked.extension === 'mp4' ? 'video/mp4' : 'video/webm';
-  return {
-    blob: new Blob([output.target.buffer!], { type: mimeType }),
-    extension: picked.extension,
-    audioDropped,
-  };
+    const mimeType = picked.extension === 'mp4' ? 'video/mp4' : 'video/webm';
+    return {
+      blob: buffer ? new Blob([buffer.buffer!], { type: mimeType }) : null,
+      extension: picked.extension,
+      audioDropped,
+    };
+  } catch (error) {
+    if (file) await file.abort().catch(() => undefined);
+    throw error;
+  }
 }
 
 /** Renders one clean frame (no grid, no selection handles) and downloads it as PNG. */

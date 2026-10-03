@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { supportsFileSystemAccess } from '../project/fileAccess';
 import { Download, Film, Layers, Loader2, X } from 'lucide-react';
 import type { ExportFormat, ExportPhase } from '../utils/exportVideo';
 import { MessageKey, useI18n } from '../i18n';
@@ -8,6 +9,7 @@ export interface ExportRequest {
   startFrame: number;
   endFrame: number;
   includeAudio: boolean;
+  directToFile?: boolean;
 }
 
 interface ExportDialogProps {
@@ -55,6 +57,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [format, setFormat] = useState<ExportFormat>('mp4');
   // A transparent layer usually goes over a video that already has the sound, so it starts off there
   const [includeAudio, setIncludeAudio] = useState<Record<ExportFormat, boolean>>({ mp4: true, 'webm-alpha': false });
+  const [directToFile, setDirectToFile] = useState(false);
   const [startFrame, setStartFrame] = useState(1);
   const [endFrame, setEndFrame] = useState(totalFrames);
 
@@ -164,6 +167,14 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </label>
         )}
 
+        {supportsFileSystemAccess() && (
+          <label className="flex items-start gap-2 text-neutral-300 cursor-pointer">
+            <input type="checkbox" checked={directToFile} disabled={isExporting}
+              onChange={(e) => setDirectToFile(e.target.checked)} className="accent-sky-500" />
+            <span>{t('export.directToFile')}<small className="block text-neutral-500">{t('export.directToFileHint')}</small></span>
+          </label>
+        )}
+
         {error && <p role="alert" className="text-amber-300">{error}</p>}
         {cancelled && <p role="status" className="text-neutral-300">{t('export.cancelled')}</p>}
 
@@ -182,7 +193,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </div>
         ) : (
           <button
-            onClick={() => onExport({ format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format] })}
+            onClick={() => onExport({ directToFile: directToFile && supportsFileSystemAccess(), format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format] })}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
           >
             <Download size={15} /> {format === 'mp4' ? t('export.buttonMp4') : t('export.buttonAlpha')}
