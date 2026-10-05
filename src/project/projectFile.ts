@@ -1,5 +1,6 @@
 import type { UserPose } from '../utils/userPoses';
 import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, StickActor, VideoBackground } from '../types';
+import { CANVAS_PRESETS } from '../types';
 import { t } from '../i18n';
 import { migrateChart, migrateText } from '../engine/overlays';
 import { normalizeShape } from '../engine/shapes';
@@ -8,6 +9,7 @@ import { migrateFrameSticks, withStickLayers } from '../engine/stickActor';
 export const PROJECT_FORMAT = 'flashmotion-project';
 export const PROJECT_VERSION = 1;
 export const PROJECT_EXTENSION = '.fmproj';
+export const MAX_PROJECT_FRAMES = 1_000_000;
 
 /** Everything needed to reopen a project. The background video file itself is not embedded. */
 export interface ProjectState {
@@ -50,6 +52,33 @@ export class ProjectFileError extends Error {}
 
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asNumber = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+const isRecord = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Missing settings are supported for older files; supplied invalid settings are not repaired silently. */
+function setting(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new ProjectFileError(t('project.error.invalidSettings'));
+  }
+  return value;
+}
+
+function validateContent(content: Record<string, any>) {
+  for (const key of ['charts', 'texts', 'images', 'actors', 'paths', 'layers', 'groups']) {
+    const items = content[key];
+    if (items !== undefined && (!Array.isArray(items) || items.some((item) => !isRecord(item)))) {
+      throw new ProjectFileError(t('project.error.invalidContent'));
+    }
+  }
+  for (const key of ['sticks', 'audio', 'markers']) {
+    if (content[key] !== undefined && !Array.isArray(content[key])) {
+      throw new ProjectFileError(t('project.error.invalidContent'));
+    }
+  }
+  if (content.frames !== undefined && !isRecord(content.frames)) {
+    throw new ProjectFileError(t('project.error.invalidContent'));
+  }
+}
 
 /** Markers with a valid frame, sorted; missing labels/colors get defaults. */
 function parseMarkers(value: unknown): Marker[] {
@@ -123,7 +152,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
   } catch {
     throw new ProjectFileError(t('project.error.invalidJson'));
   }
-  if (data?.format !== PROJECT_FORMAT || !data.project) {
+  if (data?.format !== PROJECT_FORMAT || !isRecord(data.project)) {
     throw new ProjectFileError(t('project.error.notProject'));
   }
   if (asNumber(data.version, 0) > PROJECT_VERSION) {
@@ -131,11 +160,26 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
   }
 
   const p = data.project;
+  if ((p.content !== undefined && !isRecord(p.content)) ||
+      (p.canvas !== undefined && !isRecord(p.canvas)) ||
+      (p.videoBg !== undefined && !isRecord(p.videoBg))) {
+    throw new ProjectFileError(t('project.error.invalidContent'));
+  }
   const c = p.content ?? {};
+  validateContent(c);
+  // 8K per side is the maximum supported stage; at least 2 pixels for even-sized video encoding.
+  const canvasW = setting(p.canvas?.width, 1280, 2, 8192);
+  const canvasH = setting(p.canvas?.height, 720, 2, 8192);
+  const fps = setting(p.fps, 24, 1, 120);
+  const totalFrames = setting(p.totalFrames, 60, 1, MAX_PROJECT_FRAMES);
   const frames: HistorySnapshot['frames'] = {};
   Object.entries(c.frames ?? {}).forEach(([k, v]: [string, any]) => {
     const n = Number(k);
-    if (!Number.isInteger(n) || n < 1 || !v) return;
+    if (!Number.isSafeInteger(n) || n < 1) return;
+    if (!isRecord(v) || ['stickFigures', 'drawings', 'groups'].some((key) =>
+      v[key] !== undefined && (!Array.isArray(v[key]) || v[key].some((item: unknown) => !isRecord(item))))) {
+      throw new ProjectFileError(t('project.error.invalidContent'));
+    }
     frames[n] = {
       frameNumber: n,
       stickFigures: asArray(v.stickFigures),
@@ -151,14 +195,14 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
     if (!sticks.some((x) => x.id === s.id)) sticks.push(s);
   });
 
-  const canvasW = asNumber(p.canvas?.width, 1280);
-  const canvasH = asNumber(p.canvas?.height, 720);
   const videoBg = p.videoBg ?? {};
   return {
     name: typeof p.name === 'string' && p.name ? p.name : t('project.untitled'),
-    fps: asNumber(p.fps, 24),
-    totalFrames: Math.max(1, Math.round(asNumber(p.totalFrames, 60))),
-    canvas: { width: canvasW, height: canvasH, preset: p.canvas?.preset ?? 'custom' },
+    fps,
+    totalFrames,
+    canvas: { width: canvasW, height: canvasH, preset: CANVAS_PRESETS.some((preset) =>
+      preset.id === p.canvas?.preset && preset.width === canvasW && preset.height === canvasH)
+      ? p.canvas.preset : 'custom' },
     videoBg: {
       type: videoBg.type === 'preset' ? 'preset' : 'color',
       color: typeof videoBg.color === 'string' ? videoBg.color : '#0a0a0f',

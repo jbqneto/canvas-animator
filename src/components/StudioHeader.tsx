@@ -17,6 +17,8 @@ import {
 import { CanvasDimensions, CANVAS_PRESETS } from '../types';
 import { useI18n } from '../i18n';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { AutosaveIndicator } from './AutosaveIndicator';
+import type { AutosaveStatus } from '../project/useAutosave';
 
 interface StudioHeaderProps {
   onExportVideo: () => void;
@@ -42,6 +44,9 @@ interface StudioHeaderProps {
   onUpdateCanvasDimensions: (dim: CanvasDimensions) => void;
   projectName: string;
   isDirty: boolean;
+  autosaveStatus: AutosaveStatus;
+  autosaveSavedAt: number | null;
+  onRetryAutosave: () => void;
   onOpenProject: () => void;
   onSaveProject: () => void;
 }
@@ -68,6 +73,9 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   onUpdateCanvasDimensions,
   projectName,
   isDirty,
+  autosaveStatus,
+  autosaveSavedAt,
+  onRetryAutosave,
   onOpenProject,
   onSaveProject,
 }) => {
@@ -96,6 +104,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
               <span className="truncate">{projectName}</span>
               {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />}
             </p>
+            <AutosaveIndicator status={autosaveStatus} savedAt={autosaveSavedAt} onRetry={onRetryAutosave} />
           </div>
           <div className="flex items-center gap-0.5 ml-1">
             <button

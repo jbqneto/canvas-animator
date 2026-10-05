@@ -4,6 +4,8 @@
  * so images were drawn only by luck (and never in the first exported frames).
  */
 
+import { t } from '../i18n';
+
 const cache = new Map<string, HTMLImageElement>();
 const listeners = new Set<() => void>();
 
@@ -24,15 +26,23 @@ export function isImageReady(img: HTMLImageElement): boolean {
   return img.complete && img.naturalWidth > 0;
 }
 
-/** Resolves once every image has finished loading (or failed), so export never skips them. */
-export function preloadImages(urls: string[]): Promise<void> {
-  return Promise.all(
-    urls.map((url) => {
+/** A broken image must not silently disappear from an exported video or PNG. */
+export async function preloadImages(urls: string[]): Promise<void> {
+  const results = await Promise.all(
+    [...new Set(urls)].map(async (url) => {
       const img = getCachedImage(url);
-      if (img.complete) return Promise.resolve();
-      return img.decode().catch(() => undefined);
+      try {
+        await img.decode();
+        if (isImageReady(img)) return true;
+      } catch {
+        // Retry a failed load on the next export, without retaining a broken cache entry.
+      }
+      cache.delete(url);
+      return false;
     })
-  ).then(() => undefined);
+  );
+  const count = results.filter((ready) => !ready).length;
+  if (count > 0) throw new Error(t('exportVideo.error.imagesFailed', { count }));
 }
 
 /** Subscribes to "an image finished loading" so the live preview can redraw. */

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { openVideoFile } from './utils/videoFile';
 import {
   FrameData,
   ChartOverlay,
@@ -29,7 +30,10 @@ import { isTypingTarget } from './utils/keyboard';
 import { LOCALES, shortMonth, translate, useI18n } from './i18n';
 import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
-import { AutosaveEntry, clearAutosave, readAutosave, writeAutosave } from './project/autosave';
+import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
+import { useAutosave } from './project/useAutosave';
+import { isAbortError, throwIfAborted } from './utils/abort';
+import type { ExportPhase } from './utils/exportVideo';
 import { loadImageFileAsActorSource } from './utils/importImage';
 import { mergeUserPoses, readUserPoses } from './utils/userPoses';
 import {
@@ -274,11 +278,18 @@ export default function App() {
   const [videoFileName, setVideoFileName] = useState<string | undefined>();
   const [pendingRestore, setPendingRestore] = useState<AutosaveEntry | null>(null);
   const fileHandleRef = useRef<ProjectFileHandle | undefined>(undefined);
-  const autosaveReadyRef = useRef(false);
+  const [autosaveReady, setAutosaveReady] = useState(false);
+  const [autosaveReadError, setAutosaveReadError] = useState(false);
+  const [resolvingRestore, setResolvingRestore] = useState(false);
+  const recoveryResolvedRef = useRef(false);
+  const recoveryReadRef = useRef(0);
 
   // Unsaved-changes tracking: state is immutable, so comparing references with the values at the
   // last save/open is exact (and immune to effects running twice in StrictMode).
-  const currentMarker = { present: history.present, fps, totalFrames, canvasDimensions, videoBg, projectName };
+  const currentMarker = useMemo(
+    () => ({ present: history.present, fps, totalFrames, canvasDimensions, videoBg, projectName }),
+    [history.present, fps, totalFrames, canvasDimensions, videoBg, projectName]
+  );
   const [savedMarker, setSavedMarker] = useState(currentMarker);
   // When set, the state rendered next becomes the "saved" reference (after open/restore)
   const markSavedOnRenderRef = useRef(false);
@@ -310,23 +321,31 @@ export default function App() {
     );
   };
 
-  // Any content/settings change schedules an autosave
-  useEffect(() => {
-    if (!autosaveReadyRef.current) return;
-    const timer = setTimeout(() => {
-      writeAutosave({ text: serializeCurrent(), savedAt: Date.now(), name: projectName });
-    }, 1500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history.present, fps, totalFrames, canvasDimensions, videoBg, projectName]);
+  const autosave = useAutosave(autosaveReady, currentMarker, () => ({
+    text: serializeCurrent(), savedAt: Date.now(), name: projectName,
+  }));
 
-  // On startup, offer to restore work that was never saved to a file
-  useEffect(() => {
-    readAutosave().then((entry) => {
+  // Do not overwrite the recovery slot until it was read and the user has decided what to do.
+  const loadRecovery = useCallback(async () => {
+    const request = ++recoveryReadRef.current;
+    setAutosaveReadError(false);
+    try {
+      const entry = await readAutosave();
+      if (request !== recoveryReadRef.current || recoveryResolvedRef.current) return;
       if (entry) setPendingRestore(entry);
-      else autosaveReadyRef.current = true;
-    });
+      else {
+        recoveryResolvedRef.current = true;
+        setAutosaveReady(true);
+      }
+    } catch {
+      if (request === recoveryReadRef.current && !recoveryResolvedRef.current) setAutosaveReadError(true);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadRecovery();
+    return () => { recoveryReadRef.current++; };
+  }, [loadRecovery]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -378,6 +397,10 @@ export default function App() {
       if (!opened) return;
       const project = applyProjectText(opened.text, projectNameFromFile(opened.fileName));
       fileHandleRef.current = opened.handle;
+      recoveryResolvedRef.current = true;
+      setPendingRestore(null);
+      setAutosaveReadError(false);
+      setAutosaveReady(true);
       if (project.missingVideo) {
         alert(t('app.missingVideo', { name: project.missingVideo }));
       }
@@ -394,8 +417,10 @@ export default function App() {
       const file = await handle.getFile();
       applyProjectText(await file.text(), projectNameFromFile(file.name));
       fileHandleRef.current = handle;
+      recoveryResolvedRef.current = true;
       setPendingRestore(null);
-      autosaveReadyRef.current = true;
+      setAutosaveReadError(false);
+      setAutosaveReady(true);
     } catch (err) {
       alert(err instanceof ProjectFileError ? err.message : t('app.error.open', { error: String(err) }));
     }
@@ -409,19 +434,25 @@ export default function App() {
     });
   }, []);
 
-  const handleRestoreAutosave = (restore: boolean) => {
-    if (restore && pendingRestore) {
-      try {
+  const handleRestoreAutosave = async (restore: boolean) => {
+    setResolvingRestore(true);
+    try {
+      if (restore && pendingRestore) {
         applyProjectText(pendingRestore.text, pendingRestore.name, false);
         markSavedOnRenderRef.current = false; // restored work still isn't in a file
-      } catch {
-        clearAutosave();
+      } else {
+        await clearAutosave();
       }
-    } else {
-      clearAutosave();
+      recoveryResolvedRef.current = true;
+      setPendingRestore(null);
+      setAutosaveReadError(false);
+      setAutosaveReady(true);
+    } catch {
+      // A failed restore must never delete the only recovery copy.
+      alert(t('autosave.restoreError'));
+    } finally {
+      setResolvingRestore(false);
     }
-    setPendingRestore(null);
-    autosaveReadyRef.current = true;
   };
 
   // Sync hidden video currentTime with timeline scrubber (while paused; playback drives itself)
@@ -1769,18 +1800,9 @@ export default function App() {
   };
 
   const handleResetProject = () => {
-    const emptyFrames: Record<number, FrameData> = {};
-    for (let f = 1; f <= totalFrames; f++) {
-      emptyFrames[f] = {
-        frameNumber: f,
-        stickFigures: [],
-        drawings: [],
-        groups: [],
-      };
-    }
     history.pushSnapshot(t('history.resetProject'), {
       ...history.present,
-      frames: emptyFrames,
+      frames: {},
       charts: [],
       texts: [],
       images: [],
@@ -1810,42 +1832,64 @@ export default function App() {
 
   // Export Video
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportPhase, setExportPhase] = useState<ExportPhase>('preparing');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportCancelled, setExportCancelled] = useState(false);
+  const exportControllerRef = useRef<AbortController | null>(null);
+  useEffect(() => () => exportControllerRef.current?.abort(), []);
 
   const handleExportVideo = async (request: ExportRequest) => {
+    if (exportControllerRef.current) return;
+    const controller = new AbortController();
+    exportControllerRef.current = controller;
+    setExportError(null);
+    setExportCancelled(false);
+    setExportPhase('preparing');
     setIsExporting(true);
     setExportProgress(0);
     setIsPlaying(false);
 
     try {
-      const sound = request.includeAudio
-        ? await mixdown(audio, fps, request.startFrame, request.endFrame)
-        : null;
       const { blob, extension, audioDropped } = await exportVideoSequence(sceneContent(), {
         totalFrames,
         fps,
         width: canvasDimensions.width,
         height: canvasDimensions.height,
         onProgress: (progress) => setExportProgress(progress),
+        onPhase: setExportPhase,
+        signal: controller.signal,
         format: request.format,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
-        audio: sound,
+        prepareAudio: () => request.includeAudio
+          ? mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal)
+          : Promise.resolve(null),
+        openFile: request.directToFile
+          ? (extension) => openVideoFile(`${projectName}${request.format === 'webm-alpha' ? '-transparente' : ''}`, extension)
+          : undefined,
       });
+      throwIfAborted(controller.signal);
       if (audioDropped) alert(t('app.audioDropped'));
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const suffix = request.format === 'webm-alpha' ? '-transparente' : '';
-      a.download = `${projectName}${suffix}.${extension}`;
-      a.click();
-      // Revoking synchronously can cancel the download before the browser starts it
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const suffix = request.format === 'webm-alpha' ? '-transparente' : '';
+        a.download = `${projectName}${suffix}.${extension}`;
+        a.click();
+        // Revoking synchronously can cancel the download before the browser starts it
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
       setExportDialogOpen(false);
     } catch (err) {
-      console.error('Export error:', err);
-      alert(t('app.error.export', { error: err instanceof Error ? err.message : String(err) }));
+      if (isAbortError(err)) setExportCancelled(true);
+      else {
+        console.error('Export error:', err);
+        setExportError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
+      exportControllerRef.current = null;
       setIsExporting(false);
       setExportProgress(0);
     }
@@ -1907,7 +1951,7 @@ export default function App() {
 
       {/* Top Flash Studio Header with History & Grouping controls */}
       <StudioHeader
-        onExportVideo={() => setExportDialogOpen(true)}
+        onExportVideo={() => { setExportError(null); setExportCancelled(false); setExportDialogOpen(true); }}
         isExporting={isExporting}
         exportProgress={exportProgress}
         onSnapshot={handleSnapshot}
@@ -1928,9 +1972,21 @@ export default function App() {
         onUpdateCanvasDimensions={setCanvasDimensions}
         projectName={projectName}
         isDirty={isDirty}
+        autosaveStatus={autosave.status}
+        autosaveSavedAt={autosave.savedAt}
+        onRetryAutosave={autosave.retry}
         onOpenProject={handleOpenProject}
         onSaveProject={() => handleSaveProject(false)}
       />
+
+      {autosaveReadError && (
+        <div role="alert" className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
+          <span className="flex-1">{t('autosave.readError')}</span>
+          <button onClick={() => void loadRecovery()} className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10">
+            {t('autosave.retry')}
+          </button>
+        </div>
+      )}
 
       {pendingRestore && (
         <div className="px-4 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-3 text-xs text-amber-100 shrink-0">
@@ -1942,12 +1998,14 @@ export default function App() {
           </span>
           <button
             onClick={() => handleRestoreAutosave(true)}
+            disabled={resolvingRestore}
             className="px-3 py-1 rounded bg-amber-500 text-neutral-950 font-semibold hover:bg-amber-400"
           >
             {t('app.restore.restore')}
           </button>
           <button
             onClick={() => handleRestoreAutosave(false)}
+            disabled={resolvingRestore}
             className="px-3 py-1 rounded border border-amber-500/40 hover:bg-amber-500/10"
           >
             {t('app.restore.discard')}
@@ -2195,6 +2253,10 @@ export default function App() {
         onExport={handleExportVideo}
         isExporting={isExporting}
         progress={exportProgress}
+        phase={exportPhase}
+        error={exportError}
+        cancelled={exportCancelled}
+        onCancel={() => exportControllerRef.current?.abort()}
         totalFrames={totalFrames}
         fps={fps}
         width={canvasDimensions.width}

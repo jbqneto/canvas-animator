@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -235,6 +235,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   onAutoMarkers,
 }) => {
   const { t, locale } = useI18n();
+  const drawingFrames = useMemo(() => Object.entries(frames)
+    .filter(([frame, content]) => Number(frame) >= 1 && Number(frame) <= totalFrames && content.drawings.length > 0)
+    .map(([frame]) => Number(frame))
+    .sort((a, b) => a - b), [frames, totalFrames]);
   const rulerRef = useRef<HTMLDivElement>(null);
   const menuContainerRef = useRef<HTMLDivElement>(null);
   // The layer list and the tracks scroll separately: keep their rows aligned
@@ -1734,14 +1738,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                   {/* 2D. DRAWING KEYFRAME DOTS */}
                   {layer.type === 'drawing' && (
                     <div className="absolute inset-0 flex items-center pointer-events-none">
-                      {Array.from({ length: totalFrames }).map((_, i) => {
-                        const fNum = i + 1;
-                        const frameData = frames[fNum];
-                        const hasDrawings =
-                          frameData?.drawings && frameData.drawings.length > 0;
-
-                        if (!hasDrawings) return null;
-
+                      {drawingFrames.map((fNum) => {
                         return (
                           <div
                             key={fNum}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { supportsFileSystemAccess } from '../project/fileAccess';
 import { Download, Film, Layers, Loader2, X } from 'lucide-react';
-import type { ExportFormat } from '../utils/exportVideo';
+import type { ExportFormat, ExportPhase } from '../utils/exportVideo';
 import { MessageKey, useI18n } from '../i18n';
 
 export interface ExportRequest {
@@ -8,6 +9,7 @@ export interface ExportRequest {
   startFrame: number;
   endFrame: number;
   includeAudio: boolean;
+  directToFile?: boolean;
 }
 
 interface ExportDialogProps {
@@ -16,6 +18,10 @@ interface ExportDialogProps {
   onExport: (request: ExportRequest) => void;
   isExporting: boolean;
   progress: number;
+  phase: ExportPhase;
+  error: string | null;
+  cancelled: boolean;
+  onCancel: () => void;
   totalFrames: number;
   fps: number;
   width: number;
@@ -36,6 +42,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   onExport,
   isExporting,
   progress,
+  phase,
+  error,
+  cancelled,
+  onCancel,
   totalFrames,
   fps,
   width,
@@ -47,6 +57,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [format, setFormat] = useState<ExportFormat>('mp4');
   // A transparent layer usually goes over a video that already has the sound, so it starts off there
   const [includeAudio, setIncludeAudio] = useState<Record<ExportFormat, boolean>>({ mp4: true, 'webm-alpha': false });
+  const [directToFile, setDirectToFile] = useState(false);
   const [startFrame, setStartFrame] = useState(1);
   const [endFrame, setEndFrame] = useState(totalFrames);
 
@@ -63,21 +74,25 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
   if (!isOpen) return null;
 
-  const first = Math.max(1, Math.min(startFrame, totalFrames));
-  const last = Math.max(first, Math.min(endFrame, totalFrames));
+  const first = Math.max(1, Math.min(Math.round(startFrame) || 1, totalFrames));
+  const last = Math.max(first, Math.min(Math.round(endFrame) || first, totalFrames));
   const seconds = (last - first + 1) / fps;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onMouseDown={() => !isExporting && onClose()}>
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-dialog-title"
         className="w-[440px] bg-neutral-950 border border-neutral-800 rounded-xl shadow-2xl p-5 space-y-4 text-xs"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white">{t('export.title')}</h3>
+          <h3 id="export-dialog-title" className="text-sm font-bold text-white">{t('export.title')}</h3>
           <button
             onClick={onClose}
             disabled={isExporting}
+            aria-label={t('export.close')}
             className="p-1 rounded text-neutral-400 hover:text-white disabled:opacity-30"
           >
             <X size={16} />
@@ -113,6 +128,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         <div className="flex items-center gap-2 text-neutral-300">
           <span>{t('export.fromFrame')}</span>
           <input
+            aria-label={t('export.fromFrame')}
             type="number"
             min={1}
             max={totalFrames}
@@ -123,6 +139,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           />
           <span>{t('export.toFrame')}</span>
           <input
+            aria-label={t('export.toFrame')}
             type="number"
             min={1}
             max={totalFrames}
@@ -150,18 +167,33 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </label>
         )}
 
+        {supportsFileSystemAccess() && (
+          <label className="flex items-start gap-2 text-neutral-300 cursor-pointer">
+            <input type="checkbox" checked={directToFile} disabled={isExporting}
+              onChange={(e) => setDirectToFile(e.target.checked)} className="accent-sky-500" />
+            <span>{t('export.directToFile')}<small className="block text-neutral-500">{t('export.directToFileHint')}</small></span>
+          </label>
+        )}
+
+        {error && <p role="alert" className="text-amber-300">{error}</p>}
+        {cancelled && <p role="status" className="text-neutral-300">{t('export.cancelled')}</p>}
+
         {isExporting ? (
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-sky-300">
-              <Loader2 size={14} className="animate-spin" /> {t('export.rendering', { progress })}
+            <div role="status" aria-live="polite" className="flex items-center gap-2 text-sky-300">
+              <Loader2 size={14} className="animate-spin" />
+              {phase === 'rendering' ? t('export.rendering', { progress }) : t(`export.${phase}`)}
             </div>
-            <div className="h-1.5 rounded bg-neutral-800 overflow-hidden">
+            <div role="progressbar" aria-label={t('export.title')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-1.5 rounded bg-neutral-800 overflow-hidden">
               <div className="h-full bg-sky-500 transition-all" style={{ width: `${progress}%` }} />
             </div>
+            <button type="button" onClick={onCancel} disabled={phase === 'finalizing'} className="w-full py-2 rounded-lg border border-neutral-700 text-neutral-200 hover:bg-neutral-800 disabled:opacity-40">
+              {t('export.cancel')}
+            </button>
           </div>
         ) : (
           <button
-            onClick={() => onExport({ format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format] })}
+            onClick={() => onExport({ directToFile: directToFile && supportsFileSystemAccess(), format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format] })}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
           >
             <Download size={15} /> {format === 'mp4' ? t('export.buttonMp4') : t('export.buttonAlpha')}

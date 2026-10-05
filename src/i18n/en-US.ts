@@ -7,6 +7,34 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'lang.pt-BR': 'Português (BR)',
   'lang.en-US': 'English (US)',
 
+  // Autosave and project reliability
+  'autosave.pending': 'Autosave pending',
+  'autosave.saving': 'Saving in browser…',
+  'autosave.saved': 'Saved in browser',
+  'autosave.error': 'Autosave failed',
+  'autosave.retry': 'Try again',
+  'autosave.hint': 'Recovery copy in this browser. Use Ctrl+S to save a file.',
+  'autosave.savedHint': 'Recovery copy saved at {time} in this browser. Use Ctrl+S to save a file.',
+  'autosave.errorHint': 'Could not save the recovery copy. Try again or use Ctrl+S to save a file.',
+  'autosave.readError': 'Could not check the recovery copy. Autosave is paused to preserve it. Try again; use Ctrl+S to save your current work to a file.',
+  'autosave.restoreError': 'Could not restore or discard the recovery copy. It has been preserved. Use Ctrl+S to save your current work to a file.',
+  'project.error.invalidSettings': 'The project contains invalid timing or stage size settings.',
+  'project.error.invalidContent': 'The project contains an invalid content structure.',
+  'exportVideo.error.imagesFailed': 'Could not load {count} image(s). Reimport the missing images before exporting.',
+
+  'export.close': 'Close export',
+  'export.preparing': 'Preparing images, fonts and audio…',
+  'export.directToFile': 'Save directly to a file',
+  'export.directToFileHint': 'Uses less memory for long videos. Choose the destination before rendering.',
+  'export.finalizing': 'Finalizing file…',
+  'export.cancel': 'Cancel export',
+  'export.cancelled': 'Export canceled. You can adjust the options and try again.',
+  'exportVideo.error.videoSeek': 'Could not load a background video frame. Check the video and try again.',
+  'exportVideo.error.invalidSettings': 'The export settings are invalid.',
+
+  'route.loadError': 'Could not load the map. Check your connection and try again.',
+  'route.retry': 'Try again',
+
   // Header
   'header.unsaved': 'Unsaved changes',
   'header.allSaved': 'All changes saved',
