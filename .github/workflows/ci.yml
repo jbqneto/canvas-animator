@@ -36,3 +36,6 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: MCP stdio handshake
+        run: npm run mcp:check

@@ -1,6 +1,9 @@
 import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
+import { createServer } from 'node:http';
+import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
+import { installAutomationBridge } from './mcp/bridge';
 import { GoogleGenAI } from '@google/genai';
 import {
   chatContents,
@@ -15,14 +18,26 @@ import {
 
 dotenv.config();
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || '0.0.0.0';
 const app = express();
+const httpServer = createServer(app);
+const mcpEnabled = process.env.FLASHMOTION_MCP === '1';
+if (mcpEnabled && HOST !== '127.0.0.1') throw new Error('MCP_REQUIRES_LOOPBACK_HOST');
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('INVALID_PORT');
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+const bridge = mcpEnabled ? installAutomationBridge(app, httpServer, { port: PORT }) : undefined;
 
 // Lazy GoogleGenAI initialization (server key from .env)
 let aiClient: GoogleGenAI | null = null;
+
+// No secret material is returned; capability discovery is never cached by the PWA.
+app.get('/api/capabilities', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ ai: Boolean(process.env.GEMINI_API_KEY?.trim()) });
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -34,7 +49,7 @@ class NoServerKeyError extends Error {}
 
 function getAIClient(): GoogleGenAI {
   if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) throw new NoServerKeyError('GEMINI_API_KEY is not configured on the server.');
     aiClient = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
   }
@@ -104,8 +119,30 @@ async function start() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`FlashMotion Studio running on http://0.0.0.0:${PORT}`);
+  httpServer.listen(PORT, HOST, async () => {
+    if (bridge) {
+      try {
+        const folder = path.join(process.cwd(), '.local');
+        await mkdir(folder, { recursive: true, mode: 0o700 });
+        await writeFile(path.join(folder, 'mcp-session.json'), JSON.stringify({ url: `http://127.0.0.1:${PORT}`, token: bridge.token }), { mode: 0o600 });
+      } catch (error) { console.error('MCP_SESSION_WRITE_FAILED', error); process.exit(1); }
+    }
+    console.log(`FlashMotion Studio running on http://${HOST}:${PORT}`);
+  });
+  let stopping = false;
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, async () => {
+    if (stopping) return;
+    stopping = true;
+    if (bridge) {
+      await bridge.close();
+      const file = path.join(process.cwd(), '.local/mcp-session.json');
+      try {
+        const session = JSON.parse(await readFile(file, 'utf8'));
+        if (session.token === bridge.token) await unlink(file);
+      } catch { /* Already removed, or replaced by a newer server. */ }
+    }
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 3000).unref();
   });
 }
 

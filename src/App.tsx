@@ -32,6 +32,10 @@ import { parseProject, ProjectFileError, projectNameFromFile, serializeProject }
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
 import { useAutosave } from './project/useAutosave';
+import { createBrowserApi, type AutomationAdapter } from './automation/browserApi';
+import { connectMcpBridge, type McpConnectionState } from './automation/mcpBridge';
+import { useMcpSession } from './automation/useMcpSession';
+import { useServerAi } from './ai/useServerAi';
 import { isAbortError, throwIfAborted } from './utils/abort';
 import type { ExportPhase } from './utils/exportVideo';
 import { loadImageFileAsActorSource } from './utils/importImage';
@@ -42,11 +46,12 @@ import {
 } from './utils/stickFigurePresets';
 import {
   exportVideoSequence,
-  exportFramePNG,
   renderFrameToDataURL,
+  seekVideo,
   videoTimeForFrame,
 } from './utils/exportVideo';
 import { useHistory } from './hooks/useHistory';
+import { DocumentPropertiesDialog } from './components/DocumentPropertiesDialog';
 import { StudioHeader } from './components/StudioHeader';
 import { FlashCanvas } from './components/FlashCanvas';
 import { PropertiesInspector } from './components/PropertiesInspector';
@@ -266,6 +271,7 @@ export default function App() {
 
   // UI Modals & Export state
   const [exportProgress, setExportProgress] = useState<number>(0);
+  const aiEnabled = useServerAi();
   const [aiModalOpen, setAiModalOpen] = useState<boolean>(false);
   const [chatbotOpen, setChatbotOpen] = useState<boolean>(false);
   const [aiKeyOpen, setAiKeyOpen] = useState<boolean>(false);
@@ -721,7 +727,16 @@ export default function App() {
 
   // ================= GROUP / UNGROUP OBJECTS =================
   // Flash-inspired: "um boneco palito é resultado de um grupo de objetos -> varios palitos e um circulo"
+  const [documentPropertiesOpen, setDocumentPropertiesOpen] = useState(false);
+  const ungroupedStrokes = (frames[currentFrame]?.drawings ?? []).filter(stroke =>
+    !(frames[currentFrame]?.groups ?? []).some(group => group.strokeIds.includes(stroke.id)));
+  const canGroupSelection = selectedObject?.type === 'drawing' && ungroupedStrokes.length >= 2 &&
+    layers.some(layer => layer.id === selectedObject.id && layer.type === 'drawing' && layer.visible && !layer.locked);
+  const canUngroupSelection = (selectedObject?.type === 'group' && !!frames[currentFrame]?.groups?.some(group => group.id === selectedObject.id)) ||
+    (selectedObject?.type === 'stick' && sticks.some(stick => stick.id === selectedObject.id && isActorOnScreen(stick, currentFrame)));
+
   const handleUngroupSelected = () => {
+    if (!canUngroupSelection) return;
     // 1. A stick figure breaks apart into loose strokes (head circle + bone lines) in the current frame
     if (selectedObject?.type === 'stick') {
       const stick = sticks.find((s) => s.id === selectedObject.id);
@@ -768,6 +783,7 @@ export default function App() {
   };
 
   const handleGroupSelected = () => {
+    if (!canGroupSelection) return;
     const currentFrameData = frames[currentFrame];
     if (!currentFrameData) return;
 
@@ -780,7 +796,7 @@ export default function App() {
         y: 0,
         scale: 1,
         rotation: 0,
-        strokeIds: currentFrameData.drawings.map((d) => d.id),
+        strokeIds: ungroupedStrokes.map((d) => d.id),
       };
 
       history.pushSnapshot(t('history.group'), {
@@ -1622,7 +1638,7 @@ export default function App() {
         handleOpenProject();
         return;
       }
-      if (isTypingTarget(e.target)) return;
+      if (isTypingTarget(e.target) || (e.target instanceof Element && e.target.closest('dialog[open]'))) return;
 
       // Ctrl+Z / Cmd+Z -> Undo
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
@@ -1916,16 +1932,74 @@ export default function App() {
     scene: sceneContent(),
   });
 
-  // Snapshot PNG
-  const handleSnapshot = () => {
-    exportFramePNG(currentFrameRenderParams(), `frame-${currentFrame}-snapshot.png`);
-  };
-
   // Open AI Image Modal
   const handleOpenAiImage = async () => {
     setCanvasSnapshot(await renderFrameToDataURL(currentFrameRenderParams()));
     setAiModalOpen(true);
   };
+
+  // Explicit opt-in for agents running JavaScript in this tab: /?automation=1.
+  // The stable API delegates through a ref so calls see the latest rendered state.
+  const { session: mcpSession, connect: startMcp, disconnect: stopMcp } = useMcpSession();
+  const mcpEnabled = !!mcpSession;
+  const [mcpState, setMcpState] = useState<McpConnectionState | null>(null);
+  const automationAdapterRef = useRef<AutomationAdapter>(null);
+  automationAdapterRef.current = {
+    status: () => ({ name: projectName, frame: currentFrame, fps, totalFrames,
+      playing: isPlaying, dirty: isDirty, ready: autosaveReady, exporting: isExporting }),
+    project: serializeCurrent,
+    replaceContent: (content) => {
+      history.pushSnapshot(t('history.automation'), {
+        ...content, description: t('history.automation'), timing: { fps, totalFrames },
+      });
+      setSelectedObject(null);
+      setIsPlaying(false);
+    },
+    seek: (frame) => { setIsPlaying(false); setCurrentFrame(frame); },
+    play: setIsPlaying,
+    render: async (frame) => {
+      const params = { ...currentFrameRenderParams(), frame };
+      const video = videoBg.type === 'upload' || videoBg.type === 'preset' ? videoEl : null;
+      if (videoBg.url && !video) throw new Error('VIDEO_NOT_READY');
+      const restoreTime = video?.currentTime;
+      try {
+        if (video) await seekVideo(video, videoTimeForFrame(frame, fps, video.duration));
+        return await renderFrameToDataURL(params);
+      } finally {
+        if (video && restoreTime !== undefined) await seekVideo(video, restoreTime);
+      }
+    },
+  };
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mcp = mcpEnabled;
+    if (!mcp && params.get('automation') !== '1') return;
+    const api = createBrowserApi({
+      status: () => automationAdapterRef.current!.status(),
+      project: () => automationAdapterRef.current!.project(),
+      replaceContent: (content) => automationAdapterRef.current!.replaceContent(content),
+      seek: (frame) => automationAdapterRef.current!.seek(frame),
+      play: (playing) => automationAdapterRef.current!.play(playing),
+      render: (frame) => automationAdapterRef.current!.render(frame),
+    });
+    window.flashmotion = api;
+    const disconnect = mcp ? connectMcpBridge(api, setMcpState, mcpSession!) : undefined;
+    return () => { disconnect?.(); if (window.flashmotion === api) delete window.flashmotion; };
+  }, [mcpSession]);
+
+  const agentControls = (
+      <div className="flex flex-col items-start gap-2 text-xs">
+        {mcpEnabled && mcpState && <span>{t(`mcp.${mcpState}`)}</span>}
+        {mcpSession && <span className="text-neutral-400" title={t('mcp.sessionHint')}>{t('mcp.expires', { time: new Date(mcpSession.expiresAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) })}</span>}
+        <button className="text-sky-300 hover:text-white" onClick={() => {
+          if (mcpEnabled) stopMcp(); else startMcp();
+          setMcpState(null);
+          const url = new URL(window.location.href);
+          if (mcpEnabled) url.searchParams.delete('mcp'); else url.searchParams.set('mcp', '1');
+          window.history.replaceState(null, '', url.href);
+        }}>{t(mcpEnabled ? 'mcp.disconnect' : 'mcp.connect')}</button>
+      </div>
+  );
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100 font-sans">
@@ -1951,11 +2025,14 @@ export default function App() {
 
       {/* Top Flash Studio Header with History & Grouping controls */}
       <StudioHeader
+        aiEnabled={aiEnabled}
         onExportVideo={() => { setExportError(null); setExportCancelled(false); setExportDialogOpen(true); }}
         isExporting={isExporting}
         exportProgress={exportProgress}
-        onSnapshot={handleSnapshot}
         onOpenAiImage={handleOpenAiImage}
+        onAddLayer={handleAddLayer}
+        onAddShape={handleAddShape}
+        onImportImages={handleImportImageFiles}
         onOpenTemplates={() => setTemplatesOpen(true)}
         onToggleChatbot={() => setChatbotOpen((prev) => !prev)}
         chatbotOpen={chatbotOpen}
@@ -1967,9 +2044,11 @@ export default function App() {
         onRedo={history.redo}
         onGroupSelected={handleGroupSelected}
         onUngroupSelected={handleUngroupSelected}
-        hasSelection={selectedObject !== null}
-        canvasDimensions={canvasDimensions}
-        onUpdateCanvasDimensions={setCanvasDimensions}
+        canGroup={canGroupSelection}
+        canUngroup={canUngroupSelection}
+        onDocumentProperties={() => setDocumentPropertiesOpen(true)}
+        agentStatus={mcpEnabled && mcpState ? t(`mcp.${mcpState}`) : undefined}
+        agentControls={agentControls}
         projectName={projectName}
         isDirty={isDirty}
         autosaveStatus={autosave.status}
@@ -2051,6 +2130,8 @@ export default function App() {
             videoElement={videoEl}
             isPlaying={isPlaying}
             layers={layers}
+            canGroup={canGroupSelection}
+            canUngroup={canUngroupSelection}
             onGroupSelected={handleGroupSelected}
             onUngroupSelected={handleUngroupSelected}
             sticks={sticks}
@@ -2136,16 +2217,10 @@ export default function App() {
             }
           }
           onUpdateFrameData={handleUpdateFrameData}
-          onGroupSelected={handleGroupSelected}
           onUngroupSelected={handleUngroupSelected}
           onAddStickFigure={() => handleAddLayer('group')}
           fps={fps}
-          setFps={handleChangeFps}
           totalFrames={totalFrames}
-          setTotalFrames={setTotalFrames}
-          videoBg={videoBg}
-          setVideoBg={setVideoBg}
-          onUploadVideo={handleUploadVideo}
           pastSteps={history.past}
           futureSteps={history.future}
           onJumpToHistory={history.jumpToSnapshot}
@@ -2153,10 +2228,6 @@ export default function App() {
           canRedo={history.canRedo}
           onUndo={history.undo}
           onRedo={history.redo}
-          canvasDimensions={canvasDimensions}
-          onUpdateCanvasDimensions={setCanvasDimensions}
-          timelineHeight={timelineHeight}
-          setTimelineHeight={setTimelineHeight}
           sticks={sticks}
           onUpdateStick={handleUpdateStick}
           onDeleteStick={handleDeleteStick}
@@ -2187,6 +2258,7 @@ export default function App() {
       {/* Bottom Area: Flash-style Timeline with Layers Panel, Visibility, Lock & Ruler */}
       <div className="shrink-0 overflow-hidden flex flex-col" style={{ height: timelineHeight }}>
         <Timeline
+          onDocumentProperties={() => setDocumentPropertiesOpen(true)}
           currentFrame={currentFrame}
           setCurrentFrame={setCurrentFrame}
           totalFrames={totalFrames}
@@ -2265,6 +2337,11 @@ export default function App() {
         audibleClips={audio.filter((c) => !c.muted && c.volume > 0).length}
       />
 
+      <DocumentPropertiesDialog open={documentPropertiesOpen} onClose={() => setDocumentPropertiesOpen(false)}
+        canvasDimensions={canvasDimensions} onUpdateCanvasDimensions={setCanvasDimensions}
+        timelineHeight={timelineHeight} setTimelineHeight={setTimelineHeight}
+        videoBg={videoBg} setVideoBg={setVideoBg} onUploadVideo={handleUploadVideo}
+        fps={fps} setFps={handleChangeFps} totalFrames={totalFrames} setTotalFrames={setTotalFrames} />
       <PwaStatus hasUnsavedChanges={isDirty} />
 
       <TemplateLibraryDialog
@@ -2309,7 +2386,7 @@ export default function App() {
 
       {/* AI Image Generation & Editing Modal */}
       <AiImageModal
-        isOpen={aiModalOpen}
+        isOpen={aiEnabled && aiModalOpen}
         onClose={() => setAiModalOpen(false)}
         currentFrame={currentFrame}
         totalFrames={totalFrames}
@@ -2330,12 +2407,12 @@ export default function App() {
 
       {/* Floating / Docked Gemini Animation Chatbot */}
       <GeminiChatbot
-        isOpen={chatbotOpen}
+        isOpen={aiEnabled && chatbotOpen}
         onToggle={() => setChatbotOpen(false)}
         onOpenAiKey={() => setAiKeyOpen(true)}
       />
 
-      <AiKeyDialog isOpen={aiKeyOpen} onClose={() => setAiKeyOpen(false)} />
+      <AiKeyDialog isOpen={aiEnabled && aiKeyOpen} onClose={() => setAiKeyOpen(false)} />
     </div>
   );
 }

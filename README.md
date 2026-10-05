@@ -64,11 +64,55 @@ qualquer editor.
   e as opções ficam disponíveis para tentar novamente. O cancelamento fica indisponível na finalização.
   Erros aparecem no próprio diálogo; um vídeo de fundo que não consegue carregar o frame solicitado
   interrompe a exportação em vez de repetir o frame anterior silenciosamente.
-- IA opcional (Gemini) para imagens e um copiloto de roteiro, com a chave do servidor ou a sua própria chave
-  (ícone de chave no copiloto ou no gerador de imagens), que fica só no navegador e fala direto com o Google.
+- IA opcional (Gemini) para imagens e copiloto: os botões aparecem somente se o servidor
+  anunciar uma `GEMINI_API_KEY` configurada. Se a API estiver indisponível ou o servidor não tiver
+  chave, a interface oculta esses recursos. Uma chave pessoal antiga no navegador não altera essa regra.
 - Interface em **português (BR)** e **inglês (US)**, escolhida no canto superior direito e lembrada no navegador.
 
 ## Desenvolvimento
+
+### Executar e instalar localmente
+
+```bash
+npm install
+npm run local
+```
+
+Esse comando compila a versão de produção, inicia o servidor apenas em `127.0.0.1:3000`
+e abre `http://localhost:3000` no navegador padrão. Use Chrome/Edge e escolha **Instalar**
+no aplicativo ou no menu do navegador. A instalação final depende dessa ação no navegador.
+O modo `npm run dev` não gera o service worker de produção.
+Mantenha o terminal aberto enquanto usa o servidor; execute o comando novamente após reiniciar
+o computador. Para não abrir o navegador: `npm run local -- --no-open`.
+Use sempre a mesma origem e porta para manter a instalação e o autosave.
+
+O PWA permite abrir/salvar `.fmproj` e receber arquivos pelo sistema quando o navegador/SO
+suporta `file_handlers`. O acesso ao disco continua limitado aos arquivos autorizados pelo
+usuário. A File System Access API também funciona numa aba compatível em localhost;
+a instalação não concede acesso irrestrito a pastas. O editor fica em cache para uso offline
+após o primeiro carregamento; recursos de IA e recursos remotos ainda precisam de rede.
+
+### Codex, Claude e automação
+
+O MCP local está implementado, com transporte stdio para Codex, Claude Code e Claude Desktop.
+`npm run local` abre o editor com a conexão MCP habilitada. No PWA instalado, use
+**Conectar agentes (MCP)**; **Desconectar** encerra o acesso sem recarregar o projeto.
+A conexão é lembrada por uma sessão temporária de 8 horas em localStorage e retomada
+após recarregar. A interface mostra o horário de expiração. A sessão é compartilhada entre
+abas da mesma origem; desconectar revoga essa sessão em todas elas.
+
+```bash
+npm run mcp:config   # comandos e JSON com os caminhos corretos desta instalação
+npm run mcp:check    # verifica handshake stdio e ferramentas (após build)
+```
+
+As ferramentas permitem listar janelas, ler o projeto, substituir conteúdo com desfazer e
+controle de revisão, navegar na timeline, reproduzir/pausar e renderizar PNG.
+A conexão exige o servidor local e uma janela conectada. O MCP não salva arquivos nem
+exporta vídeo automaticamente; use a interface para essas operações.
+Veja configuração, exemplos e limites em [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
+A API JavaScript também continua disponível em `/?automation=1` para agentes com acesso
+a executar código no contexto da página.
 
 Requer Node 20+.
 
@@ -88,8 +132,10 @@ de 2 a 8192 px por lado e duração de 1 a 1.000.000 de quadros. Campos ausentes
 continuam recebendo os valores padrão; configurações inválidas e estruturas de conteúdo incompatíveis
 são rejeitadas antes de substituir a cena atual.
 
-Para os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`) ou deixe cada usuário colar a
-própria chave no app (ícone de chave): assim o app instalado ou hospedado só como site estático também usa a IA.
+Para exibir os recursos de IA, defina `GEMINI_API_KEY` no `.env` (veja `.env.example`) e reinicie o servidor.
+`/api/capabilities` informa apenas se a IA está habilitada, sem revelar a chave. Sem essa configuração,
+os botões ficam ocultos, inclusive em hospedagem estática/offline. Uma chave pessoal ainda pode ser usada
+nos diálogos quando os recursos estiverem habilitados pelo servidor.
 
 ## Arquitetura
 

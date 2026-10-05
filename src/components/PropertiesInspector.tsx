@@ -14,15 +14,12 @@ import {
   History,
   Copy,
   Ungroup,
-  Group,
   TrendingUp,
   PieChart,
   Hash,
   Palette,
   Check,
   Zap,
-  Upload,
-  VideoOff,
   Image as ImageIcon,
   LayoutTemplate,
   Square,
@@ -34,7 +31,6 @@ import {
   ChartOverlay,
   ChartDataPoint,
   TextOverlay,
-  VideoBackground,
   ChartType,
   TextEffect,
   SelectedObjectRef,
@@ -70,23 +66,13 @@ interface PropertiesInspectorProps {
   currentFrame: number;
   currentFrameData: FrameData;
   onUpdateFrameData: (frameNum: number, data: FrameData) => void;
-  onGroupSelected: () => void;
   onUngroupSelected: () => void;
   onAddStickFigure: () => void;
   // Document Properties
   fps: number;
-  setFps: (fps: number) => void;
   totalFrames: number;
-  setTotalFrames: (total: number) => void;
-  videoBg: VideoBackground;
-  setVideoBg: React.Dispatch<React.SetStateAction<VideoBackground>>;
-  onUploadVideo: (file: File) => void;
   // Canvas Dimensions & Presets (YouTube, Shorts, etc.)
-  canvasDimensions: import('../types').CanvasDimensions;
-  onUpdateCanvasDimensions: (dim: import('../types').CanvasDimensions) => void;
   // Timeline height
-  timelineHeight: number;
-  setTimelineHeight: (h: number | ((prev: number) => number)) => void;
   // Stick figures (animated by pose keys)
   sticks: StickActor[];
   onUpdateStick: (stick: StickActor, description?: string) => void;
@@ -130,20 +116,10 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   currentFrame,
   currentFrameData,
   onUpdateFrameData,
-  onGroupSelected,
   onUngroupSelected,
   onAddStickFigure,
   fps,
-  setFps,
   totalFrames,
-  setTotalFrames,
-  videoBg,
-  setVideoBg,
-  onUploadVideo,
-  canvasDimensions,
-  onUpdateCanvasDimensions,
-  timelineHeight,
-  setTimelineHeight,
   sticks,
   onUpdateStick,
   onDeleteStick,
@@ -277,7 +253,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           <button
             id="tab-properties-btn"
             onClick={() => setActiveTab('properties')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition ${
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] font-semibold transition ${
               activeTab === 'properties'
                 ? 'bg-neutral-800 text-sky-400 shadow-sm border border-neutral-700'
                 : 'text-neutral-400 hover:text-white'
@@ -290,7 +266,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           <button
             id="tab-library-btn"
             onClick={() => setActiveTab('library')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition ${
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] font-semibold transition ${
               activeTab === 'library'
                 ? 'bg-neutral-800 text-sky-400 shadow-sm border border-neutral-700'
                 : 'text-neutral-400 hover:text-white'
@@ -303,7 +279,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
           <button
             id="tab-history-btn"
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition ${
+            className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] font-semibold transition ${
               activeTab === 'history'
                 ? 'bg-neutral-800 text-sky-400 shadow-sm border border-neutral-700'
                 : 'text-neutral-400 hover:text-white'
@@ -904,16 +880,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     {t('inspector.grouping')}
                   </span>
 
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      onClick={onGroupSelected}
-                      title={t('inspector.groupHint')}
-                      className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-medium transition"
-                    >
-                      <Group size={13} className="text-sky-400" />
-                      {t('selection.groupShort')}
-                    </button>
-
+                  <div className="grid grid-cols-1 gap-1.5">
                     <button
                       onClick={onUngroupSelected}
                       title={t('selection.ungroup')}
@@ -995,361 +962,12 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     <Sliders size={15} />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white text-xs">{t('inspector.doc.title')}</h4>
-                    <p className="text-[10px] text-neutral-400">{t('inspector.doc.subtitle')}</p>
+                    <h4 className="font-bold text-white text-xs">{t('workspace.noSelection')}</h4>
+                    <p className="text-[10px] text-neutral-400">{t('workspace.selectionHint')}</p>
                   </div>
                 </div>
 
-                {/* Stage Canvas Dimensions & Presets (YouTube, Shorts, etc.) */}
-                <div className="space-y-3 bg-neutral-900/60 p-3 rounded-lg border border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                      {t('inspector.doc.size')}
-                    </span>
-                    <span className="text-[9px] font-mono text-sky-400 bg-sky-950/80 px-1.5 py-0.5 rounded border border-sky-800/60">
-                      {canvasDimensions.width} × {canvasDimensions.height} px
-                    </span>
-                  </div>
 
-                  {/* YouTube & Social Presets */}
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-neutral-400 font-medium">{t('inspector.doc.presets')}</span>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        onClick={() =>
-                          onUpdateCanvasDimensions({
-                            width: 1920,
-                            height: 1080,
-                            preset: 'youtube-1080p',
-                          })
-                        }
-                        className={`px-2 py-1.5 rounded text-left text-xs font-semibold border transition ${
-                          canvasDimensions.preset === 'youtube-1080p'
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                            : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <span className="block text-[11px]">{t('inspector.doc.preset.1080p')}</span>
-                        <span className="text-[9px] text-neutral-400 font-mono">1920 × 1080 (16:9)</span>
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          onUpdateCanvasDimensions({
-                            width: 1280,
-                            height: 720,
-                            preset: 'youtube-720p',
-                          })
-                        }
-                        className={`px-2 py-1.5 rounded text-left text-xs font-semibold border transition ${
-                          canvasDimensions.preset === 'youtube-720p'
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                            : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <span className="block text-[11px]">{t('inspector.doc.preset.720p')}</span>
-                        <span className="text-[9px] text-neutral-400 font-mono">1280 × 720 (16:9)</span>
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          onUpdateCanvasDimensions({
-                            width: 1080,
-                            height: 1920,
-                            preset: 'youtube-shorts',
-                          })
-                        }
-                        className={`px-2 py-1.5 rounded text-left text-xs font-semibold border transition ${
-                          canvasDimensions.preset === 'youtube-shorts'
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                            : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <span className="block text-[11px]">{t('inspector.doc.preset.shorts')}</span>
-                        <span className="text-[9px] text-neutral-400 font-mono">1080 × 1920 (9:16)</span>
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          onUpdateCanvasDimensions({
-                            width: 1080,
-                            height: 1080,
-                            preset: 'square',
-                          })
-                        }
-                        className={`px-2 py-1.5 rounded text-left text-xs font-semibold border transition ${
-                          canvasDimensions.preset === 'square'
-                            ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                            : 'bg-neutral-900 text-neutral-300 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <span className="block text-[11px]">{t('inspector.doc.preset.square')}</span>
-                        <span className="text-[9px] text-neutral-400 font-mono">1080 × 1080 (1:1)</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Manual Editable Width and Height */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <div>
-                      <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.doc.width')}</span>
-                      <input
-                        type="number"
-                        min="320"
-                        max="3840"
-                        step="10"
-                        value={canvasDimensions.width}
-                        onChange={(e) => {
-                          const w = Math.max(320, Math.min(3840, Number(e.target.value) || 1280));
-                          onUpdateCanvasDimensions({
-                            ...canvasDimensions,
-                            width: w,
-                            preset: 'custom',
-                          });
-                        }}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-xs text-white font-mono outline-none focus:border-sky-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-neutral-400 block mb-1">{t('inspector.doc.height')}</span>
-                      <input
-                        type="number"
-                        min="240"
-                        max="2160"
-                        step="10"
-                        value={canvasDimensions.height}
-                        onChange={(e) => {
-                          const h = Math.max(240, Math.min(2160, Number(e.target.value) || 720));
-                          onUpdateCanvasDimensions({
-                            ...canvasDimensions,
-                            height: h,
-                            preset: 'custom',
-                          });
-                        }}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-xs text-white font-mono outline-none focus:border-sky-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline Height / Space Controls */}
-                <div className="space-y-2 bg-neutral-900/60 p-3 rounded-lg border border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                      {t('inspector.doc.timelineSize')}
-                    </span>
-                    <span className="text-[9px] font-mono text-cyan-400">
-                      {timelineHeight}px
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      onClick={() => setTimelineHeight(140)}
-                      className={`py-1 rounded text-center text-xs font-medium border transition ${
-                        timelineHeight === 140
-                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                          : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
-                      }`}
-                    >
-                      {t('inspector.doc.timeline.compact')}
-                    </button>
-                    <button
-                      onClick={() => setTimelineHeight(200)}
-                      className={`py-1 rounded text-center text-xs font-medium border transition ${
-                        timelineHeight === 200
-                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                          : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
-                      }`}
-                    >
-                      {t('inspector.doc.timeline.default')}
-                    </button>
-                    <button
-                      onClick={() => setTimelineHeight(320)}
-                      className={`py-1 rounded text-center text-xs font-medium border transition ${
-                        timelineHeight === 320
-                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50'
-                          : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
-                      }`}
-                    >
-                      {t('inspector.doc.timeline.wide')}
-                    </button>
-                  </div>
-
-                  <input
-                    type="range"
-                    min="110"
-                    max="450"
-                    value={timelineHeight}
-                    onChange={(e) => setTimelineHeight(Number(e.target.value))}
-                    className="w-full accent-cyan-500 mt-1"
-                  />
-                </div>
-
-                {/* Stage Background Color */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    {t('inspector.doc.bgColor')}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={videoBg.color || '#09090b'}
-                      onChange={(e) =>
-                        setVideoBg((prev) => ({
-                          ...prev,
-                          color: e.target.value,
-                          type: 'color',
-                        }))
-                      }
-                      className="w-8 h-8 rounded bg-transparent border-0 cursor-pointer"
-                    />
-                    <div className="flex gap-1">
-                      {['#09090b', '#0f172a', '#18181b', '#042f2e', '#1e1b4b'].map((c) => (
-                        <button
-                          key={c}
-                          onClick={() =>
-                            setVideoBg((prev) => ({ ...prev, color: c, type: 'color' }))
-                          }
-                          style={{ backgroundColor: c }}
-                          className="w-6 h-6 rounded border border-neutral-700 hover:scale-110 transition"
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Background Video (the footage the overlays enrich) */}
-                <div className="space-y-2">
-                  <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    {t('inspector.doc.video')}
-                  </span>
-                  <label className="flex items-center gap-2 p-2 rounded border border-dashed border-neutral-700 hover:border-purple-500 bg-neutral-900 cursor-pointer transition text-xs text-neutral-300">
-                    <Upload size={14} className="text-purple-400" />
-                    <span>
-                      {videoBg.type === 'upload' ? t('inspector.doc.replaceVideo') : t('inspector.doc.loadVideo')}
-                    </span>
-                    <input
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) onUploadVideo(file);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  {videoBg.type !== 'color' && videoBg.url && (
-                    <>
-                      <div className="flex items-center justify-between text-[11px] text-neutral-400">
-                        <span>{t('inspector.doc.videoOpacity')}</span>
-                        <span className="font-mono text-neutral-200">
-                          {Math.round(videoBg.opacity * 100)}%
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0.1"
-                        max="1"
-                        step="0.05"
-                        value={videoBg.opacity}
-                        onChange={(e) =>
-                          setVideoBg((prev) => ({ ...prev, opacity: Number(e.target.value) }))
-                        }
-                        className="w-full accent-purple-500"
-                      />
-                      <button
-                        onClick={() => setVideoBg((prev) => ({ ...prev, type: 'color', url: '' }))}
-                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white text-xs transition"
-                      >
-                        <VideoOff size={13} />
-                        {t('inspector.doc.removeVideo')}
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Quick Add Elements onto Stage */}
-                <div className="space-y-2 pt-2 border-t border-neutral-800">
-                  <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
-                    {t('inspector.doc.insert')}
-                  </span>
-                  <button
-                    onClick={onOpenTemplates}
-                    className="w-full flex items-center gap-2 p-2 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40 text-left transition"
-                  >
-                    <LayoutTemplate size={14} />
-                    <span className="text-xs">
-                      {t('templates.button')}
-                      <span className="block text-[10px] text-sky-200/60">{t('templates.buttonHint')}</span>
-                    </span>
-                  </button>
-                  {/* Editable vector shapes (animated like any actor) */}
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {SHAPE_TYPES.map((type) => (
-                      <button
-                        key={type}
-                        data-add-shape={type}
-                        onClick={() => onAddShape(type)}
-                        title={t('shape.addHint', { shape: t(`shape.type.${type}`) })}
-                        className="flex flex-col items-center gap-1 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-orange-300 border border-neutral-800 transition"
-                      >
-                        {type === 'rect' ? <Square size={14} /> : type === 'ellipse' ? <Circle size={14} /> : type === 'arrow' ? <ArrowRight size={14} /> : <Minus size={14} />}
-                        <span className="text-[9px]">{t(`shape.type.${type}`)}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
-                    <ImageIcon size={14} />
-                    <span className="text-xs">
-                      {t('inspector.doc.importImage')}
-                      <span className="block text-[10px] text-orange-200/60">
-                        {t('inspector.doc.importHint')}
-                      </span>
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files?.length) onImportImageFiles(e.target.files);
-                        e.target.value = '';
-                      }}
-                    />
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      onClick={() => onAddChart('bar')}
-                      className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-neutral-800 text-left transition"
-                    >
-                      <BarChart3 size={14} className="text-sky-400" />
-                      <span>{t('timeline.addChart')}</span>
-                    </button>
-                    <button
-                      onClick={() => onAddText(false)}
-                      className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-neutral-800 text-left transition"
-                    >
-                      <Type size={14} className="text-emerald-400" />
-                      <span>{t('timeline.addText')}</span>
-                    </button>
-                    <button
-                      onClick={() => onAddText(true)}
-                      className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-indigo-300 border border-neutral-800 text-left transition"
-                    >
-                      <Hash size={14} className="text-indigo-400" />
-                      <span>{t('inspector.doc.addCounter')}</span>
-                    </button>
-                    <button
-                      onClick={onAddStickFigure}
-                      className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-amber-300 border border-neutral-800 text-left transition"
-                    >
-                      <User size={14} className="text-amber-400" />
-                      <span>{t('inspector.doc.addStick')}</span>
-                    </button>
-                  </div>
-                </div>
               </div>
             )}
           </>
@@ -1365,6 +983,86 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               </p>
             </div>
 
+            {/* Quick Add Elements onto Stage */}
+            <div className="space-y-2 pt-2 border-t border-neutral-800">
+              <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
+                {t('inspector.doc.insert')}
+              </span>
+              <button
+                onClick={onOpenTemplates}
+                className="w-full flex items-center gap-2 p-2 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40 text-left transition"
+              >
+                <LayoutTemplate size={14} />
+                <span className="text-xs">
+                  {t('templates.button')}
+                  <span className="block text-[10px] text-sky-200/60">{t('templates.buttonHint')}</span>
+                </span>
+              </button>
+              {/* Editable vector shapes (animated like any actor) */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {SHAPE_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    data-add-shape={type}
+                    onClick={() => onAddShape(type)}
+                    title={t('shape.addHint', { shape: t(`shape.type.${type}`) })}
+                    className="flex flex-col items-center gap-1 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-orange-300 border border-neutral-800 transition"
+                  >
+                    {type === 'rect' ? <Square size={14} /> : type === 'ellipse' ? <Circle size={14} /> : type === 'arrow' ? <ArrowRight size={14} /> : <Minus size={14} />}
+                    <span className="text-[9px]">{t(`shape.type.${type}`)}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="flex items-center gap-2 p-2 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 border border-orange-500/40 cursor-pointer transition">
+                <ImageIcon size={14} />
+                <span className="text-xs">
+                  {t('inspector.doc.importImage')}
+                  <span className="block text-[10px] text-orange-200/60">
+                    {t('inspector.doc.importHint')}
+                  </span>
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.length) onImportImageFiles(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => onAddChart('bar')}
+                  className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-sky-300 border border-neutral-800 text-left transition"
+                >
+                  <BarChart3 size={14} className="text-sky-400" />
+                  <span>{t('timeline.addChart')}</span>
+                </button>
+                <button
+                  onClick={() => onAddText(false)}
+                  className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-emerald-300 border border-neutral-800 text-left transition"
+                >
+                  <Type size={14} className="text-emerald-400" />
+                  <span>{t('timeline.addText')}</span>
+                </button>
+                <button
+                  onClick={() => onAddText(true)}
+                  className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-indigo-300 border border-neutral-800 text-left transition"
+                >
+                  <Hash size={14} className="text-indigo-400" />
+                  <span>{t('inspector.doc.addCounter')}</span>
+                </button>
+                <button
+                  onClick={onAddStickFigure}
+                  className="flex items-center gap-1.5 p-2 rounded bg-neutral-900 hover:bg-neutral-800 text-amber-300 border border-neutral-800 text-left transition"
+                >
+                  <User size={14} className="text-amber-400" />
+                  <span>{t('inspector.doc.addStick')}</span>
+                </button>
+              </div>
+            </div>
             {/* Stick Figures Section */}
             <div className="space-y-2">
               <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">

@@ -110,7 +110,6 @@ const MIN_CLIP_FRAMES = 5;
 /** Edits snap to markers (and the playhead) closer than this, in screen pixels; Alt disables it. */
 const SNAP_PX = 8;
 /** 10 minutes at 60 fps: long narrations fit; the grid is CSS so length doesn't cost rendering. */
-const MAX_TIMELINE_FRAMES = 36000;
 
 interface TimelineProps {
   currentFrame: number;
@@ -119,6 +118,7 @@ interface TimelineProps {
   setTotalFrames: (total: number) => void;
   fps: number;
   setFps: (fps: number) => void;
+  onDocumentProperties: () => void;
   isPlaying: boolean;
   setIsPlaying: (playing: boolean | ((prev: boolean) => boolean)) => void;
   isLooping: boolean;
@@ -182,6 +182,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   setTotalFrames,
   fps,
   setFps,
+  onDocumentProperties,
   isPlaying,
   setIsPlaying,
   isLooping,
@@ -961,42 +962,11 @@ export const Timeline: React.FC<TimelineProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-400 text-[11px]">FPS:</span>
-            <div className="flex bg-neutral-950 rounded p-0.5 border border-neutral-800">
-              {[12, 24, 30, 60].map((rate) => (
-                <button
-                  key={rate}
-                  onClick={() => setFps(rate)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition ${
-                    fps === rate
-                      ? 'bg-sky-500 text-neutral-950 font-bold'
-                      : 'text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  {rate}
-                </button>
-              ))}
-            </div>
-          </div>
+          <button onClick={onDocumentProperties} title={t('workspace.documentProperties')} className="flex items-center gap-2 text-[11px] font-mono text-neutral-400 hover:text-white px-2 py-1 rounded hover:bg-neutral-800">
+            <span>{fps} FPS</span><span className="text-neutral-600">·</span>
+            <span id="timeline-duration">{formatSeconds(totalFrames / fps, totalFrames / fps >= 10 ? 1 : 0.5, locale)}</span>
+          </button>
 
-          <div className="flex items-center gap-1">
-            <span className="text-neutral-400 text-[11px]">{t('timeline.frames')}</span>
-            <input
-              type="number"
-              min="24"
-              max={MAX_TIMELINE_FRAMES}
-              step="12"
-              value={totalFrames}
-              onChange={(e) =>
-                setTotalFrames(Math.max(24, Math.min(MAX_TIMELINE_FRAMES, Number(e.target.value))))
-              }
-              className="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-0.5 text-center font-mono text-neutral-200 focus:border-sky-500 outline-none text-[11px]"
-            />
-            <span className="text-neutral-500 text-[11px] font-mono" id="timeline-duration">
-              {formatSeconds(totalFrames / fps, totalFrames / fps >= 10 ? 1 : 0.5, locale)}
-            </span>
-          </div>
         </div>
       </div>
 
@@ -1013,34 +983,6 @@ export const Timeline: React.FC<TimelineProps> = ({
 
             {/* Quick Add Buttons & Dropdown Menu */}
             <div className="flex items-center gap-1" ref={menuContainerRef}>
-              {/* Quick Add Buttons for instantaneous 1-click creation */}
-              <button
-                onClick={() => onAddLayer('chart')}
-                title={t('timeline.addChartHint')}
-                className="px-1.5 py-0.5 rounded bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 text-[10px] font-medium flex items-center gap-1 transition"
-              >
-                <BarChart3 size={11} />
-                <span>{t('timeline.addChart')}</span>
-              </button>
-
-              <button
-                onClick={() => onAddLayer('text')}
-                title={t('timeline.addTextHint')}
-                className="px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-[10px] font-medium flex items-center gap-1 transition"
-              >
-                <Type size={11} />
-                <span>{t('timeline.addText')}</span>
-              </button>
-
-              <button
-                onClick={() => onAddLayer('group')}
-                title={t('timeline.addStickHint')}
-                className="px-1.5 py-0.5 rounded bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[10px] font-medium flex items-center gap-1 transition"
-              >
-                <User size={11} />
-                <span>{t('timeline.addStick')}</span>
-              </button>
-
               {/* Dropdown Menu Toggle */}
               <div className="relative">
                 <button
@@ -1147,7 +1089,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                   key={layer.id}
                   onClick={() => {
                     onSelectLayer(layer.id);
-                    if (layer.targetIds?.length && layer.type === 'text') {
+                    if (layer.type === 'drawing') {
+                      onSelectObject({ type: 'drawing', id: layer.id });
+                    } else if (layer.targetIds?.length && layer.type === 'text') {
                       // Shared track: the row picks its first object; each clip picks its own
                       onSelectObject({ type: 'text', id: layer.targetIds[0] });
                     } else if (layer.targetId) {

@@ -128,6 +128,8 @@ interface FlashCanvasProps {
   videoElement: HTMLVideoElement | null;
   isPlaying: boolean;
   layers: StudioLayer[];
+  canGroup: boolean;
+  canUngroup: boolean;
   onGroupSelected: () => void;
   onUngroupSelected: () => void;
   sticks: StickActor[];
@@ -202,6 +204,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   videoElement,
   isPlaying,
   layers,
+  canGroup,
+  canUngroup,
   onGroupSelected,
   onUngroupSelected,
   sticks,
@@ -1492,7 +1496,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       {/* ================= CENTER FLASH STAGE ================= */}
       <div className="flex-1 flex flex-col items-center justify-center p-3 overflow-auto relative">
         {/* Floating Context Toolbar when an object is selected */}
-        {hasSelection && (
+        {hasSelection && (canGroup || canUngroup) && (
           <div className="absolute top-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900/95 border border-sky-500/40 shadow-2xl backdrop-blur-md text-xs text-white">
             <span className="font-semibold text-sky-400 font-mono text-[11px] uppercase tracking-wider pr-1">
               {selectedObject?.type === 'stick'
@@ -1513,39 +1517,23 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
             <div className="w-[1px] h-3.5 bg-neutral-700 mx-1" />
 
             {/* Flash Group / Ungroup Buttons */}
-            <button
+            {canGroup && <button
               onClick={onGroupSelected}
               title={t('selection.group')}
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-800 text-neutral-300 hover:text-white transition"
             >
               <Group size={12} className="text-sky-400" />
               <span>{t('selection.groupShort')}</span>
-            </button>
+            </button>}
 
-            <button
+            {canUngroup && <button
               onClick={onUngroupSelected}
               title={t('selection.ungroup')}
               className="flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-800 text-amber-400 transition"
             >
               <Ungroup size={12} />
               <span>{t('selection.ungroupShort')}</span>
-            </button>
-
-            <div className="w-[1px] h-3.5 bg-neutral-700 mx-1" />
-
-            {/* Delete Object */}
-            <button
-              onClick={() => {
-                if (selectedObject?.type === 'chart') onDeleteChart(selectedObject.id);
-                else if (selectedObject?.type === 'text') onDeleteText(selectedObject.id);
-                else if (selectedObject?.type === 'stick') onDeleteStick(selectedObject.id);
-                onSelectObject(null);
-              }}
-              title={t('selection.delete')}
-              className="p-1 rounded hover:bg-rose-950/60 text-neutral-400 hover:text-rose-400 transition"
-            >
-              <Trash2 size={13} />
-            </button>
+            </button>}
           </div>
         )}
 
