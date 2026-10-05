@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportVideoSequence, SceneContent, seekVideo } from '../exportVideo';
 
 const encoder = vi.hoisted(() => ({
+  target: null as WritableStream | null, mp4Options: null as any,
   start: vi.fn(), add: vi.fn(), close: vi.fn(), finalize: vi.fn(), cancel: vi.fn(), audioAdd: vi.fn(),
 }));
 vi.mock('mediabunny', () => ({
@@ -14,10 +15,11 @@ vi.mock('mediabunny', () => ({
     finalize = encoder.finalize;
     cancel = encoder.cancel;
   },
+  StreamTarget: class { constructor(stream: WritableStream) { encoder.target = stream; } },
   BufferTarget: class { buffer = new ArrayBuffer(8); },
   CanvasSource: class { add = encoder.add; close = encoder.close; },
   AudioBufferSource: class { add = encoder.audioAdd; close() {} },
-  Mp4OutputFormat: class { getSupportedVideoCodecs() { return ['avc']; } getSupportedAudioCodecs() { return ['aac']; } },
+  Mp4OutputFormat: class { constructor(options: any) { encoder.mp4Options = options; } getSupportedVideoCodecs() { return ['avc']; } getSupportedAudioCodecs() { return ['aac']; } },
   WebMOutputFormat: class { getSupportedVideoCodecs() { return ['vp9']; } getSupportedAudioCodecs() { return ['opus']; } },
   getFirstEncodableVideoCodec: vi.fn().mockResolvedValue('avc'),
   getFirstEncodableAudioCodec: vi.fn().mockResolvedValue('aac'),
@@ -31,7 +33,9 @@ const scene = (): SceneContent => ({
 const options = () => ({ totalFrames: 6, fps: 24, width: 1280, height: 720 });
 
 beforeEach(() => {
-  Object.values(encoder).forEach((fn) => fn.mockReset().mockResolvedValue(undefined));
+  Object.values(encoder).filter((fn) => typeof fn === 'function').forEach((fn: any) => fn.mockReset().mockResolvedValue(undefined));
+  encoder.target = null;
+  encoder.mp4Options = null;
   vi.stubGlobal('VideoEncoder', class {});
   vi.stubGlobal('document', {
     fonts: { ready: Promise.resolve() },
@@ -53,8 +57,74 @@ describe('video export lifecycle', () => {
     expect(phases).toEqual(['preparing', 'rendering', 'finalizing']);
     expect(progress.at(-1)).toBe(100);
     expect(result.extension).toBe('mp4');
-    expect(result.blob.type).toBe('video/mp4');
+    expect(result.blob?.type).toBe('video/mp4');
     expect(encoder.cancel).not.toHaveBeenCalled();
+  });
+
+  it('streams positional writes and commits only after finalization, without an output blob', async () => {
+    const file = { write: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined), abort: vi.fn() };
+    const progress: number[] = [];
+    const prepareAudio = vi.fn().mockResolvedValue(null);
+    const openFile = vi.fn(async (extension) => {
+      expect(extension).toBe('mp4');
+      expect(prepareAudio).not.toHaveBeenCalled();
+      return file;
+    });
+    encoder.finalize.mockImplementation(async () => {
+      const writer = encoder.target!.getWriter();
+      await writer.write({ type: 'write', position: 16, data: new Uint8Array([1, 2]) });
+      await writer.close();
+      expect(file.close).not.toHaveBeenCalled();
+    });
+    file.close.mockImplementation(async () => { expect(progress.at(-1)).toBe(99); });
+    const result = await exportVideoSequence(scene(), { ...options(), openFile, prepareAudio, onProgress: (p) => progress.push(p) });
+    expect(file.write).toHaveBeenCalledWith({ type: 'write', position: 16, data: new Uint8Array([1, 2]) });
+    expect(file.close).toHaveBeenCalledTimes(1);
+    expect(file.abort).not.toHaveBeenCalled();
+    expect(result.blob).toBeNull();
+    expect(encoder.mp4Options.fastStart).toBe(false);
+    expect(progress.at(-1)).toBe(100);
+  });
+
+  it('uses the actual WebM extension for the file picker when MP4 codecs are unavailable', async () => {
+    const { getFirstEncodableVideoCodec } = await import('mediabunny');
+    vi.mocked(getFirstEncodableVideoCodec).mockResolvedValueOnce(null).mockResolvedValueOnce('vp9');
+    const file = { write: vi.fn(), close: vi.fn().mockResolvedValue(undefined), abort: vi.fn() };
+    const openFile = vi.fn().mockResolvedValue(file);
+    const result = await exportVideoSequence(scene(), { ...options(), openFile });
+    expect(openFile).toHaveBeenCalledWith('webm');
+    expect(result.extension).toBe('webm');
+    expect(result.blob).toBeNull();
+  });
+
+  it.each(['preflight', 'encoding', 'commit'])('discards partial output when %s fails', async (stage) => {
+    const failure = new Error('Disk export failed');
+    const file = { write: vi.fn(), close: vi.fn().mockResolvedValue(undefined), abort: vi.fn().mockResolvedValue(undefined) };
+    if (stage === 'preflight') (document.fonts as any).ready = Promise.reject(failure);
+    if (stage === 'encoding') encoder.add.mockRejectedValueOnce(failure);
+    if (stage === 'commit') file.close.mockRejectedValueOnce(failure);
+    await expect(exportVideoSequence(scene(), { ...options(), openFile: async () => file })).rejects.toThrow(failure);
+    expect(file.abort).toHaveBeenCalledTimes(1);
+    if (stage !== 'commit') expect(file.close).not.toHaveBeenCalled();
+  });
+
+  it('discards a writer returned after cancellation while the picker was open', async () => {
+    const controller = new AbortController();
+    const file = { write: vi.fn(), close: vi.fn(), abort: vi.fn().mockResolvedValue(undefined) };
+    await expect(exportVideoSequence(scene(), { ...options(), signal: controller.signal, openFile: async () => {
+      controller.abort(); return file;
+    } })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(file.abort).toHaveBeenCalledTimes(1);
+    expect(encoder.start).not.toHaveBeenCalled();
+  });
+
+  it('does not mix audio or encode when the destination picker is canceled', async () => {
+    const prepareAudio = vi.fn();
+    await expect(exportVideoSequence(scene(), { ...options(), prepareAudio, openFile: async () => {
+      throw new DOMException('Canceled', 'AbortError');
+    } })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(prepareAudio).not.toHaveBeenCalled();
+    expect(encoder.start).not.toHaveBeenCalled();
   });
 
   it('does not start encoding when already canceled', async () => {
