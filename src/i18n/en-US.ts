@@ -656,6 +656,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'captions.fontSize': 'Size',
   'captions.timing': 'From {from}s to {to}s, using {markers} marker(s).',
   'captions.create': 'Create {count} caption(s)',
+  'captions.layerName': 'Captions',
   'captions.import': 'Import .srt / .vtt',
   'captions.importError': 'No timed captions found in the file.',
   'captions.file': 'File: {name}',
