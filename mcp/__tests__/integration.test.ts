@@ -15,6 +15,12 @@ import { executeBridgeCommand } from '../../src/automation/mcpBridge';
 import { parseProject, serializeProject } from '../../src/project/projectFile';
 import { callSchema } from '../../src/automation/protocol';
 
+/** Every tool the server registers. Add new names here when a task registers a tool. */
+const EXPECTED_TOOLS = [
+  'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
+  'load_project', 'export_video',
+];
+
 describe('MCP and local browser bridge', () => {
   let http: Server;
   let bridge: ReturnType<typeof installAutomationBridge>;
@@ -92,9 +98,8 @@ describe('MCP and local browser bridge', () => {
   const value = (result: any) => JSON.parse(result.content[0].text);
 
   it('negotiates MCP tools and reports an editor only after opting in', async () => {
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
-      'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
-    ]);
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    expect([...names].sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(value(await call('list_windows'))).toEqual({ windows: [] });
     const { windowId } = await windowSession();
     expect(value(await call('list_windows')).windows[0]).toMatchObject({ windowId, name: 'Scene', ready: true });
