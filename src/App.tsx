@@ -1952,7 +1952,11 @@ export default function App() {
         if (video && restoreTime !== undefined) await seekVideo(video, restoreTime);
       }
     },
-    loadProject: (text) => { applyProjectText(text, undefined, false); },
+    loadProject: (text) => {
+      // The agent-loaded project must never be saved over the file the user had open.
+      fileHandleRef.current = undefined;
+      applyProjectText(text, undefined, false);
+    },
     contactSheet: async (frames, { columns, cellWidth }) => {
       const urls: string[] = [];
       for (const f of frames) urls.push(await automationAdapterRef.current!.render(f));

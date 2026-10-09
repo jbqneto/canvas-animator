@@ -1,4 +1,3 @@
-// src/engine/lint.ts
 import type { ActorOverlay, ChartOverlay, TextOverlay } from '../types';
 import { sampleActor } from './actor';
 import { contrastRatio } from './color';

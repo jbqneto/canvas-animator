@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FONT_FAMILY, FONT_FAMILIES, fontCss, loadSceneFonts } from '../fonts';
 
 describe('fontCss', () => {
@@ -28,6 +28,7 @@ describe('fontCss', () => {
 });
 
 describe('loadSceneFonts', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
   it('asks the browser to load each distinct font once', async () => {
     const load = vi.fn(async () => []);
     vi.stubGlobal('document', { fonts: { load } });
@@ -38,12 +39,10 @@ describe('loadSceneFonts', () => {
     ]);
     expect(load).toHaveBeenCalledTimes(2);
     expect(load).toHaveBeenCalledWith('italic 500 84px "Cormorant Garamond", serif');
-    vi.unstubAllGlobals();
   });
   it('does nothing without document.fonts', async () => {
     vi.stubGlobal('document', {});
     await expect(loadSceneFonts([{ fontSize: 10 }])).resolves.toBeUndefined();
-    vi.unstubAllGlobals();
   });
 });
 

@@ -64,7 +64,7 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
 
 1. Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis
-2. Câmera com keyframes (pan/zoom/rotação da cena) + camadas presas à câmera (base para parallax)
+2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
 3. Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir
 4. Repetir/ciclo e tremida por propriedade
 5. Máscara; revelar traços e contornos (quadro branco)

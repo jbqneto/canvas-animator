@@ -139,10 +139,10 @@ describe('MCP and local browser bridge', () => {
     expect(api.getProject().project.content.texts[0].id).toBe('tiny');
     const lint = await call('lint_scene', { windowId });
     expect(lint.isError).not.toBe(true);
-    expect(value(lint).issues.some((i: { rule: string }) => i.rule === 'text-too-small')).toBe(true);
+    expect(value(lint).issues.some((i: { rule: string; objectId?: string }) => i.rule === 'text-too-small' && i.objectId === 'tiny')).toBe(true);
     const described = await call('describe_scene', { windowId });
     expect(described.isError).not.toBe(true);
-    expect(value(described).items.length).toBeGreaterThanOrEqual(1);
+    expect(value(described).items[0].id).toBe('tiny');
   });
 
   it('rejects wrong credentials, foreign origins and rebinding hosts', async () => {

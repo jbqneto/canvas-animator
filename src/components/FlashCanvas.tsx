@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   StickActor,
   DrawingStroke,
@@ -61,7 +61,7 @@ const rotateHandleLocal = (box: LocalBox, scale: number) => ({
 type Vec2Like = { x: number; y: number };
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
 import { onImageLoaded } from '../utils/imageCache';
-import { loadSceneFonts } from '../utils/fonts';
+import { fontCss, loadSceneFonts } from '../utils/fonts';
 import {
   MousePointer,
   Move,
@@ -410,9 +410,13 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   // otherwise the stage keeps showing the previous video frame after a scrub.
   const [assetTick, setAssetTick] = useState(0);
   // Web fonts load lazily: fetch the ones the scene uses, then redraw
+  const fontKey = useMemo(() => [...new Set(texts.map((x) => fontCss(x, x.fontSize)))].sort().join('|'), [texts]);
   useEffect(() => {
-    void loadSceneFonts(texts).then(() => setAssetTick((n) => n + 1));
-  }, [texts]);
+    let cancelled = false;
+    void loadSceneFonts(texts).then(() => { if (!cancelled) setAssetTick((n) => n + 1); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fontKey]);
   useEffect(() => onImageLoaded(() => setAssetTick((t) => t + 1)), []);
   useEffect(() => {
     if (!videoElement) return;

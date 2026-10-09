@@ -3,6 +3,7 @@ import { parseProject } from '../project/projectFile';
 import { translate } from '../i18n';
 import { TEMPLATES } from '../templates/library';
 import { coerceTemplateValues, mergeTemplateOutput } from '../templates/insert';
+import { contactSheetLayout } from '../engine/contactSheet';
 import { defaultValues } from '../templates/types';
 
 export interface AutomationStatus {
@@ -115,7 +116,7 @@ export function createBrowserApi(adapter: AutomationAdapter) {
         fitsTimeline: out.endFrame <= totalFrames,
       };
     },
-    seek:(frame: number) => { validateFrame(frame); adapter.seek(frame); },
+    seek: (frame: number) => { validateFrame(frame); adapter.seek(frame); },
     setPlaying: (playing: boolean) => {
       assertReady();
       if (typeof playing !== 'boolean') throw new Error('INVALID_PLAYBACK');
@@ -137,6 +138,9 @@ export function createBrowserApi(adapter: AutomationAdapter) {
         throw new Error('INVALID_SHEET_OPTIONS');
       }
       if (adapter.status().playing) throw new Error('PLAYBACK_ACTIVE');
+      const { canvas } = JSON.parse(adapter.project()).project;
+      const sheet = contactSheetLayout({ count: frames.length, columns, cellWidth, aspect: canvas.height / canvas.width });
+      if (sheet.width > 16384 || sheet.height > 16384 || sheet.width * sheet.height > 16_000_000) throw new Error('SHEET_TOO_LARGE');
       rendering = true;
       try { return await adapter.contactSheet(frames, { columns, cellWidth }); }
       finally { rendering = false; }
@@ -144,6 +148,7 @@ export function createBrowserApi(adapter: AutomationAdapter) {
     loadProject: (text: unknown) => {
       if (typeof text !== 'string') throw new Error('INVALID_PROJECT');
       const status = adapter.status();
+      if (!status.ready) throw new Error('RECOVERY_PENDING');
       if (status.exporting || job?.state === 'running') throw new Error('EXPORT_IN_PROGRESS');
       if (rendering) throw new Error('RENDER_IN_PROGRESS');
       parseProject(text); // validate before touching the editor

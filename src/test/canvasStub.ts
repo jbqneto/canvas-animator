@@ -1,4 +1,3 @@
-// src/test/canvasStub.ts
 export interface CtxCall {
   name: string;
   args: unknown[];

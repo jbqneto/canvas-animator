@@ -107,5 +107,9 @@ export function migrateChart(raw: any): ChartOverlay {
 
 export function migrateText(raw: any): TextOverlay {
   const motion = migrateMotion(raw ?? {}, { x: 0, y: 0 });
-  return withoutLegacy({ ...raw, text: typeof raw?.text === 'string' ? raw.text : '', ...motion });
+  const text: any = withoutLegacy({ ...raw, text: typeof raw?.text === 'string' ? raw.text : '', ...motion });
+  for (const key of ['letterSpacing', 'fontWeight']) {
+    if (key in text && !(typeof text[key] === 'number' && Number.isFinite(text[key]))) delete text[key];
+  }
+  return text as TextOverlay;
 }

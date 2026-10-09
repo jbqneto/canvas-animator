@@ -98,6 +98,10 @@ describe('migration of the old motion tween', () => {
       { x: 5, y: 6 }
     );
     expect(migrateText(JSON.parse(JSON.stringify(text)))).toEqual(text);
+    const dirty = migrateText({ ...JSON.parse(JSON.stringify(text)), letterSpacing: '4', fontWeight: Number.NaN });
+    expect('letterSpacing' in dirty).toBe(false);
+    expect('fontWeight' in dirty).toBe(false);
+    expect(migrateText({ ...JSON.parse(JSON.stringify(text)), letterSpacing: 2, fontWeight: 700 })).toMatchObject({ letterSpacing: 2, fontWeight: 700 });
     expect(migrateText({ text: 'old', x: 5, y: 6, startFrame: 1, durationFrames: 10 }).base).toMatchObject({ x: 5, y: 6 });
   });
 });

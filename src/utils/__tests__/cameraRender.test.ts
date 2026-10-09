@@ -30,6 +30,19 @@ describe('camera in the renderer', () => {
       expect(scaled(calls)).toBe(false);
     }
   });
+  it('paints the background before the camera transform', () => {
+    const { ctx, calls } = createCanvasStub();
+    renderCompositeFrame(ctx, 1280, 720, 5, scene(zoom2));
+    const fill = calls.findIndex((c) => c.name === 'fillRect');
+    const scale = calls.findIndex((c) => c.name === 'scale' && c.args[0] === 2 && c.args[1] === 2);
+    expect(fill).toBeGreaterThanOrEqual(0);
+    expect(fill).toBeLessThan(scale);
+  });
+  it('still applies the camera on a transparent render', () => {
+    const { ctx, calls } = createCanvasStub();
+    renderCompositeFrame(ctx, 1280, 720, 5, scene(zoom2), { transparent: true });
+    expect(scaled(calls)).toBe(true);
+  });
   it('keeps save/restore balanced', () => {
     const { ctx, calls } = createCanvasStub();
     renderCompositeFrame(ctx, 1280, 720, 5, scene(zoom2));

@@ -1,4 +1,3 @@
-// src/engine/color.ts
 export function parseHex(value: string): [number, number, number] | null {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim());
   if (!m) return null;

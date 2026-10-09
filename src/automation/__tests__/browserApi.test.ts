@@ -69,6 +69,20 @@ describe('browser automation', () => {
     api.setCamera(null);
     expect(adapter.replaceContent.mock.calls[2][0].camera).toBeUndefined();
   });
+  it('refuses to load a project while recovery is pending', () => {
+    const { status, api, adapter } = setup();
+    status.ready = false;
+    expect(() => api.loadProject(adapter.project())).toThrow('RECOVERY_PENDING');
+    expect(adapter.loadProject).not.toHaveBeenCalled();
+  });
+  it('rejects contact sheets that would be too large', async () => {
+    const { api, adapter } = setup();
+    const text = JSON.parse(adapter.project());
+    text.project.canvas = { width: 1080, height: 1920, preset: 'custom' };
+    adapter.project = () => JSON.stringify(text);
+    await expect(api.renderContactSheet(Array.from({ length: 24 }, (_, i) => i + 1), { columns: 1, cellWidth: 960 })).rejects.toThrow('SHEET_TOO_LARGE');
+    expect(adapter.contactSheet).not.toHaveBeenCalled();
+  });
   it('blocks set_camera while recovery is pending', () => {
     const { status, api } = setup();
     status.ready = false;
