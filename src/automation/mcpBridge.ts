@@ -35,6 +35,7 @@ export async function executeBridgeCommand(api: BrowserAutomationApi, command: B
     case 'export_status': return api.exportStatus();
     case 'export_chunk': return api.exportChunk(command.offset, command.length);
     case 'set_camera': flushSync(() => api.setCamera(command.camera)); return api.getStatus();
+    case 'render_contact_sheet': return api.renderContactSheet(command.frames, { columns: command.columns, cellWidth: command.cellWidth });
     case 'list_templates': return api.listTemplates();
     case 'apply_template': {
       let result!: ReturnType<typeof api.applyTemplate>;

@@ -31,6 +31,12 @@ export const commandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('set_camera'), camera: cameraSchema.nullable() }).strict(),
   z.object({ method: z.literal('list_templates') }).strict(),
   z.object({
+    method: z.literal('render_contact_sheet'),
+    frames: z.array(z.number().int().min(1)).min(1).max(24),
+    columns: z.number().int().min(1).max(6).optional(),
+    cellWidth: z.number().int().min(160).max(960).optional(),
+  }).strict(),
+  z.object({
     method: z.literal('apply_template'),
     templateId: z.string().min(1).max(64),
     values: z.record(z.union([z.string().max(2000), z.number()])).optional(),

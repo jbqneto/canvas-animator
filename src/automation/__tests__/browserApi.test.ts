@@ -13,12 +13,31 @@ function setup() {
       videoBg: { type: 'color' as const, color: '#000', opacity: 1, playbackRate: 1 }, content }),
     replaceContent: vi.fn(), seek: vi.fn(), play: vi.fn(), render: vi.fn(async () => 'data:image/png;base64,AA'),
     loadProject: vi.fn(),
+    contactSheet: vi.fn(async () => 'data:image/png;base64,AA'),
     exportVideo: vi.fn(async () => ({ blob: new Blob([new Uint8Array([1, 2, 3])]), extension: 'mp4' })),
   };
   return { status, content, adapter, api: createBrowserApi(adapter) };
 }
 
 describe('browser automation', () => {
+  it('renders a contact sheet through the adapter', async () => {
+    const { api, adapter } = setup();
+    await expect(api.renderContactSheet([1, 30, 60])).resolves.toMatch(/^data:image\/png/);
+    expect(adapter.contactSheet).toHaveBeenCalledWith([1, 30, 60], { columns: 3, cellWidth: 480 });
+  });
+  it('rejects empty, oversized or out-of-range contact sheets', async () => {
+    const { api, adapter } = setup();
+    await expect(api.renderContactSheet([])).rejects.toThrow('INVALID_FRAMES');
+    await expect(api.renderContactSheet(Array.from({ length: 25 }, (_, i) => i + 1))).rejects.toThrow('INVALID_FRAMES');
+    await expect(api.renderContactSheet([1, 999])).rejects.toThrow('INVALID_FRAME');
+    await expect(api.renderContactSheet([1], { columns: 9 })).rejects.toThrow('INVALID_SHEET_OPTIONS');
+    expect(adapter.contactSheet).not.toHaveBeenCalled();
+  });
+  it('refuses to render a contact sheet while playing', async () => {
+    const { status, api } = setup();
+    status.playing = true;
+    await expect(api.renderContactSheet([1, 2])).rejects.toThrow('PLAYBACK_ACTIVE');
+  });
   it('reads detached project data without changing the editor', () => {
     const { api, adapter } = setup();
     api.getProject().project.name = 'Changed';

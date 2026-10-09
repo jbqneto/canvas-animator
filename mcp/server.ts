@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { evenFrames } from '../src/engine/contactSheet';
 import { cameraSchema, type BridgeCommand } from '../src/automation/protocol';
 
 const sessionSchema = z.object({ url: z.string().url(), token: z.string().regex(/^[a-f0-9]{64}$/) });
@@ -110,6 +111,24 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     description: 'Set the virtual camera that moves/zooms/rotates all scene objects (not the background) over time. REPLACES the whole camera; pass camera=null to remove it. base = static pan/zoom/rotation (panX/panY are pixel offsets from the canvas center, zoom 0.05..20, rotation in degrees); tracks = keyframes per property, e.g. a slow push-in: {"tracks":{"zoom":[{"frame":1,"value":1,"easing":"linear"},{"frame":240,"value":1.08}]}}. One undoable edit.',
     inputSchema: { windowId, camera: cameraSchema.nullable() }, annotations: edit,
   }, safe(async ({ windowId, camera }) => text(await call(windowId, { method: 'set_camera', camera }))));
+  server.registerTool('render_contact_sheet', {
+    description: 'Render several frames into ONE PNG grid (each cell labeled #frame) to review a whole animation in a single call. Pass frames explicitly, or count (default 6) evenly spaced between startFrame (default 1) and endFrame (default: last frame). Max 24 frames; columns 1-6 (default 3); cellWidth 160-960 (default 480). Playback must be paused.',
+    inputSchema: {
+      windowId,
+      frames: z.array(z.number().int().min(1)).min(1).max(24).optional(),
+      count: z.number().int().min(1).max(24).optional(),
+      startFrame: z.number().int().min(1).optional(),
+      endFrame: z.number().int().min(1).optional(),
+      columns: z.number().int().min(1).max(6).optional(),
+      cellWidth: z.number().int().min(160).max(960).optional(),
+    },
+    annotations: readOnly,
+  }, safe(async ({ windowId, frames, count, startFrame, endFrame, columns, cellWidth }) => {
+    const list = frames ?? evenFrames(startFrame ?? 1, endFrame ?? (await call(windowId, { method: 'get_status' })).totalFrames, count ?? 6);
+    const url = await call(windowId, { method: 'render_contact_sheet', frames: list, columns, cellWidth });
+    if (typeof url !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(url)) throw new Error('INVALID_RENDER_RESULT');
+    return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
+  }));
   server.registerTool('list_templates', {
     description: 'List the built-in animation templates (id, parameters with defaults/ranges/options). Use apply_template to insert one.',
     inputSchema: { windowId }, annotations: readOnly,

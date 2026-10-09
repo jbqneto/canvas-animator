@@ -19,6 +19,7 @@ import { callSchema } from '../../src/automation/protocol';
 const EXPECTED_TOOLS = [
   'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
   'load_project', 'export_video', 'set_camera', 'list_templates', 'apply_template',
+  'render_contact_sheet',
 ];
 
 describe('MCP and local browser bridge', () => {
@@ -71,6 +72,7 @@ describe('MCP and local browser bridge', () => {
       seek: (frame) => { status.frame = frame; status.playing = false; },
       play: (playing) => { status.playing = playing; },
       loadProject: () => {},
+      contactSheet: async () => 'data:image/png;base64,iVBORw0KGgo=',
       exportVideo: async () => ({ blob: new Blob([new Uint8Array([1, 2, 3])]), extension: 'mp4' }),
       render: async () => 'data:image/png;base64,iVBORw0KGgo=',
     });

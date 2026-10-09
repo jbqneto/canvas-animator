@@ -25,6 +25,8 @@ export interface AutomationAdapter {
   render(frame: number): Promise<string>;
   /** Replace the whole project (settings + content) from .fmproj text, discarding unsaved edits. */
   loadProject(text: string): void;
+  /** Render the given frames into one labeled PNG grid (data URL). */
+  contactSheet(frames: number[], options: { columns: number; cellWidth: number }): Promise<string>;
   /** Render the timeline (or a range) to a video file without the export dialog. */
   exportVideo(options: { format: 'mp4' | 'webm-alpha'; startFrame?: number; endFrame?: number; onProgress: (p: number) => void }): Promise<{ blob: Blob; extension: string }>;
 }
@@ -124,6 +126,19 @@ export function createBrowserApi(adapter: AutomationAdapter) {
       if (adapter.status().playing) throw new Error('PLAYBACK_ACTIVE');
       rendering = true;
       try { return await adapter.render(frame); }
+      finally { rendering = false; }
+    },
+    renderContactSheet: async (frames: number[], options: { columns?: number; cellWidth?: number } = {}) => {
+      if (!Array.isArray(frames) || frames.length < 1 || frames.length > 24) throw new Error('INVALID_FRAMES');
+      frames.forEach(validateFrame);
+      const columns = options.columns ?? 3;
+      const cellWidth = options.cellWidth ?? 480;
+      if (!Number.isInteger(columns) || columns < 1 || columns > 6 || !Number.isInteger(cellWidth) || cellWidth < 160 || cellWidth > 960) {
+        throw new Error('INVALID_SHEET_OPTIONS');
+      }
+      if (adapter.status().playing) throw new Error('PLAYBACK_ACTIVE');
+      rendering = true;
+      try { return await adapter.contactSheet(frames, { columns, cellWidth }); }
       finally { rendering = false; }
     },
     loadProject: (text: unknown) => {

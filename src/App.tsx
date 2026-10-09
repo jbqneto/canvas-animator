@@ -32,6 +32,8 @@ import { parseProject, ProjectFileError, projectNameFromFile, serializeProject }
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
 import { useAutosave } from './project/useAutosave';
+import { composeContactSheet } from './utils/contactSheet';
+import { contactSheetLayout } from './engine/contactSheet';
 import { createBrowserApi, type AutomationAdapter } from './automation/browserApi';
 import { connectMcpBridge, type McpConnectionState } from './automation/mcpBridge';
 import { useMcpSession } from './automation/useMcpSession';
@@ -1951,6 +1953,14 @@ export default function App() {
       }
     },
     loadProject: (text) => { applyProjectText(text, undefined, false); },
+    contactSheet: async (frames, { columns, cellWidth }) => {
+      const urls: string[] = [];
+      for (const f of frames) urls.push(await automationAdapterRef.current!.render(f));
+      const layout = contactSheetLayout({
+        count: frames.length, columns, cellWidth, aspect: canvasDimensions.height / canvasDimensions.width,
+      });
+      return composeContactSheet(urls, frames.map((f) => `#${f}`), layout);
+    },
     exportVideo: async ({ format, startFrame, endFrame, onProgress }) => {
       if (exportControllerRef.current) throw new Error('EXPORT_IN_PROGRESS');
       const controller = new AbortController();
@@ -1982,6 +1992,7 @@ export default function App() {
       play: (playing) => automationAdapterRef.current!.play(playing),
       render: (frame) => automationAdapterRef.current!.render(frame),
       loadProject: (text) => automationAdapterRef.current!.loadProject(text),
+      contactSheet: (frames, options) => automationAdapterRef.current!.contactSheet(frames, options),
       exportVideo: (options) => automationAdapterRef.current!.exportVideo(options),
     });
     window.flashmotion = api;
