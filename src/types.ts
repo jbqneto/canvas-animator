@@ -166,6 +166,13 @@ export interface TextOverlay extends Animated {
   bgColor?: string;
   /** Where the anchor sits on the text line: its start (default) or its middle (captions). */
   align?: 'left' | 'center';
+  /** One of FONT_FAMILIES (src/utils/fonts.ts); unknown names fall back to the default family. */
+  fontFamily?: string;
+  /** 100..900, default 800. */
+  fontWeight?: number;
+  italic?: boolean;
+  /** Extra space between letters, in canvas pixels (0 = none). */
+  letterSpacing?: number;
   /** Made by the captions dialog: exported to .srt with the other captions. */
   role?: 'caption';
   effect: TextEffect;
