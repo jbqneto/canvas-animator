@@ -67,6 +67,9 @@ qualquer editor.
 - IA opcional (Gemini) para imagens e copiloto: os botões aparecem somente se o servidor
   anunciar uma `GEMINI_API_KEY` configurada. Se a API estiver indisponível ou o servidor não tiver
   chave, a interface oculta esses recursos. Uma chave pessoal antiga no navegador não altera essa regra.
+- **Tipografia por texto**: fonte, peso, itálico e espaçamento entre letras em cada texto, com uma lista fechada de famílias.
+- **Câmera virtual**: zoom, pan e rotação da cena com keyframes (move os objetos, não o fundo), aplicada no export, nos quadros renderizados e no MCP (o palco do editor não a mostra).
+- **Modelos "Cartão de data" e "Citação"** na biblioteca, além dos anteriores.
 - Interface em **português (BR)** e **inglês (US)**, escolhida no canto superior direito e lembrada no navegador.
 
 ## Desenvolvimento
@@ -108,8 +111,9 @@ npm run mcp:check    # verifica handshake stdio e ferramentas (após build)
 
 As ferramentas permitem listar janelas, ler o projeto, substituir conteúdo com desfazer e
 controle de revisão, navegar na timeline, reproduzir/pausar e renderizar PNG.
-A conexão exige o servidor local e uma janela conectada. O MCP não salva arquivos nem
-exporta vídeo automaticamente; use a interface para essas operações.
+A conexão exige o servidor local e uma janela conectada. O MCP exporta vídeo direto para um arquivo
+(`export_video`), insere modelos (`apply_template`), move a câmera (`set_camera`) e verifica a cena
+(`render_contact_sheet`, `lint_scene`); salvar o `.fmproj` continua sendo feito pela interface (Ctrl+S).
 Veja configuração, exemplos e limites em [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
 A API JavaScript também continua disponível em `/?automation=1` para agentes com acesso
 a executar código no contexto da página.

@@ -30,6 +30,18 @@ export async function executeBridgeCommand(api: BrowserAutomationApi, command: B
     case 'seek': flushSync(() => api.seek(command.frame)); return api.getStatus();
     case 'set_playing': flushSync(() => api.setPlaying(command.playing)); return api.getStatus();
     case 'render_frame': return api.renderFrame(command.frame);
+    case 'load_project': flushSync(() => api.loadProject(command.file)); return api.getStatus();
+    case 'export_start': return api.startExport({ format: command.format, startFrame: command.startFrame, endFrame: command.endFrame });
+    case 'export_status': return api.exportStatus();
+    case 'export_chunk': return api.exportChunk(command.offset, command.length);
+    case 'set_camera': flushSync(() => api.setCamera(command.camera)); return api.getStatus();
+    case 'render_contact_sheet': return api.renderContactSheet(command.frames, { columns: command.columns, cellWidth: command.cellWidth });
+    case 'list_templates': return api.listTemplates();
+    case 'apply_template': {
+      let result!: ReturnType<typeof api.applyTemplate>;
+      flushSync(() => { result = api.applyTemplate(command.templateId, command.values, command.startFrame); });
+      return { ...result, status: api.getStatus() };
+    }
   }
 }
 

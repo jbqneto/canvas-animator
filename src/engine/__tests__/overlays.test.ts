@@ -54,6 +54,12 @@ describe('charts and texts share the actor motion model', () => {
     expect(hitTestBox(text, box, 5, { x: 30, y: 75 })).toBe(false);
   });
 
+  it('widens the text box by the letter spacing', () => {
+    const plain = textBox({ text: 'ABCD', fontSize: 100 });
+    const spaced = textBox({ text: 'ABCD', fontSize: 100, letterSpacing: 10 });
+    expect(spaced.width - plain.width).toBeCloseTo(40);
+  });
+
   it('can travel a drawn path like an actor', () => {
     const path: MotionPath = {
       id: 'p', name: 'p', points: [{ x: 0, y: 0 }, { x: 100, y: 0 }], smooth: false, closed: false,
@@ -92,6 +98,10 @@ describe('migration of the old motion tween', () => {
       { x: 5, y: 6 }
     );
     expect(migrateText(JSON.parse(JSON.stringify(text)))).toEqual(text);
+    const dirty = migrateText({ ...JSON.parse(JSON.stringify(text)), letterSpacing: '4', fontWeight: Number.NaN });
+    expect('letterSpacing' in dirty).toBe(false);
+    expect('fontWeight' in dirty).toBe(false);
+    expect(migrateText({ ...JSON.parse(JSON.stringify(text)), letterSpacing: 2, fontWeight: 700 })).toMatchObject({ letterSpacing: 2, fontWeight: 700 });
     expect(migrateText({ text: 'old', x: 5, y: 6, startFrame: 1, durationFrames: 10 }).base).toMatchObject({ x: 5, y: 6 });
   });
 });

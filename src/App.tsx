@@ -32,6 +32,8 @@ import { parseProject, ProjectFileError, projectNameFromFile, serializeProject }
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
 import { useAutosave } from './project/useAutosave';
+import { composeContactSheet } from './utils/contactSheet';
+import { contactSheetLayout } from './engine/contactSheet';
 import { createBrowserApi, type AutomationAdapter } from './automation/browserApi';
 import { connectMcpBridge, type McpConnectionState } from './automation/mcpBridge';
 import { useMcpSession } from './automation/useMcpSession';
@@ -67,6 +69,7 @@ import { addToSharedLayer, withoutTarget } from './engine/layers';
 import { TemplateLibraryDialog } from './components/TemplateLibraryDialog';
 import { AiKeyDialog } from './components/AiKeyDialog';
 import type { AnimationTemplate, TemplateValues } from './templates/types';
+import { mergeTemplateOutput } from './templates/insert';
 import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
@@ -1432,30 +1435,8 @@ export default function App() {
       startFrame: currentFrame,
       idPrefix: `tpl-${template.id}-${Date.now()}`,
     });
-    const layer = (type: StudioLayer['type'], id: string, name: string, color: string): StudioLayer => ({
-      id: `layer-${type}-${id}`,
-      name: name.length > 28 ? `${name.slice(0, 27)}…` : name,
-      type,
-      visible: true,
-      locked: false,
-      color,
-      targetId: id,
-    });
-    const newLayers = [
-      ...out.texts.map((x) => layer('text', x.id, x.text, '#10b981')),
-      ...out.charts.map((c) => layer('chart', c.id, c.title, '#0ea5e9')),
-      ...out.actors.map((a) => layer('actor', a.id, a.name, '#f97316')),
-      ...out.paths.map((p) => layer('path', p.id, p.name, '#38bdf8')),
-    ];
     const present = history.presentRef.current;
-    history.pushSnapshot(t('templates.history.insert', { name: t(template.nameKey) }), {
-      ...present,
-      actors: [...present.actors, ...out.actors],
-      charts: [...present.charts, ...out.charts],
-      texts: [...present.texts, ...out.texts],
-      paths: [...present.paths, ...out.paths],
-      layers: [...newLayers, ...present.layers],
-    });
+    history.pushSnapshot(t('templates.history.insert', { name: t(template.nameKey) }), mergeTemplateOutput(present, out));
     if (out.endFrame > totalFrames) setTotalFrames(out.endFrame);
     const first = out.texts[0] ?? out.charts[0] ?? out.actors[0];
     if (first) {
@@ -1827,6 +1808,7 @@ export default function App() {
       paths: [],
       audio: [],
       markers: [],
+      camera: undefined,
       layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path' && l.type !== 'group'),
     });
     setCurrentFrame(1);
@@ -1924,6 +1906,7 @@ export default function App() {
     videoBg,
     videoElement: videoEl,
     fps,
+    camera: history.present.camera,
   });
   const currentFrameRenderParams = () => ({
     width: canvasDimensions.width,
@@ -1969,6 +1952,37 @@ export default function App() {
         if (video && restoreTime !== undefined) await seekVideo(video, restoreTime);
       }
     },
+    loadProject: (text) => {
+      // The agent-loaded project must never be saved over the file the user had open.
+      fileHandleRef.current = undefined;
+      applyProjectText(text, undefined, false);
+    },
+    contactSheet: async (frames, { columns, cellWidth }) => {
+      const urls: string[] = [];
+      for (const f of frames) urls.push(await automationAdapterRef.current!.render(f));
+      const layout = contactSheetLayout({
+        count: frames.length, columns, cellWidth, aspect: canvasDimensions.height / canvasDimensions.width,
+      });
+      return composeContactSheet(urls, frames.map((f) => `#${f}`), layout);
+    },
+    exportVideo: async ({ format, startFrame, endFrame, onProgress }) => {
+      if (exportControllerRef.current) throw new Error('EXPORT_IN_PROGRESS');
+      const controller = new AbortController();
+      exportControllerRef.current = controller;
+      setIsExporting(true); setIsPlaying(false); setExportProgress(0);
+      try {
+        const { blob, extension } = await exportVideoSequence(sceneContent(), {
+          totalFrames, fps, width: canvasDimensions.width, height: canvasDimensions.height,
+          onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame,
+          prepareAudio: () => Promise.resolve(null),
+        });
+        if (!blob) throw new Error('EXPORT_EMPTY');
+        return { blob, extension };
+      } finally {
+        exportControllerRef.current = null;
+        setIsExporting(false);
+      }
+    },
   };
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1981,6 +1995,9 @@ export default function App() {
       seek: (frame) => automationAdapterRef.current!.seek(frame),
       play: (playing) => automationAdapterRef.current!.play(playing),
       render: (frame) => automationAdapterRef.current!.render(frame),
+      loadProject: (text) => automationAdapterRef.current!.loadProject(text),
+      contactSheet: (frames, options) => automationAdapterRef.current!.contactSheet(frames, options),
+      exportVideo: (options) => automationAdapterRef.current!.exportVideo(options),
     });
     window.flashmotion = api;
     const disconnect = mcp ? connectMcpBridge(api, setMcpState, mcpSession!) : undefined;

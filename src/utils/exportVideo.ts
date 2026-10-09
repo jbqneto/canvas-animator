@@ -13,8 +13,10 @@ import {
   ActorOverlay,
   MotionPath,
   StickActor,
+  SceneCamera,
 } from '../types';
 import { sampleActor, trailPoints } from '../engine/actor';
+import { applyCamera, isIdentityCamera, sampleCamera } from '../engine/camera';
 import { arrowPolygon, fittedRadius } from '../engine/shapes';
 import { localFigure, samplePose } from '../engine/stickActor';
 import { polylineUpTo, samplePath } from '../engine/path';
@@ -24,6 +26,7 @@ import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtil
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
+import { fontCss, loadSceneFonts } from './fonts';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -42,6 +45,8 @@ export interface SceneContent {
   videoElement?: HTMLVideoElement | null;
   /** Frame rate of the timeline; built-in effects are timed in seconds (default 24). */
   fps?: number;
+  /** Virtual camera over the objects (not the background). */
+  camera?: SceneCamera;
 }
 
 /** Built-in effect timings were designed at 24 fps: elapsed frames expressed at that rate. */
@@ -52,6 +57,8 @@ export interface RenderOptions {
   showGrid?: boolean;
   /** Skip the stage background (color and video): only the animated elements, with alpha. */
   transparent?: boolean;
+  /** Apply the scene camera (default true). The editor stage turns it off so editing happens in scene space. */
+  camera?: boolean;
 }
 
 /**
@@ -212,9 +219,16 @@ export function renderCompositeFrame(
     if (draw) add(txt.id, 'text', FRONT, draw);
   });
 
+  const camera = options.camera === false ? null : sampleCamera(scene.camera, currentFrame);
+  const moved = !!camera && !isIdentityCamera(camera);
+  if (moved) {
+    ctx.save();
+    applyCamera(ctx, camera, width, height);
+  }
   drawables
     .sort((a, b) => b.depth - a.depth || a.seq - b.seq)
     .forEach((d) => d.draw());
+  if (moved) ctx.restore();
 
   ctx.restore();
 }
@@ -711,7 +725,8 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
 
   // Main Text
   ctx.textAlign = txt.align === 'center' ? 'center' : 'left';
-  ctx.font = `800 ${txt.fontSize}px Plus Jakarta Sans, sans-serif`;
+  ctx.font = fontCss(txt, txt.fontSize);
+  if (txt.letterSpacing) ctx.letterSpacing = `${txt.letterSpacing}px`;
 
   // Optional box behind the text (e.g. captions over video), sized to what is shown
   if (txt.bgColor && displayedText) {
@@ -737,7 +752,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
     const subAlpha = Math.min(1, (elapsed - 6) / 8);
     ctx.globalAlpha = parentAlpha * subAlpha * alpha;
     ctx.fillStyle = '#94a3b8';
-    ctx.font = `500 ${Math.max(12, Math.round(txt.fontSize * 0.45))}px Plus Jakarta Sans, sans-serif`;
+    ctx.font = fontCss({ ...txt, fontWeight: 500, italic: false }, Math.max(12, Math.round(txt.fontSize * 0.45)));
     ctx.fillText(txt.subtitle, 0, offsetY + txt.fontSize * 0.7);
   }
 
@@ -916,6 +931,7 @@ export async function exportVideoSequence(
     throwIfAborted(signal);
     // Everything the frames depend on must be ready before encoding starts
     await withAbort(document.fonts.ready, signal);
+    await loadSceneFonts(scene.texts);
     await withAbort(preloadSceneImages(scene), signal);
     throwIfAborted(signal);
 
@@ -1016,6 +1032,7 @@ export async function renderFrameToDataURL(params: {
   frame: number;
   scene: SceneContent;
 }): Promise<string> {
+  await loadSceneFonts(params.scene.texts);
   await document.fonts.ready;
   await preloadSceneImages(params.scene);
   const canvas = document.createElement('canvas');

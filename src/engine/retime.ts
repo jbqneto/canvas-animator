@@ -73,6 +73,15 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
     images: scene.images.map((img) => ({ ...img, ...retimeSpan(img.startFrame, img.durationFrames, k) })),
     // Audio timing inside the clip is already in seconds; only where it starts moves
     audio: scene.audio?.map((c) => ({ ...c, startFrame: retimeFrame(c.startFrame, k) })),
+    camera: scene.camera && {
+      ...scene.camera,
+      tracks: {
+        panX: retimeTrack(scene.camera.tracks.panX, k),
+        panY: retimeTrack(scene.camera.tracks.panY, k),
+        zoom: retimeTrack(scene.camera.tracks.zoom, k),
+        rotation: retimeTrack(scene.camera.tracks.rotation, k),
+      },
+    },
     markers: scene.markers && [...markers.values()].sort((a, b) => a.frame - b.frame),
   };
   return { scene: retimed, totalFrames: newTotal };

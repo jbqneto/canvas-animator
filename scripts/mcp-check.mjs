@@ -10,7 +10,9 @@ const transport = new StdioClientTransport({
 try {
   await client.connect(transport);
   const { tools } = await client.listTools();
-  const expected = ['list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame'];
-  if (JSON.stringify(tools.map((tool) => tool.name)) !== JSON.stringify(expected)) throw new Error('Unexpected MCP tools');
+  const expected = ['list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
+    'load_project', 'export_video', 'set_camera', 'list_templates', 'apply_template', 'render_contact_sheet', 'lint_scene', 'describe_scene'];
+  const names = tools.map((tool) => tool.name);
+  if (JSON.stringify([...names].sort()) !== JSON.stringify([...expected].sort())) throw new Error('Unexpected MCP tools');
   console.log(`MCP stdio: handshake e ${tools.length} ferramentas verificados.`);
 } finally { await client.close(); }

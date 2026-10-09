@@ -1,10 +1,12 @@
 import type { UserPose } from '../utils/userPoses';
-import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, StickActor, VideoBackground } from '../types';
+import type { ActorOverlay, AudioClip, Marker, CanvasDimensions, HistorySnapshot, SceneCamera, StickActor, VideoBackground } from '../types';
 import { CANVAS_PRESETS } from '../types';
 import { t } from '../i18n';
 import { migrateChart, migrateText } from '../engine/overlays';
 import { normalizeShape } from '../engine/shapes';
 import { migrateFrameSticks, withStickLayers } from '../engine/stickActor';
+import { clampZoom } from '../engine/camera';
+import { EASING_NAMES, type EasingName, type Track } from '../engine/keyframes';
 
 export const PROJECT_FORMAT = 'flashmotion-project';
 export const PROJECT_VERSION = 1;
@@ -78,6 +80,9 @@ function validateContent(content: Record<string, any>) {
   if (content.frames !== undefined && !isRecord(content.frames)) {
     throw new ProjectFileError(t('project.error.invalidContent'));
   }
+  if (content.camera !== undefined && !isRecord(content.camera)) {
+    throw new ProjectFileError(t('project.error.invalidContent'));
+  }
 }
 
 /** Markers with a valid frame, sorted; missing labels/colors get defaults. */
@@ -91,6 +96,33 @@ function parseMarkers(value: unknown): Marker[] {
       color: typeof m.color === 'string' ? m.color : '#f59e0b',
     }))
     .sort((a, b) => a.frame - b.frame);
+}
+
+/** A camera with defaults for missing fields; junk keys are dropped and zoom is limited. */
+function parseCamera(value: unknown): SceneCamera | undefined {
+  if (!isRecord(value)) return undefined;
+  const base = isRecord(value.base) ? value.base : {};
+  const tracks = isRecord(value.tracks) ? value.tracks : {};
+  const track = (raw: unknown): Track<number> | undefined => {
+    const keys = asArray<any>(raw)
+      .filter((k) => isRecord(k) && Number.isFinite(k.frame) && Number.isFinite(k.value))
+      .map((k) => ({
+        frame: Math.max(1, Math.round(k.frame)),
+        value: k.value as number,
+        ...(EASING_NAMES.includes(k.easing as EasingName) ? { easing: k.easing as EasingName } : {}),
+      }))
+      .sort((a, b) => a.frame - b.frame);
+    return keys.length ? keys : undefined;
+  };
+  return {
+    base: {
+      panX: asNumber(base.panX, 0),
+      panY: asNumber(base.panY, 0),
+      zoom: clampZoom(asNumber(base.zoom, 1)),
+      rotation: asNumber(base.rotation, 0),
+    },
+    tracks: { panX: track(tracks.panX), panY: track(tracks.panY), zoom: track(tracks.zoom), rotation: track(tracks.rotation) },
+  };
 }
 
 /** Audio clips with the timing fields repaired; clips without data are dropped. */
@@ -223,6 +255,7 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       paths: asArray(c.paths),
       audio: parseAudio(c.audio),
       markers: parseMarkers(c.markers),
+      camera: parseCamera(c.camera),
       layers: withStickLayers(asArray(c.layers), sticks),
       groups: asArray(c.groups),
     },

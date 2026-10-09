@@ -14,6 +14,14 @@ import { createBrowserApi, type AutomationStatus } from '../../src/automation/br
 import { executeBridgeCommand } from '../../src/automation/mcpBridge';
 import { parseProject, serializeProject } from '../../src/project/projectFile';
 import { callSchema } from '../../src/automation/protocol';
+import { createText } from '../../src/engine/overlays';
+
+/** Every tool the server registers. Add new names here when a task registers a tool. */
+const EXPECTED_TOOLS = [
+  'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
+  'load_project', 'export_video', 'set_camera', 'list_templates', 'apply_template',
+  'render_contact_sheet', 'lint_scene', 'describe_scene',
+];
 
 describe('MCP and local browser bridge', () => {
   let http: Server;
@@ -64,6 +72,9 @@ describe('MCP and local browser bridge', () => {
       replaceContent: (next) => { content = next as typeof content; status.dirty = true; },
       seek: (frame) => { status.frame = frame; status.playing = false; },
       play: (playing) => { status.playing = playing; },
+      loadProject: () => {},
+      contactSheet: async () => 'data:image/png;base64,iVBORw0KGgo=',
+      exportVideo: async () => ({ blob: new Blob([new Uint8Array([1, 2, 3])]), extension: 'mp4' }),
       render: async () => 'data:image/png;base64,iVBORw0KGgo=',
     });
     const socket = new WebSocket(url.replace('http:', 'ws:') + '/api/automation/ws', { origin: url });
@@ -90,9 +101,8 @@ describe('MCP and local browser bridge', () => {
   const value = (result: any) => JSON.parse(result.content[0].text);
 
   it('negotiates MCP tools and reports an editor only after opting in', async () => {
-    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
-      'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
-    ]);
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    expect([...names].sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(value(await call('list_windows'))).toEqual({ windows: [] });
     const { windowId } = await windowSession();
     expect(value(await call('list_windows')).windows[0]).toMatchObject({ windowId, name: 'Scene', ready: true });
@@ -117,6 +127,22 @@ describe('MCP and local browser bridge', () => {
       { type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgo=' },
     ]);
     expect(parseProject(JSON.stringify(api.getProject())).content.markers).toHaveLength(1);
+  });
+
+  it('lints and describes the open scene on the server from get_project', async () => {
+    const { windowId, api } = await windowSession();
+    const read = value(await call('get_project', { windowId }));
+    const content = read.file.project.content;
+    content.texts.push(createText({ id: 'tiny', text: 'Hi', fontSize: 10, color: '#ffffff', effect: 'none', visible: true, startFrame: 1, durationFrames: 30 }, { x: 960, y: 540 }));
+    const edited = await call('replace_content', { windowId, content, expectedRevision: read.revision });
+    expect(edited.isError).not.toBe(true);
+    expect(api.getProject().project.content.texts[0].id).toBe('tiny');
+    const lint = await call('lint_scene', { windowId });
+    expect(lint.isError).not.toBe(true);
+    expect(value(lint).issues.some((i: { rule: string; objectId?: string }) => i.rule === 'text-too-small' && i.objectId === 'tiny')).toBe(true);
+    const described = await call('describe_scene', { windowId });
+    expect(described.isError).not.toBe(true);
+    expect(value(described).items[0].id).toBe('tiny');
   });
 
   it('rejects wrong credentials, foreign origins and rebinding hosts', async () => {

@@ -51,6 +51,14 @@ describe('retiming to another frame rate', () => {
     expect(seconds(s.markers![0].frame, 30)).toBeCloseTo(3);
   });
 
+  it('retimes the camera tracks and leaves the base alone', () => {
+    const camera = { base: { panX: 1, panY: 2, zoom: 1, rotation: 0 }, tracks: { zoom: [{ frame: 1, value: 1 }, { frame: 25, value: 2 }] } };
+    const { scene: s } = retimeScene({ ...scene(), camera }, 96, 24, 48);
+    expect(s.camera!.tracks.zoom!.map((k) => k.frame)).toEqual([1, 49]);
+    expect(s.camera!.base).toEqual(camera.base);
+    expect(retimeScene(scene(), 96, 24, 48).scene.camera).toBeUndefined();
+  });
+
   it('moves pose keys of stick figures with the rest of the animation', () => {
     const stick = togglePoseKey(togglePoseKey(createStickActor(createDefaultStickFigure('s', 's', 0, 0), 1, 72), 25), 49);
     const { scene: s } = retimeScene({ ...scene(), sticks: [stick] }, 96, 24, 30);

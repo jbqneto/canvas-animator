@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TEMPLATES, parseDataRows } from '../library';
+import { TEMPLATES, parseDataRows, wrapText } from '../library';
 import { defaultValues, TemplateContext } from '../types';
 import { sampleActor } from '../../engine/actor';
 import { translate } from '../../i18n';
@@ -56,6 +56,51 @@ describe('template library', () => {
     const out = list.build({ items: 'a\nb\n\nc', stagger: 0.5, color: '#fff', seconds: 6 }, ctx());
     expect(out.texts.map((t) => t.startFrame)).toEqual([10, 22, 34]);
     expect(out.texts.every((t) => t.startFrame + t.durationFrames === out.endFrame)).toBe(true);
+  });
+
+  it('dateCard types the date in a monospace font with an uppercase label', () => {
+    const tpl = TEMPLATES.find((t) => t.id === 'dateCard')!;
+    const out = tpl.build({ ...defaultValues(tpl, (k) => k), date: '12.10.2013', label: 'Campo Grande' }, ctx());
+    const date = out.texts.find((t) => t.text === '12.10.2013')!;
+    expect(date.effect).toBe('typewriter');
+    expect(date.fontFamily).toBe('IBM Plex Mono');
+    expect(out.texts.some((t) => t.text === 'CAMPO GRANDE' && t.fontFamily === 'Inter' && (t.letterSpacing ?? 0) > 0)).toBe(true);
+    expect(out.actors).toHaveLength(1);
+  });
+});
+
+describe('wrapText', () => {
+  it('wraps greedily by word', () => {
+    expect(wrapText('one two three four', 9)).toEqual(['one two', 'three', 'four']);
+  });
+  it('keeps a word longer than the limit on its own line and ignores extra spaces', () => {
+    expect(wrapText('  a   supercalifragilistic b ', 5)).toEqual(['a', 'supercalifragilistic', 'b']);
+  });
+  it('returns no lines for empty text', () => {
+    expect(wrapText('   ', 10)).toEqual([]);
+  });
+});
+
+describe('quote template', () => {
+  const tpl = TEMPLATES.find((t) => t.id === 'quote')!;
+  const long = 'When we face the sun, we get a tan. When we face Jesus in the Eucharist, we become saints.';
+  for (const size of [ctx(), ctx({ width: 1080, height: 1920 })]) {
+    it(`stacks several centered lines inside the canvas (${size.width}×${size.height})`, () => {
+      const out = tpl.build({ ...defaultValues(tpl, (k) => k), quote: long, author: 'Carlo Acutis' }, size);
+      const lines = out.texts.filter((t) => t.fontFamily === 'Cormorant Garamond');
+      expect(lines.length).toBeGreaterThan(1);
+      for (const o of [...out.texts, ...out.actors]) {
+        const mid = sampleActor(o, Math.round(o.startFrame + o.durationFrames / 2));
+        expect(mid.y).toBeGreaterThan(0);
+        expect(mid.y).toBeLessThan(size.height);
+      }
+      expect(lines.every((l) => l.italic && l.align === 'center')).toBe(true);
+    });
+  }
+  it('renders nothing for an empty quote but keeps the author', () => {
+    const out = tpl.build({ ...defaultValues(tpl, (k) => k), quote: '', author: 'X' }, ctx());
+    expect(out.texts.filter((t) => t.fontFamily === 'Cormorant Garamond')).toHaveLength(0);
+    expect(out.texts.some((t) => t.text === 'X')).toBe(true);
   });
 });
 
