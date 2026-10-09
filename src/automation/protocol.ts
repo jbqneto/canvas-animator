@@ -8,6 +8,11 @@ export const commandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('seek'), frame: z.number().int().min(1) }).strict(),
   z.object({ method: z.literal('set_playing'), playing: z.boolean() }).strict(),
   z.object({ method: z.literal('render_frame'), frame: z.number().int().min(1) }).strict(),
+  z.object({ method: z.literal('load_project'), file: z.string().min(2).max(45 * 1024 * 1024) }).strict(),
+  z.object({ method: z.literal('export_start'), format: z.enum(['mp4', 'webm-alpha']).optional(),
+    startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional() }).strict(),
+  z.object({ method: z.literal('export_status') }).strict(),
+  z.object({ method: z.literal('export_chunk'), offset: z.number().int().min(0), length: z.number().int().min(1).max(16 * 1024 * 1024) }).strict(),
 ]);
 export type BridgeCommand = z.infer<typeof commandSchema>;
 export const callSchema = z.object({ windowId: z.string().uuid(), command: commandSchema }).strict();

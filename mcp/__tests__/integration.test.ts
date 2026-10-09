@@ -64,6 +64,8 @@ describe('MCP and local browser bridge', () => {
       replaceContent: (next) => { content = next as typeof content; status.dirty = true; },
       seek: (frame) => { status.frame = frame; status.playing = false; },
       play: (playing) => { status.playing = playing; },
+      loadProject: () => {},
+      exportVideo: async () => ({ blob: new Blob([new Uint8Array([1, 2, 3])]), extension: 'mp4' }),
       render: async () => 'data:image/png;base64,iVBORw0KGgo=',
     });
     const socket = new WebSocket(url.replace('http:', 'ws:') + '/api/automation/ws', { origin: url });

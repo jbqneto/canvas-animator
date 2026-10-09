@@ -12,6 +12,8 @@ function setup() {
       canvas: { width: 1280, height: 720, preset: 'custom' },
       videoBg: { type: 'color' as const, color: '#000', opacity: 1, playbackRate: 1 }, content }),
     replaceContent: vi.fn(), seek: vi.fn(), play: vi.fn(), render: vi.fn(async () => 'data:image/png;base64,AA'),
+    loadProject: vi.fn(),
+    exportVideo: vi.fn(async () => ({ blob: new Blob([new Uint8Array([1, 2, 3])]), extension: 'mp4' })),
   };
   return { status, content, adapter, api: createBrowserApi(adapter) };
 }
@@ -67,5 +69,23 @@ describe('browser automation', () => {
     await expect(render).rejects.toThrow('IMAGE_LOAD_FAILED');
     api.seek(2);
     expect(adapter.seek).toHaveBeenCalledExactlyOnceWith(2);
+  });
+});
+
+describe('background export and project loading', () => {
+  it('runs an export job and serves its bytes in base64 chunks', async () => {
+    const { api } = setup();
+    const job = api.startExport({ format: 'mp4' });
+    expect(job.state).toBe('running');
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(api.exportStatus()).toMatchObject({ state: 'done', size: 3, extension: 'mp4' });
+    expect(api.exportChunk(0, 2)).toEqual({ offset: 0, size: 3, data: 'AQI=' });
+    expect(api.exportChunk(2, 10).data).toBe('Aw==');
+  });
+  it('validates project text before loading it', () => {
+    const { api, adapter } = setup();
+    expect(() => api.loadProject('{}')).toThrow();
+    expect(adapter.loadProject).not.toHaveBeenCalled();
   });
 });

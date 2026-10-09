@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -73,6 +74,37 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     const url = await call(windowId, { method: 'render_frame', frame });
     if (typeof url !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(url)) throw new Error('INVALID_RENDER_RESULT');
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
+  }));
+  server.registerTool('load_project', {
+    description: 'Open a .fmproj file from an absolute path into the selected editor, replacing the whole project (name, FPS, canvas, duration and content). Unsaved edits in that window are discarded (save first with Ctrl+S if needed).',
+    inputSchema: { windowId, path: z.string().min(1).describe('Absolute path of the .fmproj file on this computer') }, annotations: edit,
+  }, safe(async ({ windowId, path }) => {
+    if (!isAbsolute(path)) throw new Error('ABSOLUTE_PATH_REQUIRED');
+    const file = await readFile(path, 'utf8');
+    return text(await call(windowId, { method: 'load_project', file }));
+  }));
+  server.registerTool('export_video', {
+    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path on this computer. Waits until the export finishes (it may take a while for long timelines).',
+    inputSchema: { windowId, outputPath: z.string().min(1), format: z.enum(['mp4', 'webm-alpha']).optional(),
+      startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional() }, annotations: edit,
+  }, safe(async ({ windowId, outputPath, format, startFrame, endFrame }) => {
+    if (!isAbsolute(outputPath)) throw new Error('ABSOLUTE_PATH_REQUIRED');
+    await call(windowId, { method: 'export_start', format, startFrame, endFrame });
+    let status: any;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1000));
+      status = await call(windowId, { method: 'export_status' });
+      if (status?.state === 'error') throw new Error(`EXPORT_FAILED: ${status.error}`);
+      if (status?.state === 'done') break;
+    }
+    const parts: Buffer[] = [];
+    for (let offset = 0; offset < status.size; offset += 8 * 1024 * 1024) {
+      const chunk = await call(windowId, { method: 'export_chunk', offset, length: 8 * 1024 * 1024 });
+      parts.push(Buffer.from(chunk.data, 'base64'));
+    }
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, Buffer.concat(parts));
+    return text({ outputPath, bytes: status.size, extension: status.extension });
   }));
   return server;
 }

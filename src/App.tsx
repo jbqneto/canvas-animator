@@ -1969,6 +1969,25 @@ export default function App() {
         if (video && restoreTime !== undefined) await seekVideo(video, restoreTime);
       }
     },
+    loadProject: (text) => { applyProjectText(text, undefined, false); },
+    exportVideo: async ({ format, startFrame, endFrame, onProgress }) => {
+      if (exportControllerRef.current) throw new Error('EXPORT_IN_PROGRESS');
+      const controller = new AbortController();
+      exportControllerRef.current = controller;
+      setIsExporting(true); setIsPlaying(false); setExportProgress(0);
+      try {
+        const { blob, extension } = await exportVideoSequence(sceneContent(), {
+          totalFrames, fps, width: canvasDimensions.width, height: canvasDimensions.height,
+          onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame,
+          prepareAudio: () => Promise.resolve(null),
+        });
+        if (!blob) throw new Error('EXPORT_EMPTY');
+        return { blob, extension };
+      } finally {
+        exportControllerRef.current = null;
+        setIsExporting(false);
+      }
+    },
   };
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1981,6 +2000,8 @@ export default function App() {
       seek: (frame) => automationAdapterRef.current!.seek(frame),
       play: (playing) => automationAdapterRef.current!.play(playing),
       render: (frame) => automationAdapterRef.current!.render(frame),
+      loadProject: (text) => automationAdapterRef.current!.loadProject(text),
+      exportVideo: (options) => automationAdapterRef.current!.exportVideo(options),
     });
     window.flashmotion = api;
     const disconnect = mcp ? connectMcpBridge(api, setMcpState, mcpSession!) : undefined;
