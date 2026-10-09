@@ -13,8 +13,10 @@ import {
   ActorOverlay,
   MotionPath,
   StickActor,
+  SceneCamera,
 } from '../types';
 import { sampleActor, trailPoints } from '../engine/actor';
+import { applyCamera, isIdentityCamera, sampleCamera } from '../engine/camera';
 import { arrowPolygon, fittedRadius } from '../engine/shapes';
 import { localFigure, samplePose } from '../engine/stickActor';
 import { polylineUpTo, samplePath } from '../engine/path';
@@ -43,6 +45,8 @@ export interface SceneContent {
   videoElement?: HTMLVideoElement | null;
   /** Frame rate of the timeline; built-in effects are timed in seconds (default 24). */
   fps?: number;
+  /** Virtual camera over the objects (not the background). */
+  camera?: SceneCamera;
 }
 
 /** Built-in effect timings were designed at 24 fps: elapsed frames expressed at that rate. */
@@ -53,6 +57,8 @@ export interface RenderOptions {
   showGrid?: boolean;
   /** Skip the stage background (color and video): only the animated elements, with alpha. */
   transparent?: boolean;
+  /** Apply the scene camera (default true). The editor stage turns it off so editing happens in scene space. */
+  camera?: boolean;
 }
 
 /**
@@ -213,9 +219,16 @@ export function renderCompositeFrame(
     if (draw) add(txt.id, 'text', FRONT, draw);
   });
 
+  const camera = options.camera === false ? null : sampleCamera(scene.camera, currentFrame);
+  const moved = !!camera && !isIdentityCamera(camera);
+  if (moved) {
+    ctx.save();
+    applyCamera(ctx, camera, width, height);
+  }
   drawables
     .sort((a, b) => b.depth - a.depth || a.seq - b.seq)
     .forEach((d) => d.draw());
+  if (moved) ctx.restore();
 
   ctx.restore();
 }
