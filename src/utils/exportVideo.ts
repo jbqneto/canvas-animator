@@ -24,6 +24,7 @@ import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtil
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
+import { fontCss } from './fonts';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -711,7 +712,8 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
 
   // Main Text
   ctx.textAlign = txt.align === 'center' ? 'center' : 'left';
-  ctx.font = `800 ${txt.fontSize}px Plus Jakarta Sans, sans-serif`;
+  ctx.font = fontCss(txt, txt.fontSize);
+  if (txt.letterSpacing) ctx.letterSpacing = `${txt.letterSpacing}px`;
 
   // Optional box behind the text (e.g. captions over video), sized to what is shown
   if (txt.bgColor && displayedText) {
@@ -737,7 +739,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
     const subAlpha = Math.min(1, (elapsed - 6) / 8);
     ctx.globalAlpha = parentAlpha * subAlpha * alpha;
     ctx.fillStyle = '#94a3b8';
-    ctx.font = `500 ${Math.max(12, Math.round(txt.fontSize * 0.45))}px Plus Jakarta Sans, sans-serif`;
+    ctx.font = fontCss({ ...txt, fontWeight: 500, italic: false }, Math.max(12, Math.round(txt.fontSize * 0.45)));
     ctx.fillText(txt.subtitle, 0, offsetY + txt.fontSize * 0.7);
   }
 
