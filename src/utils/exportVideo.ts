@@ -24,7 +24,7 @@ import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtil
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
-import { fontCss } from './fonts';
+import { fontCss, loadSceneFonts } from './fonts';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -918,6 +918,7 @@ export async function exportVideoSequence(
     throwIfAborted(signal);
     // Everything the frames depend on must be ready before encoding starts
     await withAbort(document.fonts.ready, signal);
+    await loadSceneFonts(scene.texts);
     await withAbort(preloadSceneImages(scene), signal);
     throwIfAborted(signal);
 
@@ -1018,6 +1019,7 @@ export async function renderFrameToDataURL(params: {
   frame: number;
   scene: SceneContent;
 }): Promise<string> {
+  await loadSceneFonts(params.scene.texts);
   await document.fonts.ready;
   await preloadSceneImages(params.scene);
   const canvas = document.createElement('canvas');

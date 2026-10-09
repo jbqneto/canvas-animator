@@ -61,6 +61,7 @@ const rotateHandleLocal = (box: LocalBox, scale: number) => ({
 type Vec2Like = { x: number; y: number };
 import { renderCompositeFrame, resolveObjectLayer } from '../utils/exportVideo';
 import { onImageLoaded } from '../utils/imageCache';
+import { loadSceneFonts } from '../utils/fonts';
 import {
   MousePointer,
   Move,
@@ -408,6 +409,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
   // Assets finish loading asynchronously (video seeks, images): bump a counter to redraw,
   // otherwise the stage keeps showing the previous video frame after a scrub.
   const [assetTick, setAssetTick] = useState(0);
+  // Web fonts load lazily: fetch the ones the scene uses, then redraw
+  useEffect(() => {
+    void loadSceneFonts(texts).then(() => setAssetTick((n) => n + 1));
+  }, [texts]);
   useEffect(() => onImageLoaded(() => setAssetTick((t) => t + 1)), []);
   useEffect(() => {
     if (!videoElement) return;
