@@ -5,6 +5,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { evenFrames } from '../src/engine/contactSheet';
+import { describeScene } from '../src/engine/describe';
+import { lintScene } from '../src/engine/lint';
 import { cameraSchema, type BridgeCommand } from '../src/automation/protocol';
 
 const sessionSchema = z.object({ url: z.string().url(), token: z.string().regex(/^[a-f0-9]{64}$/) });
@@ -128,6 +130,20 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     const url = await call(windowId, { method: 'render_contact_sheet', frames: list, columns, cellWidth });
     if (typeof url !== 'string' || !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(url)) throw new Error('INVALID_RENDER_RESULT');
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
+  }));
+  server.registerTool('lint_scene', {
+    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p), text outside the 5% safe area, low text/background contrast, empty texts, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
+    inputSchema: { windowId }, annotations: readOnly,
+  }, safe(async ({ windowId }) => {
+    const { file } = await call(windowId, { method: 'get_project' });
+    return text({ issues: lintScene(file.project) });
+  }));
+  server.registerTool('describe_scene', {
+    description: 'Compact timeline summary (what appears when, in seconds, plus markers, duration and whether a camera exists). Much cheaper than get_project for orienting yourself.',
+    inputSchema: { windowId }, annotations: readOnly,
+  }, safe(async ({ windowId }) => {
+    const { file } = await call(windowId, { method: 'get_project' });
+    return text(describeScene(file.project));
   }));
   server.registerTool('list_templates', {
     description: 'List the built-in animation templates (id, parameters with defaults/ranges/options). Use apply_template to insert one.',
