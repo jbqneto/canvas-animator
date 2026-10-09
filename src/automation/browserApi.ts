@@ -62,6 +62,14 @@ export function createBrowserApi(adapter: AutomationAdapter) {
       const validated = parseProject(JSON.stringify(file));
       adapter.replaceContent(validated.content);
     },
+    /** Replaces the whole scene camera (null removes it) as one undoable step. */
+    setCamera: (camera: unknown) => {
+      assertReady();
+      const file = JSON.parse(adapter.project());
+      if (camera === null) delete file.project.content.camera;
+      else file.project.content.camera = camera;
+      adapter.replaceContent(parseProject(JSON.stringify(file)).content);
+    },
     seek: (frame: number) => { validateFrame(frame); adapter.seek(frame); },
     setPlaying: (playing: boolean) => {
       assertReady();

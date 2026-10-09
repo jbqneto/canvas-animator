@@ -34,6 +34,7 @@ export async function executeBridgeCommand(api: BrowserAutomationApi, command: B
     case 'export_start': return api.startExport({ format: command.format, startFrame: command.startFrame, endFrame: command.endFrame });
     case 'export_status': return api.exportStatus();
     case 'export_chunk': return api.exportChunk(command.offset, command.length);
+    case 'set_camera': flushSync(() => api.setCamera(command.camera)); return api.getStatus();
   }
 }
 

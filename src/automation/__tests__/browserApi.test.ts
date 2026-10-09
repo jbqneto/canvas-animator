@@ -41,6 +41,21 @@ describe('browser automation', () => {
     expect(adapter.replaceContent).not.toHaveBeenCalled();
   });
 
+  it('sets, repairs and removes the camera', () => {
+    const { api, adapter } = setup();
+    api.setCamera({ tracks: { zoom: [{ frame: 1, value: 1 }, { frame: 60, value: 1.2 }] } });
+    expect(adapter.replaceContent.mock.calls[0][0].camera?.tracks.zoom).toHaveLength(2);
+    api.setCamera({ base: { zoom: 0 } });
+    expect(adapter.replaceContent.mock.calls[1][0].camera?.base.zoom).toBe(0.05);
+    api.setCamera(null);
+    expect(adapter.replaceContent.mock.calls[2][0].camera).toBeUndefined();
+  });
+  it('blocks set_camera while recovery is pending', () => {
+    const { status, api } = setup();
+    status.ready = false;
+    expect(() => api.setCamera(null)).toThrow('RECOVERY_PENDING');
+  });
+
   it('blocks changes while recovery or export is pending', () => {
     const { status, content, api, adapter } = setup();
     status.ready = false;

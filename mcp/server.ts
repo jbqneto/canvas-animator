@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import type { BridgeCommand } from '../src/automation/protocol';
+import { cameraSchema, type BridgeCommand } from '../src/automation/protocol';
 
 const sessionSchema = z.object({ url: z.string().url(), token: z.string().regex(/^[a-f0-9]{64}$/) });
 
@@ -106,6 +106,10 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     await writeFile(outputPath, Buffer.concat(parts));
     return text({ outputPath, bytes: status.size, extension: status.extension });
   }));
+  server.registerTool('set_camera', {
+    description: 'Set the virtual camera that moves/zooms/rotates all scene objects (not the background) over time. REPLACES the whole camera; pass camera=null to remove it. base = static pan/zoom/rotation (panX/panY are pixel offsets from the canvas center, zoom 0.05..20, rotation in degrees); tracks = keyframes per property, e.g. a slow push-in: {"tracks":{"zoom":[{"frame":1,"value":1,"easing":"linear"},{"frame":240,"value":1.08}]}}. One undoable edit.',
+    inputSchema: { windowId, camera: cameraSchema.nullable() }, annotations: edit,
+  }, safe(async ({ windowId, camera }) => text(await call(windowId, { method: 'set_camera', camera }))));
   return server;
 }
 
