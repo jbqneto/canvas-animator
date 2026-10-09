@@ -471,7 +471,104 @@ const dateCard: AnimationTemplate = {
   },
 };
 
-export const TEMPLATES: AnimationTemplate[] = [title, lowerThird, bulletList, bigNumber, chartReveal, callout, dateCard];
+/** Greedy word wrap; a word longer than the limit keeps its own line. */
+export function wrapText(text: string, maxChars: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (current && current.length + 1 + word.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+// ================= QUOTE =================
+const quote: AnimationTemplate = {
+  id: 'quote',
+  category: 'titles',
+  nameKey: 'templates.quote.name',
+  descriptionKey: 'templates.quote.description',
+  params: [
+    { key: 'quote', type: 'text', labelKey: 'templates.param.quote', defaultKey: 'templates.quote.defaultQuote' },
+    { key: 'author', type: 'text', labelKey: 'templates.param.author', defaultKey: 'templates.quote.defaultAuthor' },
+    colorParam('#E8B65A'),
+    secondsParam(6),
+  ],
+  build(values, ctx) {
+    const span = spanOf(ctx, num(values.seconds, 6));
+    const unit = Math.min(ctx.width / 1920, ctx.height / 1080);
+    const size = Math.round(84 * unit);
+    const cx = Math.round(ctx.width / 2);
+    // Cormorant is narrow: ~0.45 em per character; use 80% of the width
+    const maxChars = Math.max(8, Math.floor((ctx.width * 0.8) / (size * 0.45)));
+    const lines = wrapText(str(values.quote), maxChars);
+    const lineHeight = size * 1.25;
+    const top = ctx.height * 0.44 - ((lines.length - 1) * lineHeight) / 2;
+    const stagger = Math.round(ctx.fps * 0.25);
+    const texts: TextOverlay[] = lines.map((line, i) => {
+      const delay = Math.min(i * stagger, Math.floor(span / 3));
+      return enterExit(
+        createText(
+          {
+            ...baseText(`${ctx.idPrefix}-q${i}`, line, size, '#F3EAD8', ctx.startFrame + delay, span - delay),
+            fontFamily: 'Cormorant Garamond',
+            fontWeight: 500,
+            italic: true,
+            align: 'center',
+          },
+          { x: cx, y: Math.round(top + i * lineHeight) }
+        ),
+        ctx,
+        'slideUp',
+        'fade',
+        size * 0.3
+      );
+    });
+    const bottom = top + Math.max(0, lines.length - 1) * lineHeight;
+    const authorSize = Math.max(12, Math.round(26 * unit));
+    const author = enterExit(
+      createText(
+        {
+          ...baseText(`${ctx.idPrefix}-author`, str(values.author).toUpperCase(), authorSize, str(values.color), ctx.startFrame + Math.floor(span / 3), span - Math.floor(span / 3)),
+          fontFamily: 'Inter',
+          fontWeight: 600,
+          letterSpacing: Math.round(authorSize * 0.4),
+          align: 'center',
+        },
+        { x: cx, y: Math.round(bottom + size * 1.25) }
+      ),
+      ctx,
+      'fade',
+      'fade',
+      0
+    );
+    const rule = enterExit(
+      createShapeActor({
+        id: `${ctx.idPrefix}-rule`,
+        name: str(values.author),
+        style: { ...defaultShapeStyle('rect', str(values.color)), radius: 0 },
+        width: Math.round(260 * unit),
+        height: Math.max(2, Math.round(2 * unit)),
+        x: cx,
+        y: Math.round(bottom + size * 0.75),
+        startFrame: ctx.startFrame + Math.floor(span / 3),
+        durationFrames: span - Math.floor(span / 3),
+      }),
+      ctx,
+      'fade',
+      'fade',
+      0
+    );
+    return { ...emptyOutput(), texts: [...texts, author], actors: [rule], endFrame: ctx.startFrame + span };
+  },
+};
+
+export const TEMPLATES: AnimationTemplate[] = [title, lowerThird, bulletList, bigNumber, chartReveal, callout, dateCard, quote];
 
 export function buildTemplate(template: AnimationTemplate, values: TemplateValues, ctx: TemplateContext) {
   return template.build(values, ctx);
