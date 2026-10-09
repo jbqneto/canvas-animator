@@ -45,6 +45,7 @@ import {
 import { ActorInspector } from './ActorInspector';
 import { MotionInspector, motionInputClass } from './MotionInspector';
 import { SHAPE_TYPES } from '../engine/shapes';
+import { DEFAULT_FONT_FAMILY, FONT_FAMILIES } from '../utils/fonts';
 import { PathInspector } from './PathInspector';
 import { StickPosePanel } from './StickPosePanel';
 import { MessageKey, shortMonth, useI18n } from '../i18n';
@@ -768,7 +769,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       <input
                         type="range"
                         min="16"
-                        max="72"
+                        max="200"
                         value={activeText.fontSize}
                         onChange={(e) =>
                           onUpdateText({
@@ -788,6 +789,52 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         className="w-8 h-8 rounded bg-transparent border-0 cursor-pointer"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <label className="text-[10px] text-neutral-400">
+                      {t('inspector.text.fontFamily')}
+                      <select
+                        value={activeText.fontFamily ?? DEFAULT_FONT_FAMILY}
+                        onChange={(e) => onUpdateText({ ...activeText, fontFamily: e.target.value })}
+                        className="mt-1 w-full rounded bg-neutral-800 px-1 py-1 text-xs text-neutral-100"
+                      >
+                        {FONT_FAMILIES.map((family) => (
+                          <option key={family} value={family}>{family}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-neutral-400">
+                      {t('inspector.text.fontWeight')}
+                      <select
+                        value={activeText.fontWeight ?? 800}
+                        onChange={(e) => onUpdateText({ ...activeText, fontWeight: Number(e.target.value) })}
+                        className="mt-1 w-full rounded bg-neutral-800 px-1 py-1 text-xs text-neutral-100"
+                      >
+                        {[400, 500, 600, 700, 800].map((w) => (
+                          <option key={w} value={w}>{w}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+                      <input
+                        type="checkbox"
+                        checked={!!activeText.italic}
+                        onChange={(e) => onUpdateText({ ...activeText, italic: e.target.checked })}
+                      />
+                      {t('inspector.text.italic')}
+                    </label>
+                    <label className="text-[10px] text-neutral-400">
+                      {t('inspector.text.letterSpacing')} {activeText.letterSpacing ?? 0}px
+                      <input
+                        type="range"
+                        min="-2"
+                        max="40"
+                        value={activeText.letterSpacing ?? 0}
+                        onChange={(e) => onUpdateText({ ...activeText, letterSpacing: Number(e.target.value) })}
+                        className="w-full accent-sky-500"
+                      />
+                    </label>
                   </div>
 
                   {/* Alignment & background box */}
