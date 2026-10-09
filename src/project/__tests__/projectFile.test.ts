@@ -160,3 +160,32 @@ describe('project file', () => {
     expect(parseProject(JSON.stringify(data)).canvas.preset).toBe('custom');
   });
 });
+
+describe('camera in the project file', () => {
+  const state = (camera?: unknown) => ({
+    name: 'T', fps: 24, totalFrames: 60,
+    canvas: { width: 1280, height: 720, preset: 'custom' as const },
+    videoBg: { type: 'color' as const, color: '#000', opacity: 1, playbackRate: 1 },
+    content: { layers: [], frames: {}, charts: [], texts: [], images: [], actors: [], paths: [], camera } as any,
+  });
+
+  it('round-trips a camera', () => {
+    const camera = { base: { panX: 0, panY: 0, zoom: 1, rotation: 0 }, tracks: { zoom: [{ frame: 1, value: 1, easing: 'linear' }, { frame: 60, value: 1.2 }] } };
+    expect(parseProject(serializeProject(state(camera))).content.camera).toEqual(camera);
+  });
+  it('has no camera when the file has none', () => {
+    expect(parseProject(serializeProject(state())).content.camera).toBeUndefined();
+  });
+  it('rejects a camera that is not an object', () => {
+    expect(() => parseProject(serializeProject(state('zoom')))).toThrow();
+  });
+  it('repairs bad values and drops junk keys', () => {
+    const camera = {
+      base: { zoom: 0, panX: 'a' },
+      tracks: { zoom: [{ frame: 9, value: 2 }, { frame: 'x', value: 1 }, { frame: 1, value: Number.NaN }, { frame: 3, value: 1.5, easing: 'bogus' }] },
+    };
+    const parsed = parseProject(serializeProject(state(camera))).content.camera!;
+    expect(parsed.base).toEqual({ panX: 0, panY: 0, zoom: 0.05, rotation: 0 });
+    expect(parsed.tracks.zoom).toEqual([{ frame: 3, value: 1.5 }, { frame: 9, value: 2 }]);
+  });
+});
