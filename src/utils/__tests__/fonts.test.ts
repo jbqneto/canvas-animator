@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_FONT_FAMILY, FONT_FAMILIES, fontCss, loadSceneFonts } from '../fonts';
+import { charWidthEm, DEFAULT_FONT_FAMILY, FONT_FAMILIES, fontCss, loadSceneFonts } from '../fonts';
 
 describe('fontCss', () => {
   it('keeps the historical look by default', () => {
@@ -51,4 +51,15 @@ describe('index.html', () => {
     const html = readFileSync('index.html', 'utf8');
     for (const family of FONT_FAMILIES) expect(html).toContain(family.replace(/ /g, '+'));
   });
+
+describe('charWidthEm', () => {
+  it('estimates glyph width per family', () => {
+    expect(charWidthEm('IBM Plex Mono')).toBe(0.6);
+    expect(charWidthEm('JetBrains Mono')).toBe(0.6);
+    expect(charWidthEm('Cormorant Garamond')).toBe(0.45);
+    expect(charWidthEm('Inter')).toBe(0.55);
+    expect(charWidthEm(undefined)).toBe(0.55);
+    expect(charWidthEm('anything else')).toBe(0.55);
+  });
+});
 });

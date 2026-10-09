@@ -32,6 +32,12 @@ export function fontCss(spec: FontSpec, size: number): string {
   return `${spec.italic ? 'italic ' : ''}${weight} ${size}px "${family}", ${stack}`;
 }
 
+/** Average glyph width in em, per family: used to estimate text boxes without a canvas to measure on. */
+export function charWidthEm(fontFamily?: string): number {
+  if (fontFamily && MONO.has(fontFamily)) return 0.6;
+  return fontFamily === 'Cormorant Garamond' ? 0.45 : 0.55;
+}
+
 /** Makes the browser fetch the fonts a scene uses, so the first rendered frame already has them. */
 export async function loadSceneFonts(texts: ReadonlyArray<FontSpec & { fontSize: number }>): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts?.load) return;

@@ -104,4 +104,13 @@ describe('migration of the old motion tween', () => {
     expect(migrateText({ ...JSON.parse(JSON.stringify(text)), letterSpacing: 2, fontWeight: 700 })).toMatchObject({ letterSpacing: 2, fontWeight: 700 });
     expect(migrateText({ text: 'old', x: 5, y: 6, startFrame: 1, durationFrames: 10 }).base).toMatchObject({ x: 5, y: 6 });
   });
+
+  it('sizes the text box by the font family', () => {
+    const base = { text: 'ABCDEFGHIJ', fontSize: 100 };
+    const narrow = textBox({ ...base, fontFamily: 'Cormorant Garamond' }).width;
+    const normal = textBox(base).width;
+    const mono = textBox({ ...base, fontFamily: 'IBM Plex Mono' }).width;
+    expect(narrow).toBeLessThan(normal);
+    expect(mono).toBeGreaterThan(normal);
+  });
 });

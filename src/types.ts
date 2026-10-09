@@ -171,6 +171,8 @@ export interface TextOverlay extends Animated {
   /** 100..900, default 800. */
   fontWeight?: number;
   italic?: boolean;
+  /** Typewriter effect: show the blinking `|` while typing (default true). */
+  typewriterCursor?: boolean;
   /** Extra space between letters, in canvas pixels (0 = none). */
   letterSpacing?: number;
   /** Made by the captions dialog: exported to .srt with the other captions. */

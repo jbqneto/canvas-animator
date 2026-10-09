@@ -5,6 +5,7 @@
 import type { Animated, ChartOverlay, IntroEasing, TextOverlay } from '../types';
 import type { EasingName, Track, Vec2 } from './keyframes';
 import { LocalBox, staticMotion } from './actor';
+import { charWidthEm } from '../utils/fonts';
 
 type Content<T> = Omit<T, keyof Animated> & Pick<Animated, 'startFrame' | 'durationFrames'>;
 
@@ -24,8 +25,8 @@ export function chartBox(chart: Pick<ChartOverlay, 'width' | 'height'>): LocalBo
 }
 
 /** Approximate text box (measuring would need a canvas): the baseline starts at the anchor. */
-export function textBox(text: Pick<TextOverlay, 'text' | 'fontSize' | 'align' | 'letterSpacing'>): LocalBox {
-  const width = Math.max(160, text.text.length * (text.fontSize * 0.55 + (text.letterSpacing ?? 0)));
+export function textBox(text: Pick<TextOverlay, 'text' | 'fontSize' | 'align' | 'letterSpacing' | 'fontFamily'>): LocalBox {
+  const width = Math.max(160, text.text.length * (text.fontSize * charWidthEm(text.fontFamily) + (text.letterSpacing ?? 0)));
   const height = text.fontSize * 1.5;
   const x = text.align === 'center' ? -width / 2 - 8 : -8;
   return { x, y: -height + 6, width: width + 16, height: height + 8 };

@@ -421,6 +421,7 @@ const dateCard: AnimationTemplate = {
         {
           ...baseText(`${ctx.idPrefix}-date`, date, dateSize, '#F3EAD8', ctx.startFrame, span),
           effect: 'typewriter',
+          typewriterCursor: false,
           fontFamily: 'IBM Plex Mono',
           fontWeight: 400,
         },

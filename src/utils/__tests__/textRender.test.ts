@@ -30,4 +30,20 @@ describe('text rendering', () => {
     expect(calls).toContainEqual({ name: 'set:font', args: ['italic 500 84px "Cormorant Garamond", serif'] });
     expect(calls).toContainEqual({ name: 'set:letterSpacing', args: ['6px'] });
   });
+
+  describe('typewriter cursor', () => {
+    const typed = (over: Partial<TextOverlay> = {}) => text({ text: 'ABCDEFGH', effect: 'typewriter', ...over });
+    const shown = (calls: { name: string; args: unknown[] }[]) => calls.filter((c) => c.name === 'fillText').map((c) => c.args[0]);
+    it('shows the blinking cursor while typing by default', () => {
+      const { ctx, calls } = createCanvasStub();
+      renderCompositeFrame(ctx, 1280, 720, 5, scene([typed()])); // 4 elapsed frames = 2 characters
+      expect(shown(calls)).toContain('AB|');
+    });
+    it('hides the cursor when typewriterCursor is false', () => {
+      const { ctx, calls } = createCanvasStub();
+      renderCompositeFrame(ctx, 1280, 720, 5, scene([typed({ typewriterCursor: false })]));
+      expect(shown(calls)).toContain('AB');
+      expect(shown(calls)).not.toContain('AB|');
+    });
+  });
 });

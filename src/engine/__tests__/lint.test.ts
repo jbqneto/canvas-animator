@@ -47,4 +47,12 @@ describe('lintScene', () => {
   it('reports the object id', () => {
     expect(lintScene(input([text({ id: 'abc', fontSize: 10 })]))[0].objectId).toBe('abc');
   });
+
+  it('accepts spaced uppercase labels at 24 px (1080p) but not smaller, mixed-case or unspaced ones', () => {
+    const label = (over: Partial<TextOverlay>) => text({ text: 'CAMPO GRANDE', fontSize: 24, letterSpacing: 10, ...over });
+    expect(rules(input([label({})]))).not.toContain('text-too-small');
+    expect(rules(input([label({ fontSize: 20 })]))).toContain('text-too-small');
+    expect(rules(input([label({ text: 'Campo Grande' })]))).toContain('text-too-small');
+    expect(rules(input([label({ letterSpacing: 0 })]))).toContain('text-too-small');
+  });
 });
