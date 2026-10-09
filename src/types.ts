@@ -382,6 +382,12 @@ export interface SelectedObjectRef {
   id: string;
 }
 
+/** Virtual camera over the scene objects (not the background). Pan is an offset from the canvas center, in pixels. */
+export interface SceneCamera {
+  base: { panX: number; panY: number; zoom: number; rotation: number };
+  tracks: { panX?: Track<number>; panY?: Track<number>; zoom?: Track<number>; rotation?: Track<number> };
+}
+
 export interface HistorySnapshot {
   description: string;
   layers: StudioLayer[];
@@ -395,6 +401,7 @@ export interface HistorySnapshot {
   markers?: Marker[];
   /** Stick figures (older projects kept a copy per frame in `frames`; they are migrated here). */
   sticks?: StickActor[];
+  camera?: SceneCamera;
   /**
    * Frame rate and timeline length this snapshot was made for. Set when the frame rate changes, so
    * undo/redo also restores them (the scene is rescaled with them).
