@@ -7,3 +7,5 @@ console.log('\nClaude Code (execute na pasta deste projeto):');
 console.log(`claude mcp add --scope local --transport stdio flashmotion -- ${quote(process.execPath)} ${quote(entry)}`);
 console.log('\nClaude Desktop (adicione a mcpServers na configuração existente):');
 console.log(JSON.stringify({ mcpServers: { flashmotion: { command: process.execPath, args: [entry] } } }, null, 2));
+console.log('\nPastas permitidas para load_project/export_video: a pasta do projeto e a pasta temporária.');
+console.log('Para liberar outras, acrescente `--allow-root <pasta>` (repetível) aos argumentos acima ou defina FLASHMOTION_MCP_ROOTS.');

@@ -79,7 +79,7 @@ instalação e autosave. Não configure a ponte para uma interface de rede públ
 | `set_playing` | `windowId`, `playing` | Inicia/pausa a reprodução. |
 | `render_frame` | `windowId`, `frame` | Imagem PNG nativa do MCP, sem grade ou seleção do editor. |
 | `load_project` | `windowId`, `path` (absoluto) | Substitui o projeto inteiro (nome, FPS, canvas, duração e conteúdo) pelo `.fmproj` lido do caminho. Alterações não salvas dessa janela são descartadas. |
-| `export_video` | `windowId`, `outputPath` (absoluto), `format` (`mp4` ou `webm-alpha`, opcional), `startFrame` e `endFrame` (opcionais, intervalo inclusivo) | Renderiza a linha do tempo (ou o trecho), grava o arquivo no caminho indicado e aguarda o fim da exportação. Retorna `outputPath`, `bytes` e `extension`. As exportações via MCP ainda não incluem áudio. |
+| `export_video` | `windowId`, `outputPath` (absoluto), `format` (`mp4` ou `webm-alpha`, opcional), `overwrite` (opcional), `startFrame` e `endFrame` (opcionais, intervalo inclusivo) | Renderiza a linha do tempo (ou o trecho), grava o arquivo no caminho indicado (extensão compatível, dentro de uma pasta permitida) e aguarda o fim da exportação. Retorna `outputPath`, `bytes` e `extension`. As exportações via MCP ainda não incluem áudio. |
 | `set_camera` | `windowId`, `camera` (objeto ou `null`) | Substitui a câmera virtual inteira como um passo desfazível (`base` e `tracks`; campos `panX`/`panY` em pixels a partir do centro do canvas, `zoom` de 0.05 a 20, `rotation` em graus; cada keyframe tem a forma `{frame, value, easing?}`). `null` remove a câmera. Move os objetos, não o fundo. |
 | `render_contact_sheet` | `windowId`, `frames` ou `count` (padrão 6), `startFrame`, `endFrame`, `columns` (1–6, padrão 3), `cellWidth` (160–960, padrão 480) | Um PNG em grade, uma célula por frame, rotulada com o número do frame (máximo 24). Exige reprodução pausada. |
 | `lint_scene` | `windowId` | Verifica problemas antes de exportar: texto pequeno demais, fora da área segura, contraste baixo, textos vazios, objetos após o fim da linha do tempo. Retorna `{ issues }` (lista vazia = sem problemas). |
@@ -130,6 +130,7 @@ O palco do editor mostra a cena **sem** a câmera (para editar no espaço da cen
 - `COMMAND_TIMEOUT_RESULT_UNKNOWN` / `WINDOW_DISCONNECTED_RESULT_UNKNOWN`: o resultado
   pode ter sido aplicado. Leia o estado antes de repetir uma edição.
 - `ABSOLUTE_PATH_REQUIRED`: `load_project` e `export_video` exigem caminho absoluto.
+- `PATH_NOT_ALLOWED`, `FILE_NOT_READABLE`, `INVALID_OUTPUT_EXTENSION`, `OUTPUT_EXISTS`: veja Segurança.
 
 Há no máximo 16 conexões WebSocket e uma chamada em andamento por janela. O timeout
 é 30 s, e o limite de payload da ponte é 50 MiB. Um timeout desconecta a janela; ela tenta
@@ -151,11 +152,20 @@ com `Sec-Fetch-Site: same-origin`. Requisições de origem externa são rejeitad
 
 ### Segurança
 
-`load_project` e `export_video` aceitam qualquer caminho absoluto no computador local. A ponte
-roda com as permissões do usuário que executou `npm run local`, então o agente pode ler qualquer
-arquivo `.fmproj` que esse usuário consiga ler e gravar o vídeo em qualquer pasta onde ele tenha
-permissão de escrita (as pastas que faltarem são criadas). Não há lista de pastas permitidas:
-quem controla o agente controla esses caminhos.
+`load_project` e `export_video` só acessam pastas permitidas. Por padrão são a pasta do projeto e a
+pasta temporária do sistema; inclua outras com `--allow-root <pasta>` (repetível) nos argumentos do
+servidor MCP ou com a variável `FLASHMOTION_MCP_ROOTS` (pastas separadas por `:` no Linux/macOS e `;`
+no Windows). Só valem caminhos absolutos; links simbólicos são resolvidos antes da checagem.
+
+- `load_project`: o arquivo precisa estar numa pasta permitida, ser um arquivo comum `.fmproj` ou `.json`
+  e ter até 45 MiB. Falhas retornam `PATH_NOT_ALLOWED` ou `FILE_NOT_READABLE`, sem detalhar o motivo.
+- `export_video`: a extensão precisa casar com o formato (`.mp4` ou `.webm`), o destino precisa estar numa
+  pasta permitida e não pode ser um link simbólico. Um arquivo existente só é substituído com
+  `overwrite: true` (senão `OUTPUT_EXISTS`). O vídeo é gravado em um arquivo `.tmp` e renomeado ao
+  final, e o caminho é validado antes e depois da exportação.
+
+Exemplo: `claude mcp add --scope local --transport stdio flashmotion -- <node> <projeto>/dist/mcp.mjs --allow-root ~/Videos`.
+Mesmo assim, o servidor roda com as permissões do usuário: não dê a pastas sensíveis o status de permitidas.
 
 ## Editor online e agente local
 

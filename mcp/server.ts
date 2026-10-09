@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -8,6 +8,7 @@ import { evenFrames } from '../src/engine/contactSheet';
 import { describeScene } from '../src/engine/describe';
 import { lintScene } from '../src/engine/lint';
 import { cameraSchema, type BridgeCommand } from '../src/automation/protocol';
+import { resolveAllowedRoots, resolveReadable, resolveWritable } from './paths';
 
 const sessionSchema = z.object({ url: z.string().url(), token: z.string().regex(/^[a-f0-9]{64}$/) });
 
@@ -35,7 +36,9 @@ export function createBridgeClient(sessionFile: string) {
   };
 }
 
-export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClient>) {
+/** `roots` limits where load_project may read and export_video may write (default: see resolveAllowedRoots). */
+export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClient>, options: { roots?: string[] } = {}) {
+  const roots = options.roots ?? resolveAllowedRoots(process.argv, process.env, fileURLToPath(new URL('../', import.meta.url)));
   const server = new McpServer({ name: 'flashmotion', version: '1.0.0' });
   const windowId = z.string().uuid().describe('Window ID from list_windows. Always select the intended editor explicitly.');
   const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
@@ -79,19 +82,21 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
   }));
   server.registerTool('load_project', {
-    description: 'Open a .fmproj file from an absolute path into the selected editor, replacing the whole project (name, FPS, canvas, duration and content). Unsaved edits in that window are discarded (save first with Ctrl+S if needed).',
+    description: 'Open a .fmproj (or .json) file from an absolute path into the selected editor, replacing the whole project (name, FPS, canvas, duration and content). Unsaved edits in that window are discarded (save first with Ctrl+S if needed). The file must be inside an allowed folder (the project folder, the system temp folder, or one added with --allow-root / FLASHMOTION_MCP_ROOTS) and at most 45 MiB.',
     inputSchema: { windowId, path: z.string().min(1).describe('Absolute path of the .fmproj file on this computer') }, annotations: edit,
   }, safe(async ({ windowId, path }) => {
     if (!isAbsolute(path)) throw new Error('ABSOLUTE_PATH_REQUIRED');
-    const file = await readFile(path, 'utf8');
+    const file = await readFile(await resolveReadable(path, roots), 'utf8');
     return text(await call(windowId, { method: 'load_project', file }));
   }));
   server.registerTool('export_video', {
-    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path on this computer. Waits until the export finishes (it may take a while for long timelines).',
-    inputSchema: { windowId, outputPath: z.string().min(1), format: z.enum(['mp4', 'webm-alpha']).optional(),
+    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path. The extension must match the format (.mp4 / .webm); the path must be inside an allowed folder (the project folder, the system temp folder, or one added with --allow-root / FLASHMOTION_MCP_ROOTS); an existing file is only replaced with overwrite=true. The result has no audio. Waits until the export finishes (it may take a while for long timelines).',
+    inputSchema: { windowId, outputPath: z.string().min(1), format: z.enum(['mp4', 'webm-alpha']).optional(), overwrite: z.boolean().optional(),
       startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional() }, annotations: edit,
-  }, safe(async ({ windowId, outputPath, format, startFrame, endFrame }) => {
+  }, safe(async ({ windowId, outputPath, format, overwrite, startFrame, endFrame }) => {
     if (!isAbsolute(outputPath)) throw new Error('ABSOLUTE_PATH_REQUIRED');
+    // Validate before the (slow) export so a bad path fails fast
+    await resolveWritable(outputPath, format ?? 'mp4', roots, overwrite);
     await call(windowId, { method: 'export_start', format, startFrame, endFrame });
     let status: any;
     for (;;) {
@@ -105,9 +110,18 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
       const chunk = await call(windowId, { method: 'export_chunk', offset, length: 8 * 1024 * 1024 });
       parts.push(Buffer.from(chunk.data, 'base64'));
     }
-    await mkdir(dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, Buffer.concat(parts));
-    return text({ outputPath, bytes: status.size, extension: status.extension });
+    // Check again after the export (the folder may have changed meanwhile), then write atomically
+    const final = await resolveWritable(outputPath, format ?? 'mp4', roots, overwrite);
+    await mkdir(dirname(final), { recursive: true });
+    const temp = `${final}.tmp-${process.pid}`;
+    try {
+      await writeFile(temp, Buffer.concat(parts), { flag: 'wx' });
+      await rename(temp, final);
+    } catch (error) {
+      await rm(temp, { force: true });
+      throw error;
+    }
+    return text({ outputPath: final, bytes: status.size, extension: status.extension });
   }));
   server.registerTool('set_camera', {
     description: 'Set the virtual camera that moves/zooms/rotates all scene objects (not the background) over time. REPLACES the whole camera; pass camera=null to remove it. base = static pan/zoom/rotation (panX/panY are pixel offsets from the canvas center, zoom 0.05..20, rotation in degrees); tracks = keyframes per property, e.g. a slow push-in: {"tracks":{"zoom":[{"frame":1,"value":1,"easing":"linear"},{"frame":240,"value":1.08}]}}. One undoable edit.',
@@ -132,7 +146,7 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
   }));
   server.registerTool('lint_scene', {
-    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p), text outside the 5% safe area, low text/background contrast, empty texts, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
+    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
     inputSchema: { windowId }, annotations: readOnly,
   }, safe(async ({ windowId }) => {
     const { file } = await call(windowId, { method: 'get_project' });

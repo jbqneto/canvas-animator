@@ -108,6 +108,14 @@ describe('MCP and local browser bridge', () => {
     expect(value(await call('list_windows')).windows[0]).toMatchObject({ windowId, name: 'Scene', ready: true });
   });
 
+  it('refuses load_project/export_video outside the allowed folders before touching the editor', async () => {
+    const windowId = '00000000-0000-4000-8000-000000000000';
+    expect(await call('load_project', { windowId, path: '/etc/passwd' })).toMatchObject({ isError: true, content: [{ text: 'PATH_NOT_ALLOWED' }] });
+    expect(await call('export_video', { windowId, outputPath: '/etc/flashmotion.mp4' })).toMatchObject({ isError: true, content: [{ text: 'PATH_NOT_ALLOWED' }] });
+    expect(await call('export_video', { windowId, outputPath: path.join(folder, 'clip.avi') })).toMatchObject({ isError: true, content: [{ text: 'INVALID_OUTPUT_EXTENSION' }] });
+    expect(await call('load_project', { windowId, path: 'relative.fmproj' })).toMatchObject({ isError: true, content: [{ text: 'ABSOLUTE_PATH_REQUIRED' }] });
+  });
+
   it('edits the real protocol scene, rejects stale revisions, controls playback and returns MCP images', async () => {
     const { windowId, api } = await windowSession();
     const read = value(await call('get_project', { windowId }));
