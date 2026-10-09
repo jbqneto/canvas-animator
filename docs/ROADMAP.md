@@ -54,6 +54,10 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 - [x] T28 — Legendas a partir do roteiro (uma por linha, no tempo dos marcadores) + texto centralizado e com fundo
 - [x] T29 — Legendas: importar .srt/.vtt (tempo exato do arquivo) e baixar as legendas do projeto em .srt
 - [x] T30 — Todas as legendas numa camada só ("Legendas"): vários clipes na mesma linha, como no Flash
+- [x] T31 — Tipografia por texto (família, peso, itálico, espaçamento) com lista fechada de fontes
+- [x] T32 — Câmera virtual (zoom/pan/rotação por keyframes) aplicada em exportação, `render_frame` e MCP (`set_camera`)
+- [x] T33 — Modelos "Cartão de data" e "Citação"; MCP `list_templates` / `apply_template`
+- [x] T34 — Verificação: `render_contact_sheet`, `lint_scene`, `describe_scene`
 
 ## Próximos passos sugeridos
 
@@ -232,3 +236,7 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   rolagem vertical sincronizada com a lista de camadas. Posições dentro dela continuam em % da largura do
   conteúdo; medidas de arrasto usam a largura da régua (`trackWidth()`). Unidade salva em
   `localStorage['flashmotion.timeUnit']` (padrão: segundos). Máx. 36.000 quadros.
+- Câmera virtual (`engine/camera.ts`, `set_camera`): keyframes em `tracks`, pan/zoom/rotação em `base`. Move os
+  objetos, não o fundo. O palco do editor ignora a câmera (a prévia no palco usa `screenToScene`, tarefa futura);
+  `render_frame`, contact sheet e export a aplicam.
+- Fontes (`utils/fonts.ts`): só `FONT_FAMILIES`. Nome desconhecido cai na família padrão.

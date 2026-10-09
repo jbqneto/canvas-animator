@@ -78,6 +78,14 @@ instalação e autosave. Não configure a ponte para uma interface de rede públ
 | `seek` | `windowId`, `frame` | Pausa e move o cursor; frames inteiros de 1 até `totalFrames`. |
 | `set_playing` | `windowId`, `playing` | Inicia/pausa a reprodução. |
 | `render_frame` | `windowId`, `frame` | Imagem PNG nativa do MCP, sem grade ou seleção do editor. |
+| `load_project` | `windowId`, `path` (absoluto) | Substitui o projeto inteiro (nome, FPS, canvas, duração e conteúdo) pelo `.fmproj` lido do caminho. Alterações não salvas dessa janela são descartadas. |
+| `export_video` | `windowId`, `outputPath` (absoluto), `format` (`mp4` ou `webm-alpha`, opcional), `startFrame` e `endFrame` (opcionais, intervalo inclusivo) | Renderiza a linha do tempo (ou o trecho), grava o arquivo no caminho indicado e aguarda o fim da exportação. Retorna `outputPath`, `bytes` e `extension`. |
+| `set_camera` | `windowId`, `camera` (objeto ou `null`) | Substitui a câmera virtual inteira como um passo desfazível (`base` com pan, zoom e rotação; `tracks` com keyframes). `null` remove a câmera. Move os objetos, não o fundo. |
+| `render_contact_sheet` | `windowId`, `frames` ou `count` (padrão 6), `startFrame`, `endFrame`, `columns` (1–6, padrão 3), `cellWidth` (160–960, padrão 480) | Um PNG em grade, uma célula por frame, rotulada com o número do frame (máximo 24). Exige reprodução pausada. |
+| `lint_scene` | `windowId` | Verifica problemas antes de exportar: texto pequeno demais, fora da área segura, contraste baixo, textos vazios, objetos após o fim da linha do tempo. Retorna `{ issues }` (lista vazia = sem problemas). |
+| `describe_scene` | `windowId` | Resumo compacto da linha do tempo: o que aparece e quando (em segundos), marcadores, duração e se há câmera. |
+| `list_templates` | `windowId` | Lista os modelos com id, parâmetros, valores padrão e limites. |
+| `apply_template` | `windowId`, `templateId`, `values` (opcional), `startFrame` (opcional) | Insere o modelo como objetos editáveis, numa única edição desfazível. Começa no frame atual se `startFrame` não for informado. Retorna `fitsTimeline=false` quando o modelo termina depois do fim do projeto. |
 
 Fluxo de edição:
 
@@ -100,6 +108,17 @@ A validação reaproveita o parser de `.fmproj`: verifica estruturas e migra ver
 mas não valida integralmente cada campo de cada objeto. Use `src/types.ts` e os construtores
 em `src/engine/` para criar conteúdo válido.
 
+## Fluxo recomendado para animar com o Claude
+
+1. `list_windows` → escolha a janela; `describe_scene` para se orientar.
+2. `list_templates` → `apply_template` (cartão de data, citação, título…) em vez de escrever JSON à mão.
+3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo).
+4. Ajustes finos com `get_project` → `replace_content` (use `fontFamily`, `fontWeight`, `italic`, `letterSpacing` em textos; famílias: Plus Jakarta Sans, Inter, Cormorant Garamond, JetBrains Mono, IBM Plex Mono).
+5. `render_contact_sheet` (6 quadros) para revisar tudo de uma vez; `render_frame` para um quadro em detalhe.
+6. `lint_scene` antes de exportar; `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
+
+O palco do editor mostra a cena **sem** a câmera (para editar no espaço da cena); a câmera aparece em `render_frame`, contact sheet e exportação.
+
 ## Erros e limites
 
 - `LOCAL_APP_NOT_RUNNING` / `LOCAL_APP_UNREACHABLE_OR_TIMEOUT`: execute `npm run local`.
@@ -110,6 +129,7 @@ em `src/engine/` para criar conteúdo válido.
 - `PLAYBACK_ACTIVE`: pause antes de renderizar.
 - `COMMAND_TIMEOUT_RESULT_UNKNOWN` / `WINDOW_DISCONNECTED_RESULT_UNKNOWN`: o resultado
   pode ter sido aplicado. Leia o estado antes de repetir uma edição.
+- `ABSOLUTE_PATH_REQUIRED`: `load_project` e `export_video` exigem caminho absoluto.
 
 Há no máximo 16 conexões WebSocket e uma chamada em andamento por janela. O timeout
 é 30 s, e o limite de payload da ponte é 50 MiB. Um timeout desconecta a janela; ela tenta
@@ -118,8 +138,9 @@ validade e encerra o WebSocket ao expirar, mesmo se o navegador atrasar seus tim
 O token muda quando o servidor reinicia; a ponte busca o token novo ao reconectar.
 
 Codex e Claude podem usar o mesmo servidor local, selecionando cada janela por ID.
-O MCP não oferece execução arbitrária de JavaScript, acesso genérico ao disco, chaves de IA,
-salvamento automático em arquivos ou exportação de vídeo. Essas operações continuam na UI.
+O MCP não oferece execução arbitrária de JavaScript, chaves de IA nem salvamento do `.fmproj`
+(Ctrl+S continua na interface). Leitura e escrita de arquivos ficam restritas a `load_project`
+(abre um `.fmproj`) e `export_video` (grava o vídeo), ambos com caminho absoluto; veja a seção Segurança.
 O vídeo de referência não fica embutido em `.fmproj`. `render_frame` busca o tempo do vídeo
 solicitado e restaura o tempo anterior ao terminar.
 
@@ -127,6 +148,14 @@ A ponte só é habilitada com `FLASHMOTION_MCP=1` e `HOST=127.0.0.1` (`npm run l
 ambos). Confere conexão loopback, Host e Origin; chamadas HTTP de agentes exigem Bearer,
 e o WebSocket exige autenticação inicial. A credencial de bootstrap só é entregue a requisições
 com `Sec-Fetch-Site: same-origin`. Requisições de origem externa são rejeitadas.
+
+### Segurança
+
+`load_project` e `export_video` aceitam qualquer caminho absoluto no computador local. A ponte
+roda com as permissões do usuário que executou `npm run local`, então o agente pode ler qualquer
+arquivo `.fmproj` que esse usuário consiga ler e gravar o vídeo em qualquer pasta onde ele tenha
+permissão de escrita (as pastas que faltarem são criadas). Não há lista de pastas permitidas:
+quem controla o agente controla esses caminhos.
 
 ## Editor online e agente local
 
