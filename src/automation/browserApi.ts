@@ -1,5 +1,9 @@
 import type { HistorySnapshot } from '../types';
 import { parseProject } from '../project/projectFile';
+import { translate } from '../i18n';
+import { TEMPLATES } from '../templates/library';
+import { coerceTemplateValues, mergeTemplateOutput } from '../templates/insert';
+import { defaultValues } from '../templates/types';
 
 export interface AutomationStatus {
   name: string;
@@ -70,7 +74,46 @@ export function createBrowserApi(adapter: AutomationAdapter) {
       else file.project.content.camera = camera;
       adapter.replaceContent(parseProject(JSON.stringify(file)).content);
     },
-    seek: (frame: number) => { validateFrame(frame); adapter.seek(frame); },
+    listTemplates: () =>
+      TEMPLATES.map((tpl) => ({
+        id: tpl.id,
+        category: tpl.category,
+        name: translate('en-US', tpl.nameKey),
+        description: translate('en-US', tpl.descriptionKey),
+        params: tpl.params.map((p) => ({
+          key: p.key,
+          type: p.type,
+          label: translate('en-US', p.labelKey),
+          default: p.type === 'text' || p.type === 'lines' ? translate('en-US', p.defaultKey) : p.default,
+          ...(p.type === 'number' ? { min: p.min, max: p.max, step: p.step } : {}),
+          ...(p.type === 'select' ? { options: p.options.map((o) => o.value) } : {}),
+        })),
+      })),
+    /** Inserts a built-in template at `startFrame` (default: the current frame) as one undoable edit. */
+    applyTemplate: (templateId: string, values: Record<string, unknown> = {}, startFrame?: number) => {
+      const status = assertReady();
+      const template = TEMPLATES.find((t) => t.id === templateId);
+      if (!template) throw new Error('UNKNOWN_TEMPLATE');
+      const start = startFrame ?? status.frame;
+      validateFrame(start);
+      const merged = coerceTemplateValues(template, values, defaultValues(template, (k) => translate('en-US', k)));
+      const file = JSON.parse(adapter.project());
+      const { canvas, fps, totalFrames } = file.project;
+      const out = template.build(merged, {
+        width: canvas.width, height: canvas.height, fps, startFrame: start, idPrefix: `tpl-${template.id}-${Date.now()}`,
+      });
+      file.project.content = mergeTemplateOutput(file.project.content, out);
+      adapter.replaceContent(parseProject(JSON.stringify(file)).content);
+      return {
+        templateId,
+        createdIds: [...out.texts, ...out.charts, ...out.actors, ...out.paths].map((o) => o.id),
+        startFrame: start,
+        endFrame: out.endFrame,
+        totalFrames,
+        fitsTimeline: out.endFrame <= totalFrames,
+      };
+    },
+    seek:(frame: number) => { validateFrame(frame); adapter.seek(frame); },
     setPlaying: (playing: boolean) => {
       assertReady();
       if (typeof playing !== 'boolean') throw new Error('INVALID_PLAYBACK');

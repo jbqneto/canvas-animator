@@ -110,4 +110,38 @@ describe('background export and project loading', () => {
     expect(() => api.loadProject('{}')).toThrow();
     expect(adapter.loadProject).not.toHaveBeenCalled();
   });
+
+  it('lists templates with their parameters', () => {
+    const { api } = setup();
+    const list = api.listTemplates();
+    const title = list.find((t) => t.id === 'title')!;
+    expect(title.params.map((p) => p.key)).toContain('title');
+    expect(list.map((t) => t.id)).toEqual(expect.arrayContaining(['dateCard', 'quote']));
+  });
+  it('inserts a template as one edit with layers', () => {
+    const { api, adapter } = setup();
+    const result = api.applyTemplate('title', { title: 'Hello' });
+    expect(adapter.replaceContent).toHaveBeenCalledTimes(1);
+    const content = adapter.replaceContent.mock.calls[0][0];
+    expect(content.texts.some((t: any) => t.text === 'Hello')).toBe(true);
+    expect(content.layers[0].targetId).toBe(result.createdIds[0]);
+  });
+  it('reports when the template does not fit the timeline', () => {
+    const { api } = setup(); // 60 frames at 24 fps
+    expect(api.applyTemplate('title', { seconds: 60 }).fitsTimeline).toBe(false);
+    expect(api.applyTemplate('title', { seconds: 1 }).fitsTimeline).toBe(true);
+  });
+  it('rejects bad input without touching the scene', () => {
+    const { api, adapter } = setup();
+    expect(() => api.applyTemplate('nope', {})).toThrow('UNKNOWN_TEMPLATE');
+    expect(() => api.applyTemplate('title', { bogus: 1 })).toThrow('UNKNOWN_TEMPLATE_PARAM:bogus');
+    expect(() => api.applyTemplate('title', { color: 'red' })).toThrow('INVALID_TEMPLATE_VALUE:color');
+    expect(() => api.applyTemplate('title', {}, 999)).toThrow('INVALID_FRAME');
+    expect(adapter.replaceContent).not.toHaveBeenCalled();
+  });
+  it('blocks template insertion while recovery is pending', () => {
+    const { status, api } = setup();
+    status.ready = false;
+    expect(() => api.applyTemplate('title', {})).toThrow('RECOVERY_PENDING');
+  });
 });

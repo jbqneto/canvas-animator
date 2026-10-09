@@ -110,6 +110,16 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     description: 'Set the virtual camera that moves/zooms/rotates all scene objects (not the background) over time. REPLACES the whole camera; pass camera=null to remove it. base = static pan/zoom/rotation (panX/panY are pixel offsets from the canvas center, zoom 0.05..20, rotation in degrees); tracks = keyframes per property, e.g. a slow push-in: {"tracks":{"zoom":[{"frame":1,"value":1,"easing":"linear"},{"frame":240,"value":1.08}]}}. One undoable edit.',
     inputSchema: { windowId, camera: cameraSchema.nullable() }, annotations: edit,
   }, safe(async ({ windowId, camera }) => text(await call(windowId, { method: 'set_camera', camera }))));
+  server.registerTool('list_templates', {
+    description: 'List the built-in animation templates (id, parameters with defaults/ranges/options). Use apply_template to insert one.',
+    inputSchema: { windowId }, annotations: readOnly,
+  }, safe(async ({ windowId }) => text(await call(windowId, { method: 'list_templates' }))));
+  server.registerTool('apply_template', {
+    description: 'Insert a template (see list_templates) as ordinary editable objects with layers, as one undoable edit. values override the defaults (numbers are clamped to the parameter range; colors are #rrggbb). startFrame defaults to the current frame. The result says fitsTimeline=false when the template ends after the project duration: shorten it or extend the timeline in the editor.',
+    inputSchema: { windowId, templateId: z.string().min(1), values: z.record(z.union([z.string(), z.number()])).optional(), startFrame: z.number().int().min(1).optional() },
+    annotations: edit,
+  }, safe(async ({ windowId, templateId, values, startFrame }) =>
+    text(await call(windowId, { method: 'apply_template', templateId, values, startFrame }))));
   return server;
 }
 

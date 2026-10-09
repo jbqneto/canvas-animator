@@ -18,7 +18,7 @@ import { callSchema } from '../../src/automation/protocol';
 /** Every tool the server registers. Add new names here when a task registers a tool. */
 const EXPECTED_TOOLS = [
   'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
-  'load_project', 'export_video', 'set_camera',
+  'load_project', 'export_video', 'set_camera', 'list_templates', 'apply_template',
 ];
 
 describe('MCP and local browser bridge', () => {

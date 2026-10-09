@@ -29,6 +29,13 @@ export const commandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('export_status') }).strict(),
   z.object({ method: z.literal('export_chunk'), offset: z.number().int().min(0), length: z.number().int().min(1).max(16 * 1024 * 1024) }).strict(),
   z.object({ method: z.literal('set_camera'), camera: cameraSchema.nullable() }).strict(),
+  z.object({ method: z.literal('list_templates') }).strict(),
+  z.object({
+    method: z.literal('apply_template'),
+    templateId: z.string().min(1).max(64),
+    values: z.record(z.union([z.string().max(2000), z.number()])).optional(),
+    startFrame: z.number().int().min(1).optional(),
+  }).strict(),
 ]);
 export type BridgeCommand = z.infer<typeof commandSchema>;
 export const callSchema = z.object({ windowId: z.string().uuid(), command: commandSchema }).strict();
