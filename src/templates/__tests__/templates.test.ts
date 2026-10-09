@@ -57,6 +57,16 @@ describe('template library', () => {
     expect(out.texts.map((t) => t.startFrame)).toEqual([10, 22, 34]);
     expect(out.texts.every((t) => t.startFrame + t.durationFrames === out.endFrame)).toBe(true);
   });
+
+  it('dateCard types the date in a monospace font with an uppercase label', () => {
+    const tpl = TEMPLATES.find((t) => t.id === 'dateCard')!;
+    const out = tpl.build({ ...defaultValues(tpl, (k) => k), date: '12.10.2013', label: 'Campo Grande' }, ctx());
+    const date = out.texts.find((t) => t.text === '12.10.2013')!;
+    expect(date.effect).toBe('typewriter');
+    expect(date.fontFamily).toBe('IBM Plex Mono');
+    expect(out.texts.some((t) => t.text === 'CAMPO GRANDE' && t.fontFamily === 'Inter' && (t.letterSpacing ?? 0) > 0)).toBe(true);
+    expect(out.actors).toHaveLength(1);
+  });
 });
 
 describe('helpers', () => {

@@ -394,7 +394,84 @@ const callout: AnimationTemplate = {
   },
 };
 
-export const TEMPLATES: AnimationTemplate[] = [title, lowerThird, bulletList, bigNumber, chartReveal, callout];
+// ================= DATE CARD =================
+const dateCard: AnimationTemplate = {
+  id: 'dateCard',
+  category: 'titles',
+  nameKey: 'templates.dateCard.name',
+  descriptionKey: 'templates.dateCard.description',
+  params: [
+    { key: 'date', type: 'text', labelKey: 'templates.param.date', defaultKey: 'templates.dateCard.defaultDate' },
+    { key: 'label', type: 'text', labelKey: 'templates.param.label', defaultKey: 'templates.dateCard.defaultLabel' },
+    colorParam('#E8B65A'),
+    secondsParam(4),
+  ],
+  build(values, ctx) {
+    const span = spanOf(ctx, num(values.seconds, 4));
+    // Sizes follow the 1080p design (date 170 px, label 24 px) scaled to the canvas
+    const unit = Math.min(ctx.width / 1920, ctx.height / 1080);
+    const dateSize = Math.round(170 * unit);
+    const labelSize = Math.max(12, Math.round(24 * unit));
+    const date = str(values.date);
+    const cx = Math.round(ctx.width / 2);
+    // Typed text is left-anchored (a centered anchor would shift while typing); a mono glyph is 0.6 em wide
+    const dateX = Math.round(cx - (date.length * dateSize * 0.6) / 2);
+    const typed = enterExit(
+      createText(
+        {
+          ...baseText(`${ctx.idPrefix}-date`, date, dateSize, '#F3EAD8', ctx.startFrame, span),
+          effect: 'typewriter',
+          fontFamily: 'IBM Plex Mono',
+          fontWeight: 400,
+        },
+        { x: dateX, y: Math.round(ctx.height * 0.5) }
+      ),
+      ctx,
+      'fade',
+      'fade',
+      0
+    );
+    const delay = Math.min(Math.floor(span / 3), Math.round(ctx.fps * (0.07 * date.length + 0.3)));
+    const label = enterExit(
+      createText(
+        {
+          ...baseText(`${ctx.idPrefix}-label`, str(values.label).toUpperCase(), labelSize, str(values.color), ctx.startFrame + delay, span - delay),
+          effect: 'none',
+          fontFamily: 'Inter',
+          fontWeight: 600,
+          letterSpacing: Math.round(labelSize * 0.4),
+          align: 'center',
+        },
+        { x: cx, y: Math.round(ctx.height * 0.5 + dateSize * 0.45) }
+      ),
+      ctx,
+      'fade',
+      'fade',
+      0
+    );
+    const ruleW = Math.round(420 * unit);
+    const rule = enterExit(
+      createShapeActor({
+        id: `${ctx.idPrefix}-rule`,
+        name: str(values.label),
+        style: { ...defaultShapeStyle('rect', str(values.color)), radius: 0 },
+        width: ruleW,
+        height: Math.max(2, Math.round(2 * unit)),
+        x: cx,
+        y: Math.round(ctx.height * 0.5 + dateSize * 0.8),
+        startFrame: ctx.startFrame + delay,
+        durationFrames: span - delay,
+      }),
+      ctx,
+      'fade',
+      'fade',
+      0
+    );
+    return { ...emptyOutput(), texts: [typed, label], actors: [rule], endFrame: ctx.startFrame + span };
+  },
+};
+
+export const TEMPLATES: AnimationTemplate[] = [title, lowerThird, bulletList, bigNumber, chartReveal, callout, dateCard];
 
 export function buildTemplate(template: AnimationTemplate, values: TemplateValues, ctx: TemplateContext) {
   return template.build(values, ctx);
