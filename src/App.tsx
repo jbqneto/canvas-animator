@@ -1827,6 +1827,7 @@ export default function App() {
       paths: [],
       audio: [],
       markers: [],
+      camera: undefined,
       layers: history.present.layers.filter((l) => l.type !== 'actor' && l.type !== 'path' && l.type !== 'group'),
     });
     setCurrentFrame(1);
@@ -1924,6 +1925,7 @@ export default function App() {
     videoBg,
     videoElement: videoEl,
     fps,
+    camera: history.present.camera,
   });
   const currentFrameRenderParams = () => ({
     width: canvasDimensions.width,

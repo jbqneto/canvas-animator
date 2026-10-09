@@ -26,6 +26,13 @@ describe('browser automation', () => {
     expect(adapter.replaceContent).not.toHaveBeenCalled();
   });
 
+  it('keeps the camera when replacing content', () => {
+    const { content, api, adapter } = setup();
+    const camera = { base: { panX: 0, panY: 0, zoom: 2, rotation: 0 }, tracks: {} };
+    api.replaceContent({ ...content, camera });
+    expect(adapter.replaceContent.mock.calls[0][0].camera?.base.zoom).toBe(2);
+  });
+
   it('rejects malformed content before changing the scene', () => {
     const { api, adapter } = setup();
     for (const content of [null, [], { actors: 'invalid' }, { frames: { 1: { drawings: [null] } } }]) {
