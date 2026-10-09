@@ -686,7 +686,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
     const charsToShow = Math.min(txt.text.length, Math.floor(elapsed / charDuration));
     displayedText = txt.text.slice(0, charsToShow);
     // Blinking cursor
-    if (charsToShow < txt.text.length && Math.floor(elapsed / 8) % 2 === 0) {
+    if (txt.typewriterCursor !== false && charsToShow < txt.text.length && Math.floor(elapsed / 8) % 2 === 0) {
       displayedText += '|';
     }
   } else if (txt.effect === 'bouncePop') {

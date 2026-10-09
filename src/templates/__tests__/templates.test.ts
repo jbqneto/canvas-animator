@@ -64,6 +64,7 @@ describe('template library', () => {
     const date = out.texts.find((t) => t.text === '12.10.2013')!;
     expect(date.effect).toBe('typewriter');
     expect(date.fontFamily).toBe('IBM Plex Mono');
+    expect(date.typewriterCursor).toBe(false);
     expect(out.texts.some((t) => t.text === 'CAMPO GRANDE' && t.fontFamily === 'Inter' && (t.letterSpacing ?? 0) > 0)).toBe(true);
     expect(out.actors).toHaveLength(1);
   });
@@ -121,5 +122,16 @@ describe('helpers', () => {
     expect(bar.shape).toMatchObject({ type: 'rect', fill: '#ff0000' });
     const callout = TEMPLATES.find((t) => t.id === 'callout')!;
     expect(callout.build(defaultValues(callout, (k) => k), ctx()).actors[0].shape?.type).toBe('arrow');
+  });
+
+  it('dateCard and quote pass the scene lint at 1080p with their default content', async () => {
+    const { lintScene } = await import('../../engine/lint');
+    for (const id of ['dateCard', 'quote']) {
+      const tpl = TEMPLATES.find((t) => t.id === id)!;
+      const out = tpl.build(defaultValues(tpl, (k) => translate('en-US', k)), ctx({ width: 1920, height: 1080, fps: 30, startFrame: 1 }));
+      const issues = lintScene({ fps: 30, totalFrames: 300, canvas: { width: 1920, height: 1080 }, videoBg: { color: '#06080C' },
+        content: { texts: out.texts, actors: out.actors } });
+      expect(issues, id).toEqual([]);
+    }
   });
 });
