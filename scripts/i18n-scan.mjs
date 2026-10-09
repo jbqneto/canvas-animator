@@ -12,7 +12,8 @@ import { parse } from '@babel/parser';
 const ROOT = path.resolve(import.meta.dirname, '..');
 // src/ai/prompts.ts: instructions for the AI model (it is told which language to answer in), not UI text
 // src/utils/fonts.ts: CSS font family names, not UI text
-const SKIP = ['src/i18n', '__tests__', 'vite-env', 'src/ai/prompts.ts', 'src/utils/fonts.ts'];
+// src/engine/lint.ts: English diagnostics returned to MCP agents, not UI text
+const SKIP = ['src/i18n', '__tests__', 'vite-env', 'src/ai/prompts.ts', 'src/utils/fonts.ts', 'src/engine/lint.ts'];
 const TECH_ATTRS = new Set(['className', 'key', 'value', 'type', 'href', 'src', 'id', 'accept', 'rel', 'viewBox', 'd', 'fill', 'stroke', 'role', 'style']);
 // Calls whose string arguments are never shown to users
 const TECH_CALLS = new Set(['log', 'warn', 'error', 'fetch', 'addEventListener', 'removeEventListener', 'getContext', 'toDataURL', 'querySelector', 'localeCompare', 'toLocaleString', 'toLocaleLowerCase', 'createElement', 'setAttribute', 'getItem', 'setItem', 'removeItem', 't', 'translate', 'matchMedia', 'isTypeSupported', 'toFixed', 'createObjectStore', 'open', 'transaction', 'put', 'get', 'delete', 'import', 'setLineDash', 'measureText', 'includes', 'startsWith', 'endsWith', 'replace', 'split', 'join']);
