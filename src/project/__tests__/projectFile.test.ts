@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseProject, ProjectFileError, ProjectState, serializeProject, projectNameFromFile } from '../projectFile';
 import { createActor } from '../../engine/actor';
 import { createStickActor, togglePoseKey } from '../../engine/stickActor';
+import type { Keyframe } from '../../engine/keyframes';
+import { DEFAULT_EFFECTS, sampleEffects } from '../../engine/effects';
 import { applyPoseToStickFigure, createDefaultStickFigure } from '../../utils/stickFigurePresets';
 
 const state = (): ProjectState => ({
@@ -187,5 +189,37 @@ describe('camera in the project file', () => {
     const parsed = parseProject(serializeProject(state(camera))).content.camera!;
     expect(parsed.base).toEqual({ panX: 0, panY: 0, zoom: 0.05, rotation: 0 });
     expect(parsed.tracks.zoom).toEqual([{ frame: 3, value: 1.5 }, { frame: 9, value: 2 }]);
+  });
+});
+
+describe('object effects persistence', () => {
+  const fx = { ...DEFAULT_EFFECTS, shadowOpacity: 0.6, glowColor: '#ffcc00' };
+  const blur: Keyframe<number>[] = [{ frame: 1, value: 12, easing: 'easeOut' }, { frame: 20, value: 0 }];
+  const motion = { startFrame: 1, durationFrames: 30, base: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, tracks: { blur } };
+  const withEffects = () => {
+    const base = state();
+    base.content.texts = [{ id: 't1', text: 'oi', fontSize: 40, align: 'left', ...motion, effects: fx } as any];
+    base.content.charts = [{ id: 'c1', width: 400, height: 200, data: [], ...motion, effects: fx } as any];
+    base.content.actors = [{ ...base.content.actors[0], tracks: { blur }, effects: fx }];
+    return base;
+  };
+
+  it('round-trips effects and effect tracks on a text, a chart and an actor', () => {
+    const { content } = parseProject(serializeProject(withEffects()));
+    [content.texts[0], content.charts[0], content.actors[0]].forEach((obj) => {
+      expect(obj.effects?.shadowOpacity).toBe(0.6);
+      expect(obj.effects?.glowColor).toBe('#ffcc00');
+      expect(obj.tracks.blur).toHaveLength(2);
+      expect(obj.tracks.blur![0]).toMatchObject({ frame: 1, value: 12, easing: 'easeOut' });
+    });
+  });
+
+  it('opens an old project without effects as all off', () => {
+    const base = withEffects();
+    delete (base.content.texts[0] as any).effects;
+    delete (base.content.texts[0].tracks as any).blur;
+    const text = parseProject(serializeProject(base)).content.texts[0];
+    expect(text.effects).toBeUndefined();
+    expect(sampleEffects(text, 1)).toEqual(DEFAULT_EFFECTS);
   });
 });
