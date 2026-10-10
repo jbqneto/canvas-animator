@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Timer } from 'lucide-react';
 import type { Animated, MotionPath } from '../types';
 import { ActorFollowPanel } from './ActorFollowPanel';
+import { EffectsSection } from './EffectsSection';
 import { MessageKey, useI18n } from '../i18n';
 import {
   ActorProperty,
@@ -74,7 +75,7 @@ export const MotionInspector = <T extends MotionObject>({
 
   // Easing shown for the keys at the current frame (they share one when set from here)
   const easingHere = (() => {
-    for (const tr of [...PROPS.map((p) => track(p.id)), obj.follow?.progress]) {
+    for (const tr of [...(Object.values(obj.tracks) as (Track<unknown> | undefined)[]), obj.follow?.progress]) {
       const k = tr?.find((key) => key.frame === currentFrame);
       if (k) return k.easing ?? DEFAULT_EASING;
     }
@@ -260,6 +261,8 @@ export const MotionInspector = <T extends MotionObject>({
           );
         })}
       </div>
+
+      <EffectsSection obj={obj} currentFrame={currentFrame} onChange={onChange} />
 
       {easingHere && (
         <div className="space-y-1">
