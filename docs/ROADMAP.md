@@ -63,7 +63,7 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 
 Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
 
-1. Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis
+1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"); falta expor efeitos no MCP
 2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
 3. Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir
 4. Repetir/ciclo e tremida por propriedade
@@ -240,3 +240,9 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   objetos, não o fundo. O palco do editor ignora a câmera (a prévia no palco usa `screenToScene`, tarefa futura);
   `render_frame`, contact sheet e export a aplicam.
 - Fontes (`utils/fonts.ts`): só `FONT_FAMILIES`. Nome desconhecido cai na família padrão.
+- Efeitos por objeto (`engine/effects.ts`): sombra, brilho (glow), desfoque e tint, animáveis por keyframes como as
+  outras propriedades. Gatilho 0 = desligado (sem custo: o caminho sem efeitos desenha direto, idêntico ao
+  anterior). Cores são estáticas (não animam); só quantidades/raios animam. Ordem fixa: sombra → glow → objeto.
+  Desfoque via `ctx.filter` (ignorado sem suporte do navegador; a UI avisa). Raios em pixels de saída: não
+  escalam com o zoom da câmera. O objeto é desenhado numa canvas fora da tela do tamanho da saída (assume sem
+  DPR) que recebe a matriz da câmera. Efeitos via MCP (`set_effects`/`apply_template`) é o próximo passo natural.
