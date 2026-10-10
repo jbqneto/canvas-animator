@@ -38,12 +38,30 @@ describe('drawWithEffects', () => {
       1, () => {}, factory);
     const draws = main.calls.filter((c) => c.name === 'drawImage');
     expect(draws).toHaveLength(2);
-    expect(draws[0].args.slice(1, 3)).toEqual([-800, 0]); // off-screen copy casting the shadow
+    // margin = ceil(3*blur + max(shadowBlur, glowRadius) + |shadowX|) + 1 = ceil(0 + 10 + 5) + 1 = 16
+    expect(draws[0].args.slice(1, 3)).toEqual([-816, 0]); // off-screen copy casting the shadow
     expect(draws[1].args.slice(1, 3)).toEqual([0, 0]); // the object itself
-    expect(main.calls).toContainEqual({ name: 'set:shadowOffsetX', args: [805] });
+    expect(main.calls).toContainEqual({ name: 'set:shadowOffsetX', args: [821] });
     expect(main.calls).toContainEqual({ name: 'set:shadowOffsetY', args: [7] });
     expect(main.calls).toContainEqual({ name: 'set:shadowBlur', args: [10] });
     expect(main.calls).toContainEqual({ name: 'set:shadowColor', args: ['#112233'] });
+  });
+
+  it('parks the shadow copy beyond the blur reach so no blurred ghost bleeds in at the left edge', () => {
+    const { main, factory } = setup();
+    const blur = 6;
+    drawWithEffects(main.ctx, 800, 450,
+      { ...DEFAULT_EFFECTS, blur, shadowOpacity: 0.5, shadowBlur: 0, shadowX: -40, glowRadius: 30 }, 1, () => {}, factory);
+    const draws = main.calls.filter((c) => c.name === 'drawImage');
+    expect(draws).toHaveLength(3); // shadow, glow, object
+    [draws[0], draws[1]].forEach((d) => {
+      const x = d.args[1] as number;
+      expect(x + 800).toBeLessThanOrEqual(-(3 * blur) - 30 - 40);
+    });
+    // the shadow still lands at the requested offset from the object
+    const offsets = main.calls.filter((c) => c.name === 'set:shadowOffsetX').map((c) => c.args[0] as number);
+    expect((draws[0].args[1] as number) + offsets[0]).toBe(-40);
+    expect((draws[1].args[1] as number) + offsets[1]).toBe(0);
   });
 
   it('draws glow behind the object with its strength as alpha', () => {
@@ -70,13 +88,24 @@ describe('drawWithEffects', () => {
       { ...DEFAULT_EFFECTS, blur: 6, shadowOpacity: 0.5, glowRadius: 5 }, 1, () => {}, factory);
     const n = (name: string) => main.calls.filter((c) => c.name === name).length;
     expect(n('save')).toBe(n('restore'));
+    // the filter is only ever set inside a save/restore pair, so restore() resets it
+    let depth = 0;
+    main.calls.forEach((c) => {
+      if (c.name === 'save') depth++;
+      if (c.name === 'restore') depth--;
+      if (c.name === 'set:filter') expect(depth).toBeGreaterThan(0);
+    });
+    expect(depth).toBe(0);
+    expect(main.calls.some((c) => c.name === 'set:filter')).toBe(true);
   });
 
   it('gives the layer the main context transform (camera) and clears it first', () => {
     const { main, layer, factory } = setup();
+    const cameraMatrix = { camera: true } as unknown as DOMMatrix;
+    main.props.getTransform = () => cameraMatrix;
     drawWithEffects(main.ctx, 800, 450, { ...DEFAULT_EFFECTS, blur: 1 }, 1, () => {}, factory);
     const i = layer.calls.findIndex((c) => c.name === 'clearRect');
     expect(i).toBeGreaterThan(-1);
-    expect(names(layer.calls).slice(i)).toContain('setTransform');
+    expect(layer.calls.slice(i)).toContainEqual({ name: 'setTransform', args: [cameraMatrix] });
   });
 });

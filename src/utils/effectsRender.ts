@@ -2,6 +2,7 @@
  * Composites an object with its effects (shadow, glow, blur, tint). The object is painted on an
  * off-screen layer the size of the output, which gets the main context's current matrix (so the
  * camera is already applied), and is composed back with an identity matrix. Radii are output pixels.
+ * Assumes the output canvas has no DPR base transform (its pixel size is exactly width x height).
  */
 import type { EffectParams } from '../types';
 
@@ -64,15 +65,18 @@ export function drawWithEffects(
   if (fx.blur > 0) ctx.filter = `blur(${fx.blur}px)`;
   const baseAlpha = ctx.globalAlpha * opacity;
 
-  // A copy parked off-screen casts only its shadow into view (offset compensates the parking spot)
+  // A copy parked off-screen casts only its shadow into view (offset compensates the parking spot).
+  // It is parked beyond the reach of the blur filter and the shadows, so no ghost of it bleeds in.
+  const margin = Math.ceil(3 * fx.blur + Math.max(fx.shadowBlur, fx.glowRadius) + Math.abs(fx.shadowX)) + 1;
+  const parkX = -(width + margin);
   const castShadow = (color: string, blur: number, dx: number, dy: number, alpha: number) => {
     ctx.save();
     ctx.globalAlpha = baseAlpha * alpha;
     ctx.shadowColor = color;
     ctx.shadowBlur = blur;
-    ctx.shadowOffsetX = width + dx;
+    ctx.shadowOffsetX = -parkX + dx;
     ctx.shadowOffsetY = dy;
-    ctx.drawImage(layer.canvas, -width, 0);
+    ctx.drawImage(layer.canvas, parkX, 0);
     ctx.restore();
   };
   if (fx.shadowOpacity > 0) castShadow(fx.shadowColor, fx.shadowBlur, fx.shadowX, fx.shadowY, fx.shadowOpacity);
