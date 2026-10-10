@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_EFFECTS, hasActiveEffects, isEffectProp, sampleEffects } from '../effects';
-import { staticMotion } from '../actor';
+import {
+  actorKeyframes, actorPropertyValue, moveActorKeys, setActorProperty, shiftActorTime, staticMotion, toggleAnimated,
+} from '../actor';
 import type { Animated } from '../../types';
 
 const obj = (over: Partial<Animated> = {}): Animated => ({
@@ -58,5 +60,43 @@ describe('effects engine', () => {
   it('recognises effect property names', () => {
     expect(isEffectProp('blur')).toBe(true);
     expect(isEffectProp('opacity')).toBe(false);
+  });
+});
+
+describe('editing effects like any other property', () => {
+  it('without keys edits effects, not base', () => {
+    const a = setActorProperty(obj(), 'shadowOpacity', 5, 0.7);
+    expect(a.effects?.shadowOpacity).toBe(0.7);
+    expect(a.effects?.shadowBlur).toBe(DEFAULT_EFFECTS.shadowBlur);
+    expect((a.base as unknown as Record<string, unknown>).shadowOpacity).toBeUndefined();
+    expect(sampleEffects(a, 5).shadowOpacity).toBe(0.7);
+  });
+
+  it('with keys creates a key at the frame', () => {
+    let a = toggleAnimated(obj(), 'blur', 1);
+    a = setActorProperty(a, 'blur', 11, 12);
+    expect(actorKeyframes(a)).toEqual([1, 11]);
+    expect(actorPropertyValue(a, 'blur', 11)).toBe(12);
+  });
+
+  it('stopwatch off keeps the value seen at the frame, in effects', () => {
+    let a = toggleAnimated(obj(), 'tintAmount', 1);
+    a = setActorProperty(a, 'tintAmount', 10, 0.8);
+    a = toggleAnimated(a, 'tintAmount', 10);
+    expect(a.tracks.tintAmount).toEqual([]);
+    expect(a.effects?.tintAmount).toBe(0.8);
+  });
+
+  it('shiftActorTime and moveActorKeys carry effect tracks', () => {
+    let a = toggleAnimated(obj(), 'blur', 5);
+    a = setActorProperty(a, 'blur', 15, 9);
+    const shifted = shiftActorTime(a, 10);
+    expect(actorKeyframes(shifted)).toEqual([15, 25]);
+    const moved = moveActorKeys(a, 15, 20);
+    expect(actorKeyframes(moved)).toEqual([5, 20]);
+  });
+
+  it('isEffectProp ignores inherited names', () => {
+    expect(isEffectProp('toString')).toBe(false);
   });
 });

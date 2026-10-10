@@ -34,7 +34,7 @@ export const EFFECT_GROUPS: { id: EffectGroup; trigger: EffectProp; onValue: num
 ];
 
 export function isEffectProp(prop: string): prop is EffectProp {
-  return prop in EFFECT_PROPS;
+  return Object.hasOwn(EFFECT_PROPS, prop);
 }
 
 const clampProp = (prop: EffectProp, v: number) => {
