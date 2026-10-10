@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { renderCompositeFrame, type SceneContent } from '../exportVideo';
 import { createText } from '../../engine/overlays';
 import { createCanvasStub } from '../../test/canvasStub';
+import { DEFAULT_EFFECTS } from '../../engine/effects';
 import type { TextOverlay } from '../../types';
 
 const scene = (texts: TextOverlay[]): SceneContent => ({
@@ -44,6 +45,36 @@ describe('text rendering', () => {
       renderCompositeFrame(ctx, 1280, 720, 5, scene([typed({ typewriterCursor: false })]));
       expect(shown(calls)).toContain('AB');
       expect(shown(calls)).not.toContain('AB|');
+    });
+  });
+
+  describe('effects', () => {
+    it('without effects does not touch an off-screen layer', () => {
+      const { ctx, calls } = createCanvasStub();
+      let made = 0;
+      renderCompositeFrame(ctx, 1280, 720, 5, scene([text()]), {
+        createLayer: () => { made++; return { canvas: {} as CanvasImageSource, ctx } as never; },
+      });
+      expect(made).toBe(0);
+      expect(calls.some((c) => c.name === 'drawImage')).toBe(false);
+    });
+    it('with an active effect draws the text on the layer and composes it', () => {
+      const main = createCanvasStub();
+      const layer = createCanvasStub();
+      renderCompositeFrame(main.ctx, 1280, 720, 5,
+        scene([text({ effects: { ...DEFAULT_EFFECTS, blur: 8 } })]),
+        { createLayer: () => ({ canvas: {} as CanvasImageSource, ctx: layer.ctx }) });
+      expect(layer.calls.some((c) => c.name === 'fillText')).toBe(true);
+      expect(main.calls.some((c) => c.name === 'fillText')).toBe(false);
+      expect(main.calls).toContainEqual({ name: 'set:filter', args: ['blur(8px)'] });
+    });
+    it('goes back to the plain path once the trigger animates to 0', () => {
+      const main = createCanvasStub();
+      let made = 0;
+      const t = text({ tracks: { blur: [{ frame: 1, value: 8, easing: 'linear' }, { frame: 5, value: 0 }] } });
+      renderCompositeFrame(main.ctx, 1280, 720, 5, scene([t]),
+        { createLayer: () => { made++; return { canvas: {} as CanvasImageSource, ctx: main.ctx }; } });
+      expect(made).toBe(0);
     });
   });
 });
