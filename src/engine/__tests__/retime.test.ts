@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { retimeFrame, retimeScene, retimeSpan, retimeTrack, SceneData } from '../retime';
+import { retimeAnimated, retimeFrame, retimeScene, retimeSpan, retimeTrack, SceneData } from '../retime';
 import { createActor, sampleActor, setActorProperty, toggleAnimated } from '../actor';
 import { createChart } from '../overlays';
 import { createStickActor, togglePoseKey } from '../stickActor';
@@ -73,5 +73,15 @@ describe('retiming to another frame rate', () => {
     expect(back.totalFrames).toBe(96);
     expect(back.scene.actors[0].tracks.position!.map((k) => k.frame)).toEqual([25, 49]);
     expect(back.scene.markers![0].frame).toBe(73);
+  });
+});
+
+describe('retiming effect tracks', () => {
+  it('keeps and retimes effect tracks', () => {
+    let a = createActor({ id: 'a', name: 'a', src: 'data:', width: 10, height: 10, x: 0, y: 0, startFrame: 1, durationFrames: 48 });
+    a = toggleAnimated(a, 'blur', 25);
+    a = setActorProperty(a, 'blur', 49, 8);
+    const r = retimeAnimated(a, 30 / 24);
+    expect(r.tracks.blur?.map((key) => key.frame)).toEqual([31, 61]);
   });
 });
