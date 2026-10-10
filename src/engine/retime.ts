@@ -26,16 +26,12 @@ export function retimeTrack<T>(track: Track<T> | undefined, k: number): Track<T>
 }
 
 export function retimeAnimated<T extends Animated>(obj: T, k: number): T {
-  const t = obj.tracks;
   return {
     ...obj,
     ...retimeSpan(obj.startFrame, obj.durationFrames, k),
-    tracks: {
-      position: retimeTrack(t.position, k),
-      scale: retimeTrack(t.scale, k),
-      rotation: retimeTrack(t.rotation, k),
-      opacity: retimeTrack(t.opacity, k),
-    },
+    tracks: Object.fromEntries(
+      Object.entries(obj.tracks).map(([prop, track]) => [prop, retimeTrack(track as Track<unknown>, k)])
+    ) as Animated['tracks'],
     follow: obj.follow && { ...obj.follow, progress: retimeTrack(obj.follow.progress, k) ?? [] },
   };
 }

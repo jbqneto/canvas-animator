@@ -861,4 +861,23 @@ export const enUS: Record<keyof typeof ptBR, string> = {
 
   // Stage scale handles
   'stage.history.scale': 'Scale at frame {frame}',
+
+  // Object effects
+  'fx.title': 'Effects',
+  'fx.group.shadow': 'Shadow',
+  'fx.group.glow': 'Glow',
+  'fx.group.blur': 'Blur',
+  'fx.group.tint': 'Tint (color overlay)',
+  'fx.prop.shadowOpacity': 'Shadow opacity',
+  'fx.prop.shadowBlur': 'Softness',
+  'fx.prop.shadowX': 'Offset X',
+  'fx.prop.shadowY': 'Offset Y',
+  'fx.prop.glowRadius': 'Radius',
+  'fx.prop.glowStrength': 'Strength',
+  'fx.prop.blur': 'Blur (px)',
+  'fx.prop.tintAmount': 'Amount',
+  'fx.color': 'Color',
+  'fx.toggle': 'Turn on/off',
+  'fx.history.color': 'Effect color',
+  'fx.blurUnsupported': "This browser doesn't support blur; it will be ignored.",
 };

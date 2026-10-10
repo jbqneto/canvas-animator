@@ -862,4 +862,23 @@ export const ptBR = {
 
   // Stage scale handles
   'stage.history.scale': 'Escalar no frame {frame}',
+
+  // Object effects
+  'fx.title': 'Efeitos',
+  'fx.group.shadow': 'Sombra',
+  'fx.group.glow': 'Brilho (glow)',
+  'fx.group.blur': 'Desfoque',
+  'fx.group.tint': 'Tint (cor sobreposta)',
+  'fx.prop.shadowOpacity': 'Opacidade da sombra',
+  'fx.prop.shadowBlur': 'Suavidade',
+  'fx.prop.shadowX': 'Deslocamento X',
+  'fx.prop.shadowY': 'Deslocamento Y',
+  'fx.prop.glowRadius': 'Raio',
+  'fx.prop.glowStrength': 'Intensidade',
+  'fx.prop.blur': 'Desfoque (px)',
+  'fx.prop.tintAmount': 'Quantidade',
+  'fx.color': 'Cor',
+  'fx.toggle': 'Ligar/desligar',
+  'fx.history.color': 'Cor do efeito',
+  'fx.blurUnsupported': 'Este navegador não suporta desfoque; ele será ignorado.',
 };

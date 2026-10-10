@@ -3,6 +3,7 @@
  * retiming and "follow path". Functions are generic over `Animated`, so they keep the concrete type.
  */
 import type { ActorOverlay, ActorTransform, Animated, MotionPath } from '../types';
+import { DEFAULT_EFFECTS, isEffectProp } from './effects';
 import { buildFollowProgress, pointAtProgress, polylineUpTo, samplePath } from './path';
 import { samplePosition, sampleTrack, setKeyframe, hasKeyframeAt, moveKeyframe, Track, Vec2 } from './keyframes';
 
@@ -57,6 +58,15 @@ export function isAnimated(actor: Animated, prop: ActorProperty): boolean {
   return (actor.tracks[prop]?.length ?? 0) > 0;
 }
 
+/** Static (stopwatch off) value of a numeric property: effects live in `effects`, the rest in `base`. */
+function baseOf(actor: Animated, prop: Exclude<ActorProperty, 'position'>): number {
+  if (isEffectProp(prop)) {
+    const v = actor.effects?.[prop];
+    return typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_EFFECTS[prop];
+  }
+  return actor.base[prop];
+}
+
 /**
  * Edits a property at `frame` following the After Effects stopwatch rule:
  * not animated → change the static base value; animated → create/update the key at `frame`.
@@ -68,6 +78,9 @@ export function setActorProperty<T extends Animated, P extends ActorProperty>(
   value: PropertyValue<P>
 ): T {
   if (!isAnimated(actor, prop)) {
+    if (prop !== 'position' && isEffectProp(prop)) {
+      return { ...actor, effects: { ...DEFAULT_EFFECTS, ...actor.effects, [prop]: value as number } };
+    }
     const base =
       prop === 'position'
         ? { ...actor.base, ...(value as Vec2) }
@@ -90,7 +103,7 @@ export function actorPropertyValue<P extends ActorProperty>(
     return { x: p.x, y: p.y } as PropertyValue<P>;
   }
   const track = actor.tracks[prop as Exclude<ActorProperty, 'position'>];
-  return sampleTrack(track, frame, actor.base[prop as 'scale']) as PropertyValue<P>;
+  return sampleTrack(track, frame, baseOf(actor, prop as Exclude<ActorProperty, 'position'>)) as PropertyValue<P>;
 }
 
 /**
@@ -180,15 +193,13 @@ export function createActor(params: {
 export function shiftActorTime<T extends Animated>(actor: T, delta: number): T {
   if (delta === 0) return actor;
   const shift = <T,>(track?: Track<T>) => track?.map((k) => ({ ...k, frame: k.frame + delta }));
+  const tracks = Object.fromEntries(
+    Object.entries(actor.tracks).map(([prop, track]) => [prop, shift(track as Track<unknown>)])
+  ) as Animated['tracks'];
   return {
     ...actor,
     startFrame: actor.startFrame + delta,
-    tracks: {
-      position: shift(actor.tracks.position),
-      scale: shift(actor.tracks.scale),
-      rotation: shift(actor.tracks.rotation),
-      opacity: shift(actor.tracks.opacity),
-    },
+    tracks,
     follow: actor.follow && { ...actor.follow, progress: shift(actor.follow.progress) ?? [] },
   };
 }
