@@ -213,7 +213,21 @@ export interface ActorTransform {
   opacity: number;
 }
 
-export interface MotionTracks {
+/** Numeric (animatable) effect parameters; the colors are static. See `engine/effects.ts`. */
+export type EffectProp =
+  | 'shadowOpacity' | 'shadowBlur' | 'shadowX' | 'shadowY'
+  | 'glowRadius' | 'glowStrength'
+  | 'blur'
+  | 'tintAmount';
+
+/** Static values (stopwatch off) of the per-object effects, plus their colors. Trigger 0 = effect off. */
+export interface EffectParams extends Record<EffectProp, number> {
+  shadowColor: string;
+  glowColor: string;
+  tintColor: string;
+}
+
+export interface MotionTracks extends Partial<Record<EffectProp, Track<number>>> {
   position?: Track<Vec2>;
   scale?: Track<number>;
   rotation?: Track<number>;
@@ -239,6 +253,8 @@ export interface Animated {
    * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
    */
   follow?: ActorFollow;
+  /** Shadow, glow, blur and tint; absent = all off. Keys for the numbers live in `tracks`. */
+  effects?: EffectParams;
 }
 
 /**
