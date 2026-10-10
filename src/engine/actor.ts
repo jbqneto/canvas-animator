@@ -60,7 +60,10 @@ export function isAnimated(actor: Animated, prop: ActorProperty): boolean {
 
 /** Static (stopwatch off) value of a numeric property: effects live in `effects`, the rest in `base`. */
 function baseOf(actor: Animated, prop: Exclude<ActorProperty, 'position'>): number {
-  if (isEffectProp(prop)) return (actor.effects ?? DEFAULT_EFFECTS)[prop];
+  if (isEffectProp(prop)) {
+    const v = actor.effects?.[prop];
+    return typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_EFFECTS[prop];
+  }
   return actor.base[prop];
 }
 
@@ -76,7 +79,7 @@ export function setActorProperty<T extends Animated, P extends ActorProperty>(
 ): T {
   if (!isAnimated(actor, prop)) {
     if (prop !== 'position' && isEffectProp(prop)) {
-      return { ...actor, effects: { ...(actor.effects ?? DEFAULT_EFFECTS), [prop]: value as number } };
+      return { ...actor, effects: { ...DEFAULT_EFFECTS, ...actor.effects, [prop]: value as number } };
     }
     const base =
       prop === 'position'

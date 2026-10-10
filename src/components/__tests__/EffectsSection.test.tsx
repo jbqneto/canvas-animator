@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EffectsSection } from '../EffectsSection';
 import { I18nProvider, t } from '../../i18n';
 import type { Animated } from '../../types';
+import { DEFAULT_EFFECTS } from '../../engine/effects';
 
 vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
 const filterSupported = vi.hoisted(() => vi.fn(() => true));
@@ -115,5 +116,17 @@ describe('EffectsSection', () => {
     filterSupported.mockReturnValue(false);
     render(baseObj, 1);
     expect(container.textContent).toContain(t('fx.blurUnsupported'));
+  });
+
+  it('renders with a partial effects object without throwing', () => {
+    expect(() => render({ ...baseObj, effects: { blur: 6 } as any }, 1)).not.toThrow();
+    expect((q('[data-fx-input="shadowBlur"]') as HTMLInputElement).value).toBe(String(DEFAULT_EFFECTS.shadowBlur));
+  });
+
+  it('stays open after the last active effect is turned off', () => {
+    render({ ...baseObj, effects: { ...DEFAULT_EFFECTS, blur: 6 } }, 1);
+    expect((q('[data-fx-section]') as unknown as HTMLDetailsElement).open).toBe(true);
+    act(() => root.render(<I18nProvider><EffectsSection obj={{ ...baseObj, effects: { ...DEFAULT_EFFECTS } }} currentFrame={1} onChange={vi.fn()} /></I18nProvider>));
+    expect((q('[data-fx-section]') as unknown as HTMLDetailsElement).open).toBe(true);
   });
 });

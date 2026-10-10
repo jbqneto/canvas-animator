@@ -29,6 +29,7 @@ export const EffectsSection = <T extends Animated>({ obj, currentFrame, onChange
   const track = (prop: EffectProp) => obj.tracks[prop] as Track<number> | undefined;
   const value = (prop: EffectProp) => actorPropertyValue(obj, prop, currentFrame) as number;
   const anyActive = EFFECT_GROUPS.some((g) => value(g.trigger) > 0);
+  const [open, setOpen] = React.useState(anyActive);
 
   const setValue = (prop: EffectProp, v: number, label: string) => {
     const { min, max } = EFFECT_PROPS[prop];
@@ -57,12 +58,14 @@ export const EffectsSection = <T extends Animated>({ obj, currentFrame, onChange
   };
 
   const setColor = (key: ColorKey, color: string) => {
-    const effects: EffectParams = { ...(obj.effects ?? DEFAULT_EFFECTS), [key]: color };
+    const effects: EffectParams = { ...DEFAULT_EFFECTS, ...obj.effects, [key]: color };
     onChange({ ...obj, effects }, t('fx.history.color'));
   };
 
   return (
-    <details className="space-y-2 pt-2 border-t border-neutral-800" data-fx-section open={anyActive || undefined}>
+    <details className="space-y-2 pt-2 border-t border-neutral-800" data-fx-section open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
       <summary className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider cursor-pointer">
         {t('fx.title')}
       </summary>
@@ -70,7 +73,7 @@ export const EffectsSection = <T extends Animated>({ obj, currentFrame, onChange
         {EFFECT_GROUPS.map((group) => {
           const active = value(group.trigger) > 0;
           const colorKey = GROUP_COLOR[group.id];
-          const effects = obj.effects ?? DEFAULT_EFFECTS;
+          const effects = { ...DEFAULT_EFFECTS, ...obj.effects };
           return (
             <div key={group.id} className="space-y-1.5" data-fx-group={group.id}>
               <div className="flex items-center gap-1.5">
@@ -132,7 +135,7 @@ export const EffectsSection = <T extends Animated>({ obj, currentFrame, onChange
                       min={min}
                       max={max}
                       step={step}
-                      value={Number(value(prop).toFixed(2))}
+                      value={Number((Number.isFinite(value(prop)) ? value(prop) : DEFAULT_EFFECTS[prop]).toFixed(2))}
                       onChange={(e) => {
                         const n = Number(e.target.value);
                         if (e.target.value !== '' && Number.isFinite(n)) setValue(prop, n, label);

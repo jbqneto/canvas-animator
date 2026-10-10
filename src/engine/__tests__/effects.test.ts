@@ -99,4 +99,14 @@ describe('editing effects like any other property', () => {
   it('isEffectProp ignores inherited names', () => {
     expect(isEffectProp('toString')).toBe(false);
   });
+
+  it('tolerates partial or non-numeric stored effects', () => {
+    const partial = obj({ effects: { blur: 6 } as any });
+    expect(actorPropertyValue(partial, 'blur', 1)).toBe(6);
+    expect(actorPropertyValue(partial, 'shadowBlur', 1)).toBe(DEFAULT_EFFECTS.shadowBlur);
+    const str = obj({ effects: { ...DEFAULT_EFFECTS, shadowBlur: '4' as any } });
+    expect(actorPropertyValue(str, 'shadowBlur', 1)).toBe(DEFAULT_EFFECTS.shadowBlur);
+    const written = setActorProperty(partial, 'glowRadius', 1, 9);
+    expect(written.effects).toEqual({ ...DEFAULT_EFFECTS, blur: 6, glowRadius: 9 });
+  });
 });
