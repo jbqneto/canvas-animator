@@ -62,4 +62,19 @@ describe('lintScene', () => {
     expect(rules(input([blurIn]))).not.toContain('blurred-text');
     expect(rules(input([text()]))).not.toContain('blurred-text');
   });
+  it('flags long dead air over a plain background but not over a video or short gaps', () => {
+    const early = text({ startFrame: 1, durationFrames: 10 });
+    const late = text({ id: 't2', startFrame: 100, durationFrames: 10 });
+    const wide = { totalFrames: 120 };
+    expect(rules(input([early, late], wide))).toContain('dead-air');
+    expect(rules(input([early, late], { ...wide, videoBg: { type: 'upload' } }))).not.toContain('dead-air');
+    expect(rules(input([text({ durationFrames: 60 }), text({ id: 't2', startFrame: 61, durationFrames: 59 })], wide))).not.toContain('dead-air');
+    expect(rules(input([text({ durationFrames: 10 })], wide))).toContain('dead-air'); // trailing gap
+  });
+  it('flags a scene where every text uses the same entrance, once there are enough texts', () => {
+    const same = (n: number) => Array.from({ length: n }, (_, i) => text({ id: `t${i}`, effect: 'fadeRise' as any }));
+    expect(rules(input(same(4)))).toContain('uniform-entrance');
+    expect(rules(input(same(3)))).not.toContain('uniform-entrance');
+    expect(rules(input([...same(4), text({ id: 'x', effect: 'typewriter' as any })]))).not.toContain('uniform-entrance');
+  });
 });

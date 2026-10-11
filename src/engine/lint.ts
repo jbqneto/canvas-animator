@@ -4,7 +4,7 @@ import { contrastRatio } from './color';
 import { sampleEffects } from './effects';
 import { textBox } from './overlays';
 
-export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text';
+export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text' | 'dead-air' | 'uniform-entrance';
 
 export interface LintIssue {
   rule: LintRule;
@@ -18,7 +18,7 @@ export interface LintInput {
   fps: number;
   totalFrames: number;
   canvas: { width: number; height: number };
-  videoBg: { color?: string };
+  videoBg: { type?: string; color?: string };
   content: { texts?: TextOverlay[]; actors?: ActorOverlay[]; charts?: ChartOverlay[] };
 }
 
@@ -30,6 +30,10 @@ export interface LintOptions {
   /** Margin kept free on every side, as a fraction of the canvas. */
   safeMarginRatio?: number;
   minContrast?: number;
+  /** Longest stretch (seconds) with nothing on screen over a plain background. */
+  maxDeadAirSec?: number;
+  /** How many texts must share one entrance effect before it is flagged as the default look. */
+  uniformEntranceMin?: number;
 }
 
 /** Smallest blur over the object's span (sampled; about 60 points), so an entrance that clears to 0 is fine. */
@@ -42,7 +46,7 @@ function minBlur(obj: TextOverlay): number {
 }
 
 export function lintScene(input: LintInput, options: LintOptions = {}): LintIssue[] {
-  const { minFontPx1080 = 34, minLabelPx1080 = 24, safeMarginRatio = 0.05, minContrast = 4.5 } = options;
+  const { minFontPx1080 = 34, minLabelPx1080 = 24, safeMarginRatio = 0.05, minContrast = 4.5, maxDeadAirSec = 3, uniformEntranceMin = 4 } = options;
   const { width, height } = input.canvas;
   const texts = input.content.texts ?? [];
   const issues: LintIssue[] = [];
@@ -84,6 +88,43 @@ export function lintScene(input: LintInput, options: LintOptions = {}): LintIssu
     const ratio = contrastRatio(txt.color || '#ffffff', txt.bgColor ?? input.videoBg.color ?? '');
     if (ratio !== null && ratio < minContrast) {
       issues.push({ rule: 'low-contrast', severity: 'warning', objectId: txt.id, message: `Contrast ${ratio.toFixed(1)}:1 is below ${minContrast}:1.` });
+    }
+  }
+  issues.push(...deadAir(input, timed, maxDeadAirSec), ...uniformEntrance(texts, uniformEntranceMin));
+  return issues;
+}
+
+/** Gaps with nothing on screen. Skipped over a video background, which fills the frame by itself. */
+function deadAir(input: LintInput, timed: { startFrame: number; durationFrames: number }[], maxSec: number): LintIssue[] {
+  if (input.videoBg.type === 'upload' || input.videoBg.type === 'preset' || timed.length === 0) return [];
+  const spans = timed
+    .map((o) => [Math.max(1, o.startFrame), Math.min(input.totalFrames, o.startFrame + o.durationFrames - 1)] as const)
+    .filter(([from, to]) => to >= from)
+    .sort((a, b) => a[0] - b[0]);
+  const issues: LintIssue[] = [];
+  let covered = 0;
+  const report = (from: number, to: number) => {
+    const sec = (to - from + 1) / input.fps;
+    if (sec > maxSec) {
+      issues.push({ rule: 'dead-air', severity: 'warning', message: `Nothing on screen from ${((from - 1) / input.fps).toFixed(1)}s to ${(to / input.fps).toFixed(1)}s (${sec.toFixed(1)}s).` });
+    }
+  };
+  for (const [from, to] of spans) {
+    if (from > covered + 1) report(covered + 1, from - 1);
+    covered = Math.max(covered, to);
+  }
+  if (covered < input.totalFrames) report(covered + 1, input.totalFrames);
+  return issues;
+}
+
+/** Many texts entering the same way read as the template default; vary the entrance. */
+function uniformEntrance(texts: TextOverlay[], min: number): LintIssue[] {
+  const counts = new Map<string, number>();
+  for (const t of texts) counts.set(t.effect, (counts.get(t.effect) ?? 0) + 1);
+  const issues: LintIssue[] = [];
+  for (const [effect, n] of counts) {
+    if (n >= min && n === texts.length) {
+      issues.push({ rule: 'uniform-entrance', severity: 'warning', message: `All ${n} texts use the "${effect}" entrance; vary the entrance, easing or emphasis per object.` });
     }
   }
   return issues;

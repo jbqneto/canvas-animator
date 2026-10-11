@@ -150,7 +150,7 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
   }));
   server.registerTool('lint_scene', {
-    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, text blurred for its whole duration, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
+    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, text blurred for its whole duration, more than 3 s with nothing on screen over a plain background, every text sharing one entrance effect, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
     inputSchema: { windowId }, annotations: readOnly,
   }, safe(async ({ windowId }) => {
     const { file } = await call(windowId, { method: 'get_project' });

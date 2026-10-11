@@ -129,7 +129,8 @@ describe('helpers', () => {
     for (const id of ['dateCard', 'quote']) {
       const tpl = TEMPLATES.find((t) => t.id === id)!;
       const out = tpl.build(defaultValues(tpl, (k) => translate('en-US', k)), ctx({ width: 1920, height: 1080, fps: 30, startFrame: 1 }));
-      const issues = lintScene({ fps: 30, totalFrames: 300, canvas: { width: 1920, height: 1080 }, videoBg: { color: '#06080C' },
+      const end = Math.max(...[...out.texts, ...out.actors].map((o) => o.startFrame + o.durationFrames - 1));
+      const issues = lintScene({ fps: 30, totalFrames: end, canvas: { width: 1920, height: 1080 }, videoBg: { color: '#06080C' },
         content: { texts: out.texts, actors: out.actors } });
       expect(issues, id).toEqual([]);
     }
