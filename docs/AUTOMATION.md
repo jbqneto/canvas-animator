@@ -79,8 +79,10 @@ instalação e autosave. Não configure a ponte para uma interface de rede públ
 | `set_playing` | `windowId`, `playing` | Inicia/pausa a reprodução. |
 | `render_frame` | `windowId`, `frame` | Imagem PNG nativa do MCP, sem grade ou seleção do editor. |
 | `load_project` | `windowId`, `path` (absoluto) | Substitui o projeto inteiro (nome, FPS, canvas, duração e conteúdo) pelo `.fmproj` lido do caminho. Alterações não salvas dessa janela são descartadas. |
-| `export_video` | `windowId`, `outputPath` (absoluto), `format` (`mp4` ou `webm-alpha`, opcional), `overwrite` (opcional), `startFrame` e `endFrame` (opcionais, intervalo inclusivo) | Renderiza a linha do tempo (ou o trecho), grava o arquivo no caminho indicado (extensão compatível, dentro de uma pasta permitida) e aguarda o fim da exportação. Retorna `outputPath`, `bytes` e `extension`. As exportações via MCP ainda não incluem áudio. |
+| `export_video` | `windowId`, `outputPath` (absoluto), `format` (`mp4` ou `webm-alpha`, opcional), `overwrite` (opcional), `includeAudio` (opcional, padrão `true`), `startFrame` e `endFrame` (opcionais, intervalo inclusivo) | Renderiza a linha do tempo (ou o trecho), grava o arquivo no caminho indicado (extensão compatível, dentro de uma pasta permitida) e aguarda o fim da exportação. Retorna `outputPath`, `bytes` e `extension`. O áudio da timeline (narração, música e efeitos do `add_sfx`) entra na mixagem, a menos que `includeAudio` seja `false`; se o navegador não conseguir codificar o áudio, ele é omitido. |
 | `set_camera` | `windowId`, `camera` (objeto ou `null`) | Substitui a câmera virtual inteira como um passo desfazível (`base` e `tracks`; campos `panX`/`panY` em pixels a partir do centro do canvas, `zoom` de 0.05 a 20, `rotation` em graus; cada keyframe tem a forma `{frame, value, easing?}`). `null` remove a câmera. Move os objetos, não o fundo. |
+| `set_effects` | `windowId`, `objectId`, `base?`, `tracks?` | Sombra, glow, desfoque e tint em UM objeto (texto, gráfico, ator ou boneco; `objectId` vem de `get_project`) como um passo desfazível. Cada efeito fica desligado enquanto seu gatilho é 0: `shadowOpacity` (0..1; também `shadowBlur` 0..100, `shadowX`/`shadowY` -200..200, `shadowColor`), `glowRadius` (0..100; `glowStrength` 0..1, `glowColor`), `blur` (0..100) e `tintAmount` (0..1; `tintColor`). `base` MESCLA nos valores estáticos (números são limitados à faixa; cores `#rrggbb`). `tracks` traz keyframes `{frame, value, easing?}` por propriedade numérica e SUBSTITUI as keys dela (`[]` remove). Raios em pixels de saída. Ex.: entrada com desfoque `{"tracks":{"blur":[{"frame":1,"value":12},{"frame":20,"value":0}]}}`. |
+| `add_sfx` | `windowId`, `kind`, `frames` (1 a 32 quadros, base 1), `volume` (0 a 2, opcional) | Adiciona um efeito sonoro GERADO por código (sem arquivos nem rede, embutido no projeto) em cada quadro, como um passo desfazível. `kind`: `whoosh` (0,7 s, entradas e deslizes), `impact` (1,1 s, golpes e revelações), `riser` (2 s, tensão até um momento), `pop` (0,18 s, itens aparecendo) e `tick` (0,06 s, contadores). Retorna os ids dos clipes e `fitsTimeline` (`false` = algum clipe termina depois do fim da timeline). |
 | `render_contact_sheet` | `windowId`, `frames` ou `count` (padrão 6), `startFrame`, `endFrame`, `columns` (1–6, padrão 3), `cellWidth` (160–960, padrão 480) | Um PNG em grade, uma célula por frame, rotulada com o número do frame (máximo 24). Exige reprodução pausada. |
 | `lint_scene` | `windowId` | Verifica problemas antes de exportar: texto pequeno demais, fora da área segura, contraste baixo, textos vazios, objetos após o fim da linha do tempo. Retorna `{ issues }` (lista vazia = sem problemas). |
 | `describe_scene` | `windowId` | Resumo compacto da linha do tempo: o que aparece e quando (em segundos), marcadores, duração e se há câmera. |
@@ -112,10 +114,26 @@ em `src/engine/` para criar conteúdo válido.
 
 1. `list_windows` → escolha a janela; `describe_scene` para se orientar.
 2. `list_templates` → `apply_template` (cartão de data, citação, título…) em vez de escrever JSON à mão.
-3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo).
+3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo). `add_sfx` para som (whoosh nas entradas, impacto nas revelações, riser antes do momento forte; o `export_video` já mixa). `set_effects` para sombra em legendas sobre vídeo, glow de destaque e entradas com desfoque (`blur` 12 → 0). O modelo `glowTitle` (via `apply_template`) já traz glow e entrada desfocada.
 4. Ajustes finos com `get_project` → `replace_content` (use `fontFamily`, `fontWeight`, `italic`, `letterSpacing` em textos; famílias: Plus Jakarta Sans, Inter, Cormorant Garamond, JetBrains Mono, IBM Plex Mono).
 5. `render_contact_sheet` (6 quadros) para revisar tudo de uma vez; `render_frame` para um quadro em detalhe.
-6. `lint_scene` antes de exportar; `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
+6. `lint_scene` antes de exportar (inclui `blurred-text`, `dead-air` e `uniform-entrance`); `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
+
+### Laço de revisão (olhar, dar nota, corrigir)
+
+Um vídeo bom raramente sai na primeira tentativa. Depois de montar a cena:
+
+1. `render_contact_sheet` com `count` 6–12 e dê uma nota de 1 a 10 por plano em: composição, movimento,
+   tipografia/legibilidade e sincronia com marcadores ou áudio.
+2. Anote os três piores problemas e corrija só eles (`set_effects`, `set_camera`, `replace_content`).
+3. `lint_scene` e `describe_scene` (que agora lista os efeitos de cada objeto em `effects`) para conferir.
+4. Repita até todo plano ter nota 8 ou mais. Evite os padrões de fábrica: texto centralizado com fade em
+   tudo, mesma cor e mesma entrada em todos os objetos. Varie entrada, easing e destaque por objeto.
+
+Repetir e tremida: cada objeto aceita `modifiers` (via `replace_content`), por propriedade de transformação
+(`position`, `scale`, `rotation`, `opacity`): `{"rotation":{"loop":"pingpong"},"position":{"shake":{"amount":4,"periodFrames":6}}}`.
+`loop` (`cycle` | `pingpong`) repete as keys depois da última; `shake` soma ruído suave de ±`amount` (px na posição,
+razão em escala e opacidade, graus na rotação) com novo alvo a cada `periodFrames` quadros.
 
 O palco do editor mostra a cena **sem** a câmera (para editar no espaço da cena); a câmera aparece em `render_frame`, contact sheet e exportação.
 

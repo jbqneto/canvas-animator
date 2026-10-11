@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEntrance, applyExit } from '../motionPresets';
+import { sampleEffects } from '../effects';
 import { createActor, sampleActor, setActorProperty } from '../actor';
 
 const actor = () =>
@@ -36,5 +37,18 @@ describe('motion presets', () => {
     let a = { ...actor(), durationFrames: 6 };
     a = applyEntrance(a, 'fade', { frames: 30 });
     expect(a.tracks.opacity!.map((k) => k.frame)).toEqual([11, 14]);
+  });
+
+  it('blur-in sharpens from 12 px to the resting blur and blurs again on exit', () => {
+    const a = applyExit(applyEntrance(actor(), 'blurIn', { frames: 10 }), 'blurIn', { frames: 10 });
+    expect(sampleEffects(a, 11).blur).toBeCloseTo(12);
+    expect(sampleEffects(a, 21).blur).toBeCloseTo(0);
+    expect(sampleEffects(a, 35).blur).toBeCloseTo(0);
+    expect(sampleEffects(a, 51).blur).toBeCloseTo(12);
+    expect(sampleActor(a, 11).opacity).toBeCloseTo(0);
+  });
+  it('blur-in ends at a static blur the object already had', () => {
+    const blurred = setActorProperty(actor(), 'blur', 11, 4);
+    expect(sampleEffects(applyEntrance(blurred, 'blurIn', { frames: 10 }), 21).blur).toBeCloseTo(4);
   });
 });

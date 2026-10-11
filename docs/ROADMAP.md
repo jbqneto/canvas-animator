@@ -63,13 +63,40 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 
 Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
 
-1. Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis
+1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"), incluindo o MCP `set_effects`
 2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
-3. Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir
-4. Repetir/ciclo e tremida por propriedade
+3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
+4. ~~Repetir/ciclo e tremida por propriedade~~ — feito (ver contrato "Repetir e tremida")
 5. Máscara; revelar traços e contornos (quadro branco)
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- Efeitos sonoros gerados (`audio/synth.ts`): `synthSfx(kind)` faz DSP puro e determinístico (ruído com semente,
+  44,1 kHz mono) de `whoosh`, `impact`, `riser`, `pop` e `tick`; `encodeWav` escreve PCM 16 bits e `sfxClip`
+  devolve um `AudioClip` com o WAV embutido (data URL), então entra no projeto, na mixagem e no .fmproj como
+  qualquer áudio importado. Pico normalizado em 0,9 e 5 ms de fade no fim. UI: seletor "+ Som" na faixa de
+  áudio (no quadro atual). MCP: `add_sfx` (até 32 quadros por chamada). A exportação via MCP agora mixa o
+  áudio (`includeAudio`, padrão `true`); antes saía sem áudio. Não há síntese de música nem de voz.
+
+- Repetir e tremida (`Animated.modifiers`, `engine/modifiers.ts`): por propriedade de transformação
+  (`position`, `scale`, `rotation`, `opacity`), `{ loop?: 'cycle' | 'pingpong', shake?: { amount, periodFrames } }`,
+  como `loopOut` e `wiggle` do After Effects. O loop só age DEPOIS da última key (`loopFrame`: ciclo volta à
+  primeira, vai-e-volta anda para trás; sem efeito com menos de 2 keys) e não mexe no caminho seguido (`follow`).
+  A tremida soma ruído suave determinístico (`shakeOffset`: alvo aleatório a cada `periodFrames`, suavizado; a
+  semente é id + propriedade + eixo) de ±`amount` (px na posição, razão em escala/opacidade, graus na rotação).
+  Só `sampleActor` aplica (preview, exportação e `render_frame` iguais); `actorPropertyValue`/edição seguem
+  vendo as keys puras. Sem `modifiers` o caminho é o de antes. O retime escala `periodFrames`. Efeitos
+  (sombra, glow…) ainda não têm loop/tremida. Via MCP: `replace_content` (campo `modifiers` no objeto).
+
+- Karaokê (`TextOverlay.karaoke`, `engine/captions.ts`): `{ wordOffsets, highlightColor }`, um offset por palavra do
+  `text` (separado por espaços), em frames a partir de `startFrame` (por isso mover o clipe não quebra; o retime
+  escala os offsets). `parseSubtitles` lê os timestamps inline do WebVTT (`a<00:00:01.200><c> b</c>`): a primeira
+  palavra começa com o cue; só a linha com tags conta (legenda automática repete a anterior sem tags).
+  `CaptionSpan.words` leva o tempo; `captionTexts` só cria `karaoke` com `karaokeColor` e quando as palavras
+  batem com o texto. `karaokeState(txt, frame)` devolve as palavras e quantas já começaram (null se os dados
+  forem inválidos: cai no texto inteiro). Palavras faladas usam `highlightColor`, as demais `color`. O diálogo
+  oferece a opção só quando o arquivo tem tempo por palavra. Legendas automáticas do YouTube também geram cues
+  curtos de "transição" que repetem texto; não são filtrados.
 
 - Legendas (`engine/captions.ts`): `scriptLines` (uma legenda por linha, vazias fora) e
   `captionSpans(lines, markerFrames, from, to)` (`to` exclusivo): a linha i começa no i-ésimo marcador em
@@ -240,3 +267,9 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   objetos, não o fundo. O palco do editor ignora a câmera (a prévia no palco usa `screenToScene`, tarefa futura);
   `render_frame`, contact sheet e export a aplicam.
 - Fontes (`utils/fonts.ts`): só `FONT_FAMILIES`. Nome desconhecido cai na família padrão.
+- Efeitos por objeto (`engine/effects.ts`): sombra, brilho (glow), desfoque e tint, animáveis por keyframes como as
+  outras propriedades. Gatilho 0 = desligado (sem custo: o caminho sem efeitos desenha direto, idêntico ao
+  anterior). Cores são estáticas (não animam); só quantidades/raios animam. Ordem fixa: sombra → glow → objeto.
+  Desfoque via `ctx.filter` (ignorado sem suporte do navegador; a UI avisa). Raios em pixels de saída: não
+  escalam com o zoom da câmera. O objeto é desenhado numa canvas fora da tela do tamanho da saída (assume sem
+  DPR) que recebe a matriz da câmera. MCP: `set_effects` (um objeto por vez). Preset de entrada `blurIn` (desfoque 12 → nítido) e modelo `glowTitle` (glow fixo + entrada desfocada) já usam efeitos.

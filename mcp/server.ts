@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { evenFrames } from '../src/engine/contactSheet';
 import { describeScene } from '../src/engine/describe';
 import { lintScene } from '../src/engine/lint';
-import { cameraSchema, type BridgeCommand } from '../src/automation/protocol';
+import { SFX_KINDS, type SfxKind } from '../src/audio/synth';
+import { cameraSchema, effectsSchema, type BridgeCommand } from '../src/automation/protocol';
 import { resolveAllowedRoots, resolveReadable, resolveWritable } from './paths';
 
 const sessionSchema = z.object({ url: z.string().url(), token: z.string().regex(/^[a-f0-9]{64}$/) });
@@ -90,14 +91,14 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return text(await call(windowId, { method: 'load_project', file }));
   }));
   server.registerTool('export_video', {
-    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path. The extension must match the format (.mp4 / .webm); the path must be inside an allowed folder (the project folder, the system temp folder, or one added with --allow-root / FLASHMOTION_MCP_ROOTS); an existing file is only replaced with overwrite=true. The result has no audio. Waits until the export finishes (it may take a while for long timelines).',
-    inputSchema: { windowId, outputPath: z.string().min(1), format: z.enum(['mp4', 'webm-alpha']).optional(), overwrite: z.boolean().optional(),
+    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path. The extension must match the format (.mp4 / .webm); the path must be inside an allowed folder (the project folder, the system temp folder, or one added with --allow-root / FLASHMOTION_MCP_ROOTS); an existing file is only replaced with overwrite=true. The result includes the audio clips of the timeline (narration, music, add_sfx effects) mixed in unless includeAudio=false (a browser that cannot encode the audio leaves it out). Waits until the export finishes (it may take a while for long timelines).',
+    inputSchema: { windowId, outputPath: z.string().min(1), format: z.enum(['mp4', 'webm-alpha']).optional(), overwrite: z.boolean().optional(), includeAudio: z.boolean().optional(),
       startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional() }, annotations: edit,
-  }, safe(async ({ windowId, outputPath, format, overwrite, startFrame, endFrame }) => {
+  }, safe(async ({ windowId, outputPath, format, overwrite, includeAudio, startFrame, endFrame }) => {
     if (!isAbsolute(outputPath)) throw new Error('ABSOLUTE_PATH_REQUIRED');
     // Validate before the (slow) export so a bad path fails fast
     await resolveWritable(outputPath, format ?? 'mp4', roots, overwrite);
-    await call(windowId, { method: 'export_start', format, startFrame, endFrame });
+    await call(windowId, { method: 'export_start', format, includeAudio, startFrame, endFrame });
     let status: any;
     for (;;) {
       await new Promise((r) => setTimeout(r, 1000));
@@ -127,6 +128,15 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     description: 'Set the virtual camera that moves/zooms/rotates all scene objects (not the background) over time. REPLACES the whole camera; pass camera=null to remove it. base = static pan/zoom/rotation (panX/panY are pixel offsets from the canvas center, zoom 0.05..20, rotation in degrees); tracks = keyframes per property, e.g. a slow push-in: {"tracks":{"zoom":[{"frame":1,"value":1,"easing":"linear"},{"frame":240,"value":1.08}]}}. One undoable edit.',
     inputSchema: { windowId, camera: cameraSchema.nullable() }, annotations: edit,
   }, safe(async ({ windowId, camera }) => text(await call(windowId, { method: 'set_camera', camera }))));
+  server.registerTool('set_effects', {
+    description: 'Set shadow, glow, blur and tint on ONE object (a text, chart, actor or stick figure; objectId from get_project). Each effect is off while its trigger is 0: shadowOpacity (also shadowBlur 0..100, shadowX/shadowY -200..200, shadowColor), glowRadius 0..100 (glowStrength 0..1, glowColor), blur 0..100, tintAmount 0..1 (tintColor). base MERGES into the static values (numbers are clamped; colors are #rrggbb). tracks = keyframes per numeric property and REPLACE that property\'s keys ([] removes them), e.g. blur-in: {"tracks":{"blur":[{"frame":1,"value":12,"easing":"easeOut"},{"frame":20,"value":0}]}}. Radii are in output pixels. One undoable edit.',
+    inputSchema: { windowId, objectId: effectsSchema.shape.objectId, base: effectsSchema.shape.base, tracks: effectsSchema.shape.tracks }, annotations: edit,
+  }, safe(async ({ windowId, objectId, base, tracks }) => text(await call(windowId, { method: 'set_effects', objectId, base, tracks }))));
+  server.registerTool('add_sfx', {
+    description: `Add a generated sound effect (no files, no network; embedded in the project) at one or more frames, as one undoable edit. kind: ${SFX_KINDS.join(' | ')} (whoosh 0.7 s for entrances and slides, impact 1.1 s for hits and reveals, riser 2 s building up to a moment, pop 0.18 s for items appearing, tick 0.06 s for counters). frames = 1-based timeline frames, up to 32 per call (e.g. each entrance or marker); volume 0..2 (default 1). Result: the new clip ids and fitsTimeline (false = a clip ends after the timeline). The editor mixes them into export_video.`,
+    inputSchema: { windowId, kind: z.enum(SFX_KINDS as [SfxKind, ...SfxKind[]]), frames: z.array(z.number().int().min(1)).min(1).max(32), volume: z.number().min(0).max(2).optional() },
+    annotations: edit,
+  }, safe(async ({ windowId, kind, frames, volume }) => text(await call(windowId, { method: 'add_sfx', kind, frames, volume }))));
   server.registerTool('render_contact_sheet', {
     description: 'Render several frames into ONE PNG grid (each cell labeled #frame) to review a whole animation in a single call. Pass frames explicitly, or count (default 6) evenly spaced between startFrame (default 1) and endFrame (default: last frame). Max 24 frames; columns 1-6 (default 3); cellWidth 160-960 (default 480). Playback must be paused.',
     inputSchema: {
@@ -146,14 +156,14 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
   }));
   server.registerTool('lint_scene', {
-    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
+    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, text blurred for its whole duration, more than 3 s with nothing on screen over a plain background, every text sharing one entrance effect, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
     inputSchema: { windowId }, annotations: readOnly,
   }, safe(async ({ windowId }) => {
     const { file } = await call(windowId, { method: 'get_project' });
     return text({ issues: lintScene(file.project) });
   }));
   server.registerTool('describe_scene', {
-    description: 'Compact timeline summary (what appears when, in seconds, plus markers, duration and whether a camera exists). Much cheaper than get_project for orienting yourself.',
+    description: 'Compact timeline summary (what appears when, in seconds, plus markers, duration and whether a camera exists; items list the effects they turn on). Much cheaper than get_project for orienting yourself.',
     inputSchema: { windowId }, annotations: readOnly,
   }, safe(async ({ windowId }) => {
     const { file } = await call(windowId, { method: 'get_project' });

@@ -2,8 +2,10 @@
  * Keyframed transform of any animated object (actor, chart, text): stopwatch rule, sampling, keys,
  * retiming and "follow path". Functions are generic over `Animated`, so they keep the concrete type.
  */
-import type { ActorOverlay, ActorTransform, Animated, MotionPath } from '../types';
+import type { ActorOverlay, ActorTransform, Animated, ModifiableProperty, MotionPath } from '../types';
+import { DEFAULT_EFFECTS, isEffectProp } from './effects';
 import { buildFollowProgress, pointAtProgress, polylineUpTo, samplePath } from './path';
+import { loopFrame, shakeOffset } from './modifiers';
 import { samplePosition, sampleTrack, setKeyframe, hasKeyframeAt, moveKeyframe, Track, Vec2 } from './keyframes';
 
 export type ActorProperty = keyof Animated['tracks'];
@@ -25,28 +27,44 @@ export function followedPath(actor: Animated, paths: MotionPath[]): MotionPath |
 }
 
 /** Position (and travel direction) from the followed path, or from the position keys. */
-function samplePlacement(actor: Animated, frame: number, paths: MotionPath[]) {
+function samplePlacement(actor: Animated, frame: number, paths: MotionPath[], keyFrame = frame) {
   const path = followedPath(actor, paths);
   if (path && actor.follow) {
     const p = pointAtProgress(samplePath(path), sampleTrack(actor.follow.progress, frame, 0));
     return { x: p.x, y: p.y, angle: actor.follow.orient ? p.angle : 0 };
   }
-  const pos = samplePosition(actor.tracks.position, frame, actor.base, actor.smoothPath);
+  const pos = samplePosition(actor.tracks.position, keyFrame, actor.base, actor.smoothPath);
   const animated = (actor.tracks.position?.length ?? 0) >= 2;
   return { x: pos.x, y: pos.y, angle: actor.orientToPath && animated ? pos.angle : 0 };
 }
 
 /** Evaluates every animated property of the actor at `frame` (`paths` resolves "follow path"). */
 export function sampleActor(actor: Animated, frame: number, paths: MotionPath[] = []): ActorState {
-  const { base, tracks } = actor;
-  const pos = samplePlacement(actor, frame, paths);
-  const pathAngle = pos.angle;
+  const { base, tracks, modifiers } = actor;
+  if (!modifiers) {
+    const pos = samplePlacement(actor, frame, paths);
+    return {
+      x: pos.x,
+      y: pos.y,
+      scale: sampleTrack(tracks.scale, frame, base.scale),
+      rotation: sampleTrack(tracks.rotation, frame, base.rotation) + pos.angle,
+      opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, frame, base.opacity))),
+      visible: isActorOnScreen(actor, frame),
+    };
+  }
+  // Loops read the keys at another frame; shakes add noise on top of what the keys give
+  const at = (prop: ModifiableProperty) => loopFrame(tracks[prop], frame, modifiers[prop]?.loop);
+  const shake = (prop: ModifiableProperty, axis = '') => {
+    const s = modifiers[prop]?.shake;
+    return s ? shakeOffset(`${(actor as { id?: string }).id ?? ''}:${prop}${axis}`, frame, s.amount, s.periodFrames) : 0;
+  };
+  const pos = samplePlacement(actor, frame, paths, at('position'));
   return {
-    x: pos.x,
-    y: pos.y,
-    scale: sampleTrack(tracks.scale, frame, base.scale),
-    rotation: sampleTrack(tracks.rotation, frame, base.rotation) + pathAngle,
-    opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, frame, base.opacity))),
+    x: pos.x + shake('position', 'x'),
+    y: pos.y + shake('position', 'y'),
+    scale: sampleTrack(tracks.scale, at('scale'), base.scale) + shake('scale'),
+    rotation: sampleTrack(tracks.rotation, at('rotation'), base.rotation) + pos.angle + shake('rotation'),
+    opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, at('opacity'), base.opacity) + shake('opacity'))),
     visible: isActorOnScreen(actor, frame),
   };
 }
@@ -55,6 +73,15 @@ type PropertyValue<P extends ActorProperty> = P extends 'position' ? Vec2 : numb
 
 export function isAnimated(actor: Animated, prop: ActorProperty): boolean {
   return (actor.tracks[prop]?.length ?? 0) > 0;
+}
+
+/** Static (stopwatch off) value of a numeric property: effects live in `effects`, the rest in `base`. */
+function baseOf(actor: Animated, prop: Exclude<ActorProperty, 'position'>): number {
+  if (isEffectProp(prop)) {
+    const v = actor.effects?.[prop];
+    return typeof v === 'number' && Number.isFinite(v) ? v : DEFAULT_EFFECTS[prop];
+  }
+  return actor.base[prop];
 }
 
 /**
@@ -68,6 +95,9 @@ export function setActorProperty<T extends Animated, P extends ActorProperty>(
   value: PropertyValue<P>
 ): T {
   if (!isAnimated(actor, prop)) {
+    if (prop !== 'position' && isEffectProp(prop)) {
+      return { ...actor, effects: { ...DEFAULT_EFFECTS, ...actor.effects, [prop]: value as number } };
+    }
     const base =
       prop === 'position'
         ? { ...actor.base, ...(value as Vec2) }
@@ -90,7 +120,7 @@ export function actorPropertyValue<P extends ActorProperty>(
     return { x: p.x, y: p.y } as PropertyValue<P>;
   }
   const track = actor.tracks[prop as Exclude<ActorProperty, 'position'>];
-  return sampleTrack(track, frame, actor.base[prop as 'scale']) as PropertyValue<P>;
+  return sampleTrack(track, frame, baseOf(actor, prop as Exclude<ActorProperty, 'position'>)) as PropertyValue<P>;
 }
 
 /**
@@ -180,15 +210,13 @@ export function createActor(params: {
 export function shiftActorTime<T extends Animated>(actor: T, delta: number): T {
   if (delta === 0) return actor;
   const shift = <T,>(track?: Track<T>) => track?.map((k) => ({ ...k, frame: k.frame + delta }));
+  const tracks = Object.fromEntries(
+    Object.entries(actor.tracks).map(([prop, track]) => [prop, shift(track as Track<unknown>)])
+  ) as Animated['tracks'];
   return {
     ...actor,
     startFrame: actor.startFrame + delta,
-    tracks: {
-      position: shift(actor.tracks.position),
-      scale: shift(actor.tracks.scale),
-      rotation: shift(actor.tracks.rotation),
-      opacity: shift(actor.tracks.opacity),
-    },
+    tracks,
     follow: actor.follow && { ...actor.follow, progress: shift(actor.follow.progress) ?? [] },
   };
 }

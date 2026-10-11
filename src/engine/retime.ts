@@ -25,17 +25,24 @@ export function retimeTrack<T>(track: Track<T> | undefined, k: number): Track<T>
   return [...byFrame.values()].sort((a, b) => a.frame - b.frame);
 }
 
+/** Shake periods are frames, so they scale with the rate to keep the same speed in seconds. */
+function retimeModifiers(modifiers: NonNullable<Animated['modifiers']>, k: number): NonNullable<Animated['modifiers']> {
+  return Object.fromEntries(
+    Object.entries(modifiers).map(([prop, mod]) => [
+      prop,
+      mod?.shake ? { ...mod, shake: { ...mod.shake, periodFrames: Math.max(1, Math.round(mod.shake.periodFrames * k)) } } : mod,
+    ])
+  );
+}
+
 export function retimeAnimated<T extends Animated>(obj: T, k: number): T {
-  const t = obj.tracks;
   return {
     ...obj,
     ...retimeSpan(obj.startFrame, obj.durationFrames, k),
-    tracks: {
-      position: retimeTrack(t.position, k),
-      scale: retimeTrack(t.scale, k),
-      rotation: retimeTrack(t.rotation, k),
-      opacity: retimeTrack(t.opacity, k),
-    },
+    tracks: Object.fromEntries(
+      Object.entries(obj.tracks).map(([prop, track]) => [prop, retimeTrack(track as Track<unknown>, k)])
+    ) as Animated['tracks'],
+    modifiers: obj.modifiers && retimeModifiers(obj.modifiers, k),
     follow: obj.follow && { ...obj.follow, progress: retimeTrack(obj.follow.progress, k) ?? [] },
   };
 }
@@ -68,7 +75,11 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
     actors: scene.actors.map((a) => retimeAnimated(a, k)),
     sticks: scene.sticks?.map((st) => ({ ...retimeAnimated(st, k), poses: retimeTrack(st.poses, k) ?? [] })),
     charts: scene.charts.map((c) => retimeIntro(retimeAnimated(c, k), k)),
-    texts: scene.texts.map((x) => retimeIntro(retimeAnimated(x, k), k)),
+    texts: scene.texts.map((x) => {
+      const t = retimeIntro(retimeAnimated(x, k), k);
+      // Word starts are offsets from the text start, so they scale like a duration
+      return x.karaoke ? { ...t, karaoke: { ...x.karaoke, wordOffsets: x.karaoke.wordOffsets.map((o) => Math.round(o * k)) } } : t;
+    }),
     paths: scene.paths.map((p) => ({ ...p, ...retimeSpan(p.startFrame, p.durationFrames, k) })),
     images: scene.images.map((img) => ({ ...img, ...retimeSpan(img.startFrame, img.durationFrames, k) })),
     // Audio timing inside the clip is already in seconds; only where it starts moves

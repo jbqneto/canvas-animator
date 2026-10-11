@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createBrowserApi, type AutomationStatus } from '../browserApi';
+import { createText } from '../../engine/overlays';
 import { serializeProject } from '../../project/projectFile';
 
 function setup() {
@@ -82,6 +83,48 @@ describe('browser automation', () => {
     adapter.project = () => JSON.stringify(text);
     await expect(api.renderContactSheet(Array.from({ length: 24 }, (_, i) => i + 1), { columns: 1, cellWidth: 960 })).rejects.toThrow('SHEET_TOO_LARGE');
     expect(adapter.contactSheet).not.toHaveBeenCalled();
+  });
+  it('sets effects on a text: merges base, clamps, replaces and clears tracks', () => {
+    const { api, adapter, content } = setup();
+    const text = createText({ id: 'tx1', text: 'Oi', startFrame: 1, durationFrames: 30 } as any, { x: 0, y: 0 });
+    content.texts.push(text as never);
+    api.setEffects('tx1', { shadowOpacity: 5, glowColor: '#00ff00' }, { blur: [{ frame: 1, value: 500 }, { frame: 20, value: 0 }] });
+    const first = adapter.replaceContent.mock.calls[0][0].texts[0];
+    expect(first.effects).toMatchObject({ shadowOpacity: 1, glowColor: '#00ff00', shadowBlur: 8 });
+    expect(first.tracks.blur.map((k: { value: number }) => k.value)).toEqual([100, 0]);
+    expect(() => api.setEffects('missing', { blur: 1 })).toThrow('UNKNOWN_OBJECT');
+  });
+  it('adds one generated clip per frame in a single edit', () => {
+    const { api, adapter } = setup();
+    const result = api.addSfx('whoosh', [1, 30], 0.8);
+    expect(adapter.replaceContent).toHaveBeenCalledTimes(1);
+    const audio = adapter.replaceContent.mock.calls[0][0].audio;
+    expect(audio.map((c: { startFrame: number }) => c.startFrame)).toEqual([1, 30]);
+    expect(audio[0]).toMatchObject({ volume: 0.8, muted: false });
+    expect(audio[0].src.startsWith('data:audio/wav;base64,')).toBe(true);
+    expect(result.added).toHaveLength(2);
+    expect(result.fitsTimeline).toBe(true); // 0.7 s at 24 fps from frame 30 ends by frame 47 of 60
+  });
+  it('reports a clip that runs past the end of the timeline and rejects bad input', () => {
+    const { api, adapter } = setup();
+    expect(api.addSfx('riser', [50]).fitsTimeline).toBe(false); // 2 s = 48 frames from frame 50 of 60
+    expect(() => api.addSfx('whoosh', [61])).toThrow('INVALID_FRAME');
+    expect(() => api.addSfx('whoosh', [])).toThrow('INVALID_FRAMES');
+    expect(() => api.addSfx('boom' as never, [1])).toThrow('UNKNOWN_SFX');
+    expect(adapter.replaceContent).toHaveBeenCalledTimes(1);
+  });
+  it('blocks add_sfx while recovery is pending', () => {
+    const { status, api } = setup();
+    status.ready = false;
+    expect(() => api.addSfx('pop', [1])).toThrow('RECOVERY_PENDING');
+  });
+  it('exports with audio unless told otherwise', () => {
+    const first = setup();
+    first.api.startExport({});
+    expect((first.adapter.exportVideo.mock.calls[0] as unknown as [{ includeAudio: boolean }])[0].includeAudio).toBe(true);
+    const second = setup();
+    second.api.startExport({ includeAudio: false });
+    expect((second.adapter.exportVideo.mock.calls[0] as unknown as [{ includeAudio: boolean }])[0].includeAudio).toBe(false);
   });
   it('blocks set_camera while recovery is pending', () => {
     const { status, api } = setup();

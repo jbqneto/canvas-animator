@@ -27,6 +27,9 @@ import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
 import { fontCss, loadSceneFonts } from './fonts';
+import { karaokeState } from '../engine/captions';
+import { hasActiveEffects, sampleEffects } from '../engine/effects';
+import { drawWithEffects, type LayerFactory } from './effectsRender';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -59,6 +62,8 @@ export interface RenderOptions {
   transparent?: boolean;
   /** Apply the scene camera (default true). The editor stage turns it off so editing happens in scene space. */
   camera?: boolean;
+  /** Off-screen layer factory for objects with effects; injected in tests */
+  createLayer?: LayerFactory;
 }
 
 /**
@@ -182,40 +187,54 @@ export function renderCompositeFrame(
   actors.forEach((actor) => {
     const state = sampleActor(actor, currentFrame, paths);
     if (!state.visible || state.opacity <= 0) return;
-    add(actor.id, 'actor', FRONT, () => drawActor(ctx, actor, state, currentFrame, paths));
+    add(actor.id, 'actor', FRONT, () => {
+      drawActorTrail(ctx, actor, state, currentFrame, paths);
+      const fx = sampleEffects(actor, currentFrame);
+      if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state);
+      // opacity is applied once, when composing the layer
+      drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }), options.createLayer);
+    });
   });
   frameData?.drawings?.forEach((stroke) => {
     if (!stroke.points || stroke.points.length === 0) return;
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
   });
   // Charts and texts: the same keyframed transform as actors, then their own intro inside it
-  const withTransform = (obj: Animated, draw: () => void) => {
+  const withTransform = (obj: Animated, draw: (c: CanvasRenderingContext2D) => void) => {
     const state = sampleActor(obj, currentFrame, paths);
     if (!state.visible || state.opacity <= 0) return null;
+    const fx = sampleEffects(obj, currentFrame);
+    const place = (c: CanvasRenderingContext2D) => {
+      c.translate(state.x, state.y);
+      c.rotate((state.rotation * Math.PI) / 180);
+      c.scale(state.scale, state.scale);
+    };
     return () => {
+      if (hasActiveEffects(fx)) {
+        drawWithEffects(ctx, width, height, fx, state.opacity, (c) => { c.save(); place(c); draw(c); c.restore(); }, options.createLayer);
+        return;
+      }
       ctx.save();
-      ctx.translate(state.x, state.y);
-      ctx.rotate((state.rotation * Math.PI) / 180);
-      ctx.scale(state.scale, state.scale);
+      place(ctx);
       ctx.globalAlpha *= state.opacity;
-      draw();
+      draw(ctx);
       ctx.restore();
     };
   };
   // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
   // Without a layer of their own they follow the drawings layer, as before.
   scene.sticks?.forEach((stick) => {
-    const draw = withTransform(stick, () => drawStickFigure(ctx, localFigure(stick, samplePose(stick, currentFrame))));
+    const draw = withTransform(stick, (c) => drawStickFigure(c, localFigure(stick, samplePose(stick, currentFrame))));
     if (draw) add(stick.id, 'drawing', FRONT, draw);
   });
   charts.forEach((chart) => {
     if (!chart.visible) return;
-    const draw = withTransform(chart, () => drawChart(ctx, chart, currentFrame));
+    const draw = withTransform(chart, (c) => drawChart(c, chart, currentFrame));
     if (draw) add(chart.id, 'chart', FRONT, draw);
   });
   texts.forEach((txt) => {
     if (!txt.visible) return;
-    const draw = withTransform(txt, () => drawText(ctx, txt, currentFrame, effectRate));
+    const draw = withTransform(txt, (c) => drawText(c, txt, currentFrame, effectRate));
     if (draw) add(txt.id, 'text', FRONT, draw);
   });
 
@@ -268,7 +287,7 @@ function drawImageOverlay(
   ctx.restore();
 }
 
-function drawActor(
+function drawActorTrail(
   ctx: CanvasRenderingContext2D,
   actor: ActorOverlay,
   state: ReturnType<typeof sampleActor>,
@@ -292,7 +311,9 @@ function drawActor(
       ctx.restore();
     }
   }
+}
 
+function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>) {
   const img = actor.kind === 'shape' ? null : getCachedImage(actor.src);
   if (actor.kind !== 'shape' && !isImageReady(img!)) return;
   ctx.save();
@@ -745,7 +766,22 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   ctx.shadowBlur = 12;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 2;
-  ctx.fillText(displayedText, 0, offsetY);
+  const karaoke = displayedText === txt.text ? karaokeState(txt, currentFrame) : null;
+  if (karaoke && txt.karaoke) {
+    // Word by word: spoken words in the highlight color, the others in the text color
+    const total = ctx.measureText(displayedText).width;
+    const left = txt.align === 'center' ? -total / 2 : 0;
+    const align = ctx.textAlign;
+    ctx.textAlign = 'left';
+    karaoke.words.forEach((word, i) => {
+      const x = i === 0 ? 0 : ctx.measureText(`${karaoke.words.slice(0, i).join(' ')} `).width;
+      ctx.fillStyle = i < karaoke.spoken ? txt.karaoke!.highlightColor : txt.color || '#ffffff';
+      ctx.fillText(word, left + x, offsetY);
+    });
+    ctx.textAlign = align;
+  } else {
+    ctx.fillText(displayedText, 0, offsetY);
+  }
 
   // Subtitle if provided
   if (txt.subtitle && elapsed > 6) {

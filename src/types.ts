@@ -177,6 +177,11 @@ export interface TextOverlay extends Animated {
   letterSpacing?: number;
   /** Made by the captions dialog: exported to .srt with the other captions. */
   role?: 'caption';
+  /**
+   * Word-by-word highlight (karaoke): `wordOffsets[i]` is the frame, counted from `startFrame`, where word
+   * i of `text` (split on spaces) starts; spoken words use `highlightColor`, the rest keep `color`.
+   */
+  karaoke?: { wordOffsets: number[]; highlightColor: string };
   effect: TextEffect;
   badge?: string;
   visible: boolean;
@@ -213,11 +218,39 @@ export interface ActorTransform {
   opacity: number;
 }
 
-export interface MotionTracks {
+/** Numeric (animatable) effect parameters; the colors are static. See `engine/effects.ts`. */
+export type EffectProp =
+  | 'shadowOpacity' | 'shadowBlur' | 'shadowX' | 'shadowY'
+  | 'glowRadius' | 'glowStrength'
+  | 'blur'
+  | 'tintAmount';
+
+/** Static values (stopwatch off) of the per-object effects, plus their colors. Trigger 0 = effect off. */
+export interface EffectParams extends Record<EffectProp, number> {
+  shadowColor: string;
+  glowColor: string;
+  tintColor: string;
+}
+
+export interface MotionTracks extends Partial<Record<EffectProp, Track<number>>> {
   position?: Track<Vec2>;
   scale?: Track<number>;
   rotation?: Track<number>;
   opacity?: Track<number>;
+}
+
+/** Properties that can loop or shake (the transform ones; effect values keep to their keys). */
+export type ModifiableProperty = 'position' | 'scale' | 'rotation' | 'opacity';
+
+/**
+ * What happens to a property around its keys, like After Effects' loopOut and wiggle expressions:
+ * `loop` repeats the keys after the last one (`cycle` jumps back, `pingpong` plays them in reverse),
+ * `shake` adds smooth random noise of ±`amount` (pixels for position, a ratio for scale and opacity,
+ * degrees for rotation) that picks a new target every `periodFrames` frames.
+ */
+export interface PropertyModifier {
+  loop?: 'cycle' | 'pingpong';
+  shake?: { amount: number; periodFrames: number };
 }
 
 /**
@@ -239,6 +272,10 @@ export interface Animated {
    * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
    */
   follow?: ActorFollow;
+  /** Shadow, glow, blur and tint; absent = all off. Keys for the numbers live in `tracks`. */
+  effects?: EffectParams;
+  /** Loop and shake per transform property; absent = plain keys. */
+  modifiers?: Partial<Record<ModifiableProperty, PropertyModifier>>;
 }
 
 /**

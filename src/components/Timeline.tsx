@@ -54,6 +54,7 @@ import { nextMarker, prevMarker, snapFrame, snapSpan } from '../engine/markers';
 
 type AnimKind = 'actor' | 'chart' | 'text' | 'stick';
 import { AudioLanes, AudioList } from './AudioTracks';
+import type { SfxKind } from '../audio/synth';
 import {
   clampZoom,
   fitPxPerFrame,
@@ -160,6 +161,7 @@ interface TimelineProps {
   onCommitPath: (path: MotionPath, description: string, baseSnapshot: HistorySnapshot) => void;
   audioClips: AudioClip[];
   onImportAudioFiles: (files: FileList) => void;
+  onAddSfx: (kind: SfxKind) => void;
   onUpdateAudioClip: (clip: AudioClip, description?: string) => void;
   onTransientUpdateAudioClip: (clip: AudioClip) => void;
   onCommitAudioClip: (clip: AudioClip, description: string, baseSnapshot: HistorySnapshot) => void;
@@ -221,6 +223,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onCommitPath,
   audioClips,
   onImportAudioFiles,
+  onAddSfx,
   onUpdateAudioClip,
   onTransientUpdateAudioClip,
   onCommitAudioClip,
@@ -1233,6 +1236,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             <AudioList
               clips={audioClips}
               onImport={onImportAudioFiles}
+              onAddSfx={onAddSfx}
               onUpdate={onUpdateAudioClip}
               onTransientUpdate={onTransientUpdateAudioClip}
               onCommit={onCommitAudioClip}

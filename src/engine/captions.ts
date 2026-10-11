@@ -6,9 +6,17 @@
 import type { TextOverlay } from '../types';
 import { createText } from './overlays';
 
+export interface CaptionWord {
+  text: string;
+  /** Frame where the word starts being spoken. */
+  startFrame: number;
+}
+
 export interface CaptionSpan {
   text: string;
   startFrame: number;
+  /** Per-word timing, when the subtitle file carries it (WebVTT inline timestamps). */
+  words?: CaptionWord[];
   /** First frame after the caption (the next one starts here). */
   endFrame: number;
 }
@@ -69,6 +77,15 @@ export interface CaptionStyle {
   position: 'bottom' | 'top';
   fontSize: number;
   idPrefix: string;
+  /** Highlight color for word-by-word captions; only spans that carry word timing get it. */
+  karaokeColor?: string;
+}
+
+/** The karaoke data of a span: one offset per word of its text, none when timing is missing or inconsistent. */
+function karaokeOf(span: CaptionSpan, highlightColor?: string): Pick<TextOverlay, 'karaoke'> {
+  const words = span.words;
+  if (!highlightColor || !words || words.length === 0 || words.map((w) => w.text).join(' ') !== span.text) return {};
+  return { karaoke: { wordOffsets: words.map((w) => Math.max(0, w.startFrame - span.startFrame)), highlightColor } };
 }
 
 /** One centered text per span, with a dark box so it reads over any video. */
@@ -89,6 +106,7 @@ export function captionTexts(spans: CaptionSpan[], style: CaptionStyle): TextOve
         startFrame: span.startFrame,
         // The span of an object includes its last frame, so it ends right before the next caption
         durationFrames: Math.max(0, span.endFrame - span.startFrame - 1),
+        ...karaokeOf(span, style.karaokeColor),
       },
       { x: Math.round(style.width / 2), y }
     )
@@ -114,6 +132,27 @@ function parseTime(raw: string): number {
 /** Frame where a time lands (frame 1 = 0 s). */
 const secondsToFrame = (seconds: number, fps: number) => 1 + Math.round(seconds * fps);
 
+const INLINE_TIME = /<(\d{1,2}:\d{2}:\d{2}[.,]\d{1,3}|\d{1,2}:\d{2}[.,]\d{1,3})>/;
+
+/**
+ * Words with their own start times from a cue that has WebVTT inline timestamps
+ * ("a<00:00:01.200><c> b</c>"): the first piece starts with the cue, each tag starts the piece after it.
+ * Auto-generated captions repeat the previous line untagged above the tagged one; only the tagged line counts.
+ * Null when the cue has no inline timing.
+ */
+function parseWords(body: string[], cueStart: number, fps: number): CaptionWord[] | null {
+  const tagged = body.find((l) => new RegExp(INLINE_TIME, 'g').test(l));
+  if (!tagged) return null;
+  const pieces = tagged.replace(/<\/?c[^>]*>/g, '').split(new RegExp(INLINE_TIME.source));
+  const words: CaptionWord[] = [];
+  for (let i = 0; i < pieces.length; i += 2) {
+    const frame = i === 0 ? cueStart : secondsToFrame(parseTime(pieces[i - 1]), fps);
+    const clean = (pieces[i] ?? '').replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '');
+    for (const word of clean.split(/\s+/).filter(Boolean)) words.push({ text: word, startFrame: Number.isFinite(frame) ? frame : cueStart });
+  }
+  return words.length ? words : null;
+}
+
 /**
  * Cues of an SRT or WebVTT file, in file time (0 s = frame 1). Numbers, VTT headers/notes, styling
  * tags (<i>, <c.x>, {\an8}) and cue settings are dropped; multi-line cues become one line.
@@ -130,13 +169,18 @@ export function parseSubtitles(text: string, fps: number): CaptionSpan[] {
     const start = parseTime(startRaw);
     const end = parseTime((rest ?? '').trim().split(/\s+/)[0] ?? '');
     if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-    const cue = lines
-      .slice(timing + 1)
+    const startFrame = secondsToFrame(start, fps);
+    const body = lines.slice(timing + 1);
+    const words = parseWords(body, startFrame, fps);
+    if (words) {
+      spans.push({ text: words.map((w) => w.text).join(' '), startFrame, endFrame: Math.max(startFrame + 1, secondsToFrame(end, fps)), words });
+      continue;
+    }
+    const cue = body
       .map((l) => l.replace(/<[^>]*>/g, '').replace(/\{\\[^}]*\}/g, '').trim())
       .filter(Boolean)
       .join(' ');
     if (!cue) continue;
-    const startFrame = secondsToFrame(start, fps);
     spans.push({ text: cue, startFrame, endFrame: Math.max(startFrame + 1, secondsToFrame(end, fps)) });
   }
   return spans.sort((a, b) => a.startFrame - b.startFrame);
@@ -161,4 +205,14 @@ export function captionSpansOf(texts: TextOverlay[]): CaptionSpan[] {
     .filter((x) => x.role === 'caption')
     .map((x) => ({ text: x.text, startFrame: x.startFrame, endFrame: x.startFrame + x.durationFrames + 1 }))
     .sort((a, b) => a.startFrame - b.startFrame);
+}
+
+/** The words of a karaoke text and how many have started at `frame`; null when the text has no usable word timing. */
+export function karaokeState(txt: Pick<TextOverlay, 'text' | 'startFrame' | 'karaoke'>, frame: number): { words: string[]; spoken: number } | null {
+  const wordOffsets = txt.karaoke?.wordOffsets;
+  if (!Array.isArray(wordOffsets) || typeof txt.karaoke?.highlightColor !== 'string') return null;
+  const words = txt.text.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || wordOffsets.length !== words.length) return null;
+  const elapsed = frame - txt.startFrame;
+  return { words, spoken: wordOffsets.filter((o) => o <= elapsed).length };
 }

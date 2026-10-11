@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { retimeFrame, retimeScene, retimeSpan, retimeTrack, SceneData } from '../retime';
+import { retimeAnimated, retimeFrame, retimeScene, retimeSpan, retimeTrack, SceneData } from '../retime';
 import { createActor, sampleActor, setActorProperty, toggleAnimated } from '../actor';
 import { createChart } from '../overlays';
 import { createStickActor, togglePoseKey } from '../stickActor';
@@ -73,5 +73,27 @@ describe('retiming to another frame rate', () => {
     expect(back.totalFrames).toBe(96);
     expect(back.scene.actors[0].tracks.position!.map((k) => k.frame)).toEqual([25, 49]);
     expect(back.scene.markers![0].frame).toBe(73);
+  });
+});
+
+describe('retiming effect tracks', () => {
+  it('keeps and retimes effect tracks', () => {
+    let a = createActor({ id: 'a', name: 'a', src: 'data:', width: 10, height: 10, x: 0, y: 0, startFrame: 1, durationFrames: 48 });
+    a = toggleAnimated(a, 'blur', 25);
+    a = setActorProperty(a, 'blur', 49, 8);
+    const r = retimeAnimated(a, 30 / 24);
+    expect(r.tracks.blur?.map((key) => key.frame)).toEqual([31, 61]);
+  });
+  it('scales karaoke word offsets with the frame rate', () => {
+    const text: any = { id: 'k', text: 'a b', startFrame: 1, durationFrames: 24, base: {}, tracks: {}, karaoke: { wordOffsets: [0, 12], highlightColor: '#f00' } };
+    const out = retimeScene({ ...scene(), texts: [text] }, 48, 24, 48);
+    expect(out.scene.texts[0].karaoke).toEqual({ wordOffsets: [0, 24], highlightColor: '#f00' });
+  });
+  it('scales shake periods with the frame rate and leaves loops alone', () => {
+    const base = scene().actors[0];
+    const actor = { ...base, modifiers: { position: { shake: { amount: 4, periodFrames: 6 } }, rotation: { loop: 'cycle' as const } } };
+    const out = retimeAnimated(actor, 2);
+    expect(out.modifiers).toEqual({ position: { shake: { amount: 4, periodFrames: 12 } }, rotation: { loop: 'cycle' } });
+    expect(retimeAnimated(base, 2).modifiers).toBeUndefined();
   });
 });

@@ -9,6 +9,7 @@ import { applyEntrance, applyExit, MotionPreset } from '../engine/motionPresets'
 import { setKeyframe, Track } from '../engine/keyframes';
 import { parseLocaleNumber } from '../utils/motionUtils';
 import { createShapeActor, defaultShapeStyle } from '../engine/shapes';
+import { DEFAULT_EFFECTS } from '../engine/effects';
 import { AnimationTemplate, emptyOutput, TemplateContext, TemplateValues } from './types';
 
 const str = (v: string | number | undefined) => String(v ?? '');
@@ -62,6 +63,7 @@ const title: AnimationTemplate = {
         { value: 'slideUp', labelKey: 'motionPreset.slideUp' },
         { value: 'fade', labelKey: 'motionPreset.fade' },
         { value: 'pop', labelKey: 'motionPreset.pop' },
+        { value: 'blurIn', labelKey: 'motionPreset.blurIn' },
       ],
     },
     colorParam('#ffffff'),
@@ -76,6 +78,34 @@ const title: AnimationTemplate = {
       { x: Math.round(ctx.width / 2 - textWidth(text, fontSize) / 2), y: Math.round(ctx.height * 0.46) }
     );
     t = enterExit(t, ctx, str(values.entrance) as MotionPreset, 'fade', ctx.height * 0.08);
+    return { ...emptyOutput(), texts: [t], endFrame: ctx.startFrame + span };
+  },
+};
+
+// ================= GLOW TITLE =================
+const glowTitle: AnimationTemplate = {
+  id: 'glowTitle',
+  category: 'titles',
+  nameKey: 'templates.glowTitle.name',
+  descriptionKey: 'templates.glowTitle.description',
+  params: [
+    { key: 'title', type: 'text', labelKey: 'templates.param.title', defaultKey: 'templates.glowTitle.defaultTitle' },
+    colorParam('#ffffff'),
+    { key: 'glow', type: 'color', labelKey: 'templates.param.glow', default: '#38bdf8' },
+    { key: 'strength', type: 'number', labelKey: 'templates.param.glowStrength', default: 0.8, min: 0.1, max: 1, step: 0.1 },
+    secondsParam(4),
+  ],
+  build(values, ctx) {
+    const fontSize = Math.round(Math.min(ctx.width, ctx.height * 1.8) / 12);
+    const text = str(values.title);
+    const span = spanOf(ctx, num(values.seconds, 4));
+    let t = createText(
+      baseText(`${ctx.idPrefix}-title`, text, fontSize, str(values.color), ctx.startFrame, span),
+      { x: Math.round(ctx.width / 2 - textWidth(text, fontSize) / 2), y: Math.round(ctx.height * 0.5) }
+    );
+    // The glow stays on; it sharpens in from a blur and fades out, like a sign switching on
+    t = { ...t, effects: { ...DEFAULT_EFFECTS, glowRadius: Math.round(fontSize * 0.3), glowStrength: Math.min(1, Math.max(0.1, num(values.strength, 0.8))), glowColor: str(values.glow) } };
+    t = enterExit(t, ctx, 'blurIn', 'fade', 0);
     return { ...emptyOutput(), texts: [t], endFrame: ctx.startFrame + span };
   },
 };
@@ -569,7 +599,7 @@ const quote: AnimationTemplate = {
   },
 };
 
-export const TEMPLATES: AnimationTemplate[] = [title, lowerThird, bulletList, bigNumber, chartReveal, callout, dateCard, quote];
+export const TEMPLATES: AnimationTemplate[] = [title, glowTitle, lowerThird, bulletList, bigNumber, chartReveal, callout, dateCard, quote];
 
 export function buildTemplate(template: AnimationTemplate, values: TemplateValues, ctx: TemplateContext) {
   return template.build(values, ctx);
