@@ -620,6 +620,13 @@ export const ptBR = {
 
   // Audio clips (timeline)
   'audio.section': 'Áudio ({count})',
+  'audio.sfx': '+ Som',
+  'audio.sfx.hint': 'Adiciona um efeito sonoro gerado no quadro atual (sem arquivos)',
+  'audio.sfx.whoosh': 'Whoosh (entrada)',
+  'audio.sfx.impact': 'Impacto',
+  'audio.sfx.riser': 'Subida (riser)',
+  'audio.sfx.pop': 'Pop',
+  'audio.sfx.tick': 'Tique',
   'audio.import': 'Áudio',
   'audio.importHint': 'Importar narração, música ou efeito (arquivo de áudio, ou o som de um vídeo). Também dá para arrastar para o palco.',
   'audio.scrubHint': 'Ouvir ao arrastar: tocar um trecho do som ao mudar de quadro',

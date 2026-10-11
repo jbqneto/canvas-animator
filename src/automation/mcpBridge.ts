@@ -31,12 +31,17 @@ export async function executeBridgeCommand(api: BrowserAutomationApi, command: B
     case 'set_playing': flushSync(() => api.setPlaying(command.playing)); return api.getStatus();
     case 'render_frame': return api.renderFrame(command.frame);
     case 'load_project': flushSync(() => api.loadProject(command.file)); return api.getStatus();
-    case 'export_start': return api.startExport({ format: command.format, startFrame: command.startFrame, endFrame: command.endFrame });
+    case 'export_start': return api.startExport({ format: command.format, includeAudio: command.includeAudio, startFrame: command.startFrame, endFrame: command.endFrame });
     case 'export_status': return api.exportStatus();
     case 'export_chunk': return api.exportChunk(command.offset, command.length);
     case 'set_camera': flushSync(() => api.setCamera(command.camera)); return api.getStatus();
     case 'set_effects': flushSync(() => api.setEffects(command.objectId, command.base, command.tracks)); return api.getStatus();
     case 'render_contact_sheet': return api.renderContactSheet(command.frames, { columns: command.columns, cellWidth: command.cellWidth });
+    case 'add_sfx': {
+      let result!: ReturnType<typeof api.addSfx>;
+      flushSync(() => { result = api.addSfx(command.kind, command.frames, command.volume); });
+      return { ...result, status: api.getStatus() };
+    }
     case 'list_templates': return api.listTemplates();
     case 'apply_template': {
       let result!: ReturnType<typeof api.applyTemplate>;

@@ -74,6 +74,7 @@ import { buildRouteTemplate, buildStopLabels } from './map/routeTemplate';
 import { buildFollowProgress, samplePath } from './engine/path';
 import { PLANE_ICON_ASPECT, PLANE_ICON_SRC } from './map/planeIcon';
 import { framesToFitAudio, frameTime } from './engine/audio';
+import { sfxClip, type SfxKind } from './audio/synth';
 import { decodeClip, loadAudioFile, mixdown, playClips, prepareClips, resumeAudio, scrubClips } from './audio/audioRuntime';
 import { addMarker, clipOnsetFrames, removeMarker, updateMarker } from './engine/markers';
 import { retimeFrame, retimeScene } from './engine/retime';
@@ -1301,6 +1302,13 @@ export default function App() {
     }
   };
 
+  const handleAddSfx = (kind: SfxKind) => {
+    const clip = sfxClip(kind, currentFrame, `sfx-${kind}-${Date.now()}`, t(`audio.sfx.${kind}`));
+    const present = history.presentRef.current;
+    history.pushSnapshot(t('history.addAudio', { name: clip.name }), { ...present, audio: [...(present.audio ?? []), clip] });
+    setTotalFrames((total) => Math.max(total, framesToFitAudio([clip], fps)));
+  };
+
   const handleUpdateAudioClip = (clip: AudioClip, description = t('history.edit', { name: clip.name })) => {
     history.pushSnapshot(description, replaceClip(history.present, clip));
   };
@@ -1966,7 +1974,7 @@ export default function App() {
       });
       return composeContactSheet(urls, frames.map((f) => `#${f}`), layout);
     },
-    exportVideo: async ({ format, startFrame, endFrame, onProgress }) => {
+    exportVideo: async ({ format, includeAudio, startFrame, endFrame, onProgress }) => {
       if (exportControllerRef.current) throw new Error('EXPORT_IN_PROGRESS');
       const controller = new AbortController();
       exportControllerRef.current = controller;
@@ -1975,7 +1983,9 @@ export default function App() {
         const { blob, extension } = await exportVideoSequence(sceneContent(), {
           totalFrames, fps, width: canvasDimensions.width, height: canvasDimensions.height,
           onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame,
-          prepareAudio: () => Promise.resolve(null),
+          prepareAudio: () => includeAudio
+            ? mixdown(audio, fps, startFrame ?? 1, endFrame ?? totalFrames, 48000, controller.signal)
+            : Promise.resolve(null),
         });
         if (!blob) throw new Error('EXPORT_EMPTY');
         return { blob, extension };
@@ -2321,6 +2331,7 @@ export default function App() {
           onCommitPath={handleCommitPath}
           audioClips={audio}
           onImportAudioFiles={handleImportAudioFiles}
+          onAddSfx={handleAddSfx}
           onUpdateAudioClip={handleUpdateAudioClip}
           onTransientUpdateAudioClip={handleTransientUpdateAudioClip}
           onCommitAudioClip={handleCommitAudioClip}

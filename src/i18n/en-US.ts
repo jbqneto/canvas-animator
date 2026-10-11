@@ -619,6 +619,13 @@ export const enUS: Record<keyof typeof ptBR, string> = {
 
   // Audio clips (timeline)
   'audio.section': 'Audio ({count})',
+  'audio.sfx': '+ Sound',
+  'audio.sfx.hint': 'Adds a generated sound effect at the current frame (no files)',
+  'audio.sfx.whoosh': 'Whoosh (entrance)',
+  'audio.sfx.impact': 'Impact',
+  'audio.sfx.riser': 'Riser',
+  'audio.sfx.pop': 'Pop',
+  'audio.sfx.tick': 'Tick',
   'audio.import': 'Audio',
   'audio.importHint': 'Import narration, music or an effect (audio file, or the sound of a video). You can also drop it on the stage.',
   'audio.scrubHint': 'Scrub audio: play a snippet of the sound when the frame changes',

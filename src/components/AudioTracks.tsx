@@ -9,6 +9,7 @@ import { useI18n } from '../i18n';
 import { clipDurationFrames, clipWaveform, moveClip, trimClipEnd, trimClipStart } from '../engine/audio';
 import { snapFrame, snapSpan } from '../engine/markers';
 import { decodeClip } from '../audio/audioRuntime';
+import { SFX_KINDS, type SfxKind } from '../audio/synth';
 
 export const AUDIO_HEADER_HEIGHT = 'h-7';
 export const AUDIO_ROW_HEIGHT = 'h-10';
@@ -21,6 +22,8 @@ const formatSeconds = (s: number) => {
 interface AudioListProps {
   clips: AudioClip[];
   onImport: (files: FileList) => void;
+  /** Adds a generated sound effect at the current frame. */
+  onAddSfx: (kind: SfxKind) => void;
   onUpdate: (clip: AudioClip, description?: string) => void;
   onTransientUpdate: (clip: AudioClip) => void;
   onCommit: (clip: AudioClip, description: string, baseSnapshot: HistorySnapshot) => void;
@@ -36,6 +39,7 @@ interface AudioListProps {
 export const AudioList: React.FC<AudioListProps> = ({
   clips,
   onImport,
+  onAddSfx,
   onUpdate,
   onTransientUpdate,
   onCommit,
@@ -81,6 +85,21 @@ export const AudioList: React.FC<AudioListProps> = ({
             <Plus size={11} />
             <span>{t('audio.import')}</span>
           </button>
+          <select
+            id="audio-sfx-select"
+            value=""
+            title={t('audio.sfx.hint')}
+            onChange={(e) => {
+              if (e.target.value) onAddSfx(e.target.value as SfxKind);
+              e.target.value = '';
+            }}
+            className="px-1 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30 text-[10px] font-medium outline-none"
+          >
+            <option value="">{t('audio.sfx')}</option>
+            {SFX_KINDS.map((kind) => (
+              <option key={kind} value={kind}>{t(`audio.sfx.${kind}`)}</option>
+            ))}
+          </select>
           <input
             ref={inputRef}
             type="file"

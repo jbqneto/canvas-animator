@@ -71,6 +71,13 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
+- Efeitos sonoros gerados (`audio/synth.ts`): `synthSfx(kind)` faz DSP puro e determinístico (ruído com semente,
+  44,1 kHz mono) de `whoosh`, `impact`, `riser`, `pop` e `tick`; `encodeWav` escreve PCM 16 bits e `sfxClip`
+  devolve um `AudioClip` com o WAV embutido (data URL), então entra no projeto, na mixagem e no .fmproj como
+  qualquer áudio importado. Pico normalizado em 0,9 e 5 ms de fade no fim. UI: seletor "+ Som" na faixa de
+  áudio (no quadro atual). MCP: `add_sfx` (até 32 quadros por chamada). A exportação via MCP agora mixa o
+  áudio (`includeAudio`, padrão `true`); antes saía sem áudio. Não há síntese de música nem de voz.
+
 - Repetir e tremida (`Animated.modifiers`, `engine/modifiers.ts`): por propriedade de transformação
   (`position`, `scale`, `rotation`, `opacity`), `{ loop?: 'cycle' | 'pingpong', shake?: { amount, periodFrames } }`,
   como `loopOut` e `wiggle` do After Effects. O loop só age DEPOIS da última key (`loopFrame`: ciclo volta à

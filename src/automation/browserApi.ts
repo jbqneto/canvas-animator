@@ -5,6 +5,7 @@ import { TEMPLATES } from '../templates/library';
 import { coerceTemplateValues, mergeTemplateOutput } from '../templates/insert';
 import { contactSheetLayout } from '../engine/contactSheet';
 import { defaultValues } from '../templates/types';
+import { sfxClip, SFX_KINDS, type SfxKind } from '../audio/synth';
 import { DEFAULT_EFFECTS, EFFECT_PROPS } from '../engine/effects';
 import type { EffectProp } from '../types';
 
@@ -31,7 +32,7 @@ export interface AutomationAdapter {
   /** Render the given frames into one labeled PNG grid (data URL). */
   contactSheet(frames: number[], options: { columns: number; cellWidth: number }): Promise<string>;
   /** Render the timeline (or a range) to a video file without the export dialog. */
-  exportVideo(options: { format: 'mp4' | 'webm-alpha'; startFrame?: number; endFrame?: number; onProgress: (p: number) => void }): Promise<{ blob: Blob; extension: string }>;
+  exportVideo(options: { format: 'mp4' | 'webm-alpha'; includeAudio?: boolean; startFrame?: number; endFrame?: number; onProgress: (p: number) => void }): Promise<{ blob: Blob; extension: string }>;
 }
 
 export interface ExportJob {
@@ -108,6 +109,26 @@ export function createBrowserApi(adapter: AutomationAdapter) {
         else target.tracks[prop] = keys.map((k) => ({ ...k, value: clamp(prop as EffectProp, k.value) }));
       }
       adapter.replaceContent(parseProject(JSON.stringify(file)).content);
+    },
+    /**
+     * Adds a generated sound effect at each of `frames` as one undoable edit. The result says whether
+     * every clip fits the timeline (a clip past the end is cut in the export).
+     */
+    addSfx: (kind: SfxKind, frames: number[], volume = 1) => {
+      const status = assertReady();
+      if (!SFX_KINDS.includes(kind)) throw new Error('UNKNOWN_SFX');
+      if (!Array.isArray(frames) || frames.length === 0 || frames.length > 32) throw new Error('INVALID_FRAMES');
+      const file = JSON.parse(adapter.project());
+      const { fps } = file.project;
+      const stamp = Date.now();
+      const clips = frames.map((frame, i) => {
+        if (!Number.isSafeInteger(frame) || frame < 1 || frame > status.totalFrames) throw new Error('INVALID_FRAME');
+        return sfxClip(kind, frame, `sfx-${kind}-${stamp}-${i}`, translate('en-US', `audio.sfx.${kind}`), volume);
+      });
+      file.project.content.audio = [...(file.project.content.audio ?? []), ...clips];
+      adapter.replaceContent(parseProject(JSON.stringify(file)).content);
+      const fitsTimeline = clips.every((c) => c.startFrame - 1 + c.duration * fps <= status.totalFrames);
+      return { added: clips.map((c) => ({ id: c.id, startFrame: c.startFrame })), fitsTimeline };
     },
     listTemplates: () =>
       TEMPLATES.map((tpl) => ({
@@ -187,12 +208,12 @@ export function createBrowserApi(adapter: AutomationAdapter) {
       adapter.loadProject(text);
     },
     /** Starts a background export; poll exportStatus, then read the bytes with exportChunk. */
-    startExport: (options: { format?: 'mp4' | 'webm-alpha'; startFrame?: number; endFrame?: number } = {}) => {
+    startExport: (options: { format?: 'mp4' | 'webm-alpha'; includeAudio?: boolean; startFrame?: number; endFrame?: number } = {}) => {
       assertReady();
       if (job?.state === 'running') throw new Error('EXPORT_IN_PROGRESS');
       const current: ExportJob = { id: crypto.randomUUID(), state: 'running', progress: 0 };
       job = current; jobBytes = null;
-      adapter.exportVideo({ format: options.format ?? 'mp4', startFrame: options.startFrame, endFrame: options.endFrame,
+      adapter.exportVideo({ format: options.format ?? 'mp4', includeAudio: options.includeAudio ?? true, startFrame: options.startFrame, endFrame: options.endFrame,
         onProgress: (p) => { current.progress = p; } })
         .then(async ({ blob, extension }) => {
           jobBytes = new Uint8Array(await blob.arrayBuffer());
