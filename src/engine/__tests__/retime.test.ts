@@ -89,4 +89,11 @@ describe('retiming effect tracks', () => {
     const out = retimeScene({ ...scene(), texts: [text] }, 48, 24, 48);
     expect(out.scene.texts[0].karaoke).toEqual({ wordOffsets: [0, 24], highlightColor: '#f00' });
   });
+  it('scales shake periods with the frame rate and leaves loops alone', () => {
+    const base = scene().actors[0];
+    const actor = { ...base, modifiers: { position: { shake: { amount: 4, periodFrames: 6 } }, rotation: { loop: 'cycle' as const } } };
+    const out = retimeAnimated(actor, 2);
+    expect(out.modifiers).toEqual({ position: { shake: { amount: 4, periodFrames: 12 } }, rotation: { loop: 'cycle' } });
+    expect(retimeAnimated(base, 2).modifiers).toBeUndefined();
+  });
 });

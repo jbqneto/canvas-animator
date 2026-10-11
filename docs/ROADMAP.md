@@ -66,10 +66,20 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"), incluindo o MCP `set_effects`
 2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
 3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
-4. Repetir/ciclo e tremida por propriedade
+4. ~~Repetir/ciclo e tremida por propriedade~~ — feito (ver contrato "Repetir e tremida")
 5. Máscara; revelar traços e contornos (quadro branco)
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- Repetir e tremida (`Animated.modifiers`, `engine/modifiers.ts`): por propriedade de transformação
+  (`position`, `scale`, `rotation`, `opacity`), `{ loop?: 'cycle' | 'pingpong', shake?: { amount, periodFrames } }`,
+  como `loopOut` e `wiggle` do After Effects. O loop só age DEPOIS da última key (`loopFrame`: ciclo volta à
+  primeira, vai-e-volta anda para trás; sem efeito com menos de 2 keys) e não mexe no caminho seguido (`follow`).
+  A tremida soma ruído suave determinístico (`shakeOffset`: alvo aleatório a cada `periodFrames`, suavizado; a
+  semente é id + propriedade + eixo) de ±`amount` (px na posição, razão em escala/opacidade, graus na rotação).
+  Só `sampleActor` aplica (preview, exportação e `render_frame` iguais); `actorPropertyValue`/edição seguem
+  vendo as keys puras. Sem `modifiers` o caminho é o de antes. O retime escala `periodFrames`. Efeitos
+  (sombra, glow…) ainda não têm loop/tremida. Via MCP: `replace_content` (campo `modifiers` no objeto).
 
 - Karaokê (`TextOverlay.karaoke`, `engine/captions.ts`): `{ wordOffsets, highlightColor }`, um offset por palavra do
   `text` (separado por espaços), em frames a partir de `startFrame` (por isso mover o clipe não quebra; o retime

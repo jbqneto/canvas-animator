@@ -129,6 +129,11 @@ Um vídeo bom raramente sai na primeira tentativa. Depois de montar a cena:
 4. Repita até todo plano ter nota 8 ou mais. Evite os padrões de fábrica: texto centralizado com fade em
    tudo, mesma cor e mesma entrada em todos os objetos. Varie entrada, easing e destaque por objeto.
 
+Repetir e tremida: cada objeto aceita `modifiers` (via `replace_content`), por propriedade de transformação
+(`position`, `scale`, `rotation`, `opacity`): `{"rotation":{"loop":"pingpong"},"position":{"shake":{"amount":4,"periodFrames":6}}}`.
+`loop` (`cycle` | `pingpong`) repete as keys depois da última; `shake` soma ruído suave de ±`amount` (px na posição,
+razão em escala e opacidade, graus na rotação) com novo alvo a cada `periodFrames` quadros.
+
 O palco do editor mostra a cena **sem** a câmera (para editar no espaço da cena); a câmera aparece em `render_frame`, contact sheet e exportação.
 
 ## Erros e limites

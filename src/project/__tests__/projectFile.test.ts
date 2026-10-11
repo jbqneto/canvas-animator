@@ -223,3 +223,15 @@ describe('object effects persistence', () => {
     expect(sampleEffects(text, 1)).toEqual(DEFAULT_EFFECTS);
   });
 });
+
+describe('loop and shake persistence', () => {
+  it('round-trips modifiers on a text and an actor', () => {
+    const base = state();
+    const modifiers = { rotation: { loop: 'pingpong' }, position: { shake: { amount: 4, periodFrames: 6 } } };
+    base.content.texts = [{ id: 't1', text: 'oi', fontSize: 40, align: 'left', startFrame: 1, durationFrames: 30, base: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, tracks: {}, modifiers } as any];
+    base.content.actors = [{ ...base.content.actors[0], modifiers } as any];
+    const { content } = parseProject(serializeProject(base));
+    expect(content.texts[0].modifiers).toEqual(modifiers);
+    expect(content.actors[0].modifiers).toEqual(modifiers);
+  });
+});

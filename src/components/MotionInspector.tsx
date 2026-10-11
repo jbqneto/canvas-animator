@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Timer } from 'lucide-react';
 import type { Animated, MotionPath } from '../types';
 import { ActorFollowPanel } from './ActorFollowPanel';
 import { EffectsSection } from './EffectsSection';
+import { ModifiersSection } from './ModifiersSection';
 import { MessageKey, useI18n } from '../i18n';
 import {
   ActorProperty,
@@ -261,6 +262,8 @@ export const MotionInspector = <T extends MotionObject>({
           );
         })}
       </div>
+
+      <ModifiersSection obj={obj} onChange={onChange} />
 
       <EffectsSection obj={obj} currentFrame={currentFrame} onChange={onChange} />
 

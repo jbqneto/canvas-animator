@@ -239,6 +239,20 @@ export interface MotionTracks extends Partial<Record<EffectProp, Track<number>>>
   opacity?: Track<number>;
 }
 
+/** Properties that can loop or shake (the transform ones; effect values keep to their keys). */
+export type ModifiableProperty = 'position' | 'scale' | 'rotation' | 'opacity';
+
+/**
+ * What happens to a property around its keys, like After Effects' loopOut and wiggle expressions:
+ * `loop` repeats the keys after the last one (`cycle` jumps back, `pingpong` plays them in reverse),
+ * `shake` adds smooth random noise of ±`amount` (pixels for position, a ratio for scale and opacity,
+ * degrees for rotation) that picks a new target every `periodFrames` frames.
+ */
+export interface PropertyModifier {
+  loop?: 'cycle' | 'pingpong';
+  shake?: { amount: number; periodFrames: number };
+}
+
 /**
  * Anything on the stage that moves the After Effects way: a time span plus a transform whose
  * properties are static (`base`, stopwatch off) or keyframed (`tracks`, stopwatch on), optionally
@@ -260,6 +274,8 @@ export interface Animated {
   follow?: ActorFollow;
   /** Shadow, glow, blur and tint; absent = all off. Keys for the numbers live in `tracks`. */
   effects?: EffectParams;
+  /** Loop and shake per transform property; absent = plain keys. */
+  modifiers?: Partial<Record<ModifiableProperty, PropertyModifier>>;
 }
 
 /**

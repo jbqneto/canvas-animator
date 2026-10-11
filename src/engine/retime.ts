@@ -25,6 +25,16 @@ export function retimeTrack<T>(track: Track<T> | undefined, k: number): Track<T>
   return [...byFrame.values()].sort((a, b) => a.frame - b.frame);
 }
 
+/** Shake periods are frames, so they scale with the rate to keep the same speed in seconds. */
+function retimeModifiers(modifiers: NonNullable<Animated['modifiers']>, k: number): NonNullable<Animated['modifiers']> {
+  return Object.fromEntries(
+    Object.entries(modifiers).map(([prop, mod]) => [
+      prop,
+      mod?.shake ? { ...mod, shake: { ...mod.shake, periodFrames: Math.max(1, Math.round(mod.shake.periodFrames * k)) } } : mod,
+    ])
+  );
+}
+
 export function retimeAnimated<T extends Animated>(obj: T, k: number): T {
   return {
     ...obj,
@@ -32,6 +42,7 @@ export function retimeAnimated<T extends Animated>(obj: T, k: number): T {
     tracks: Object.fromEntries(
       Object.entries(obj.tracks).map(([prop, track]) => [prop, retimeTrack(track as Track<unknown>, k)])
     ) as Animated['tracks'],
+    modifiers: obj.modifiers && retimeModifiers(obj.modifiers, k),
     follow: obj.follow && { ...obj.follow, progress: retimeTrack(obj.follow.progress, k) ?? [] },
   };
 }
