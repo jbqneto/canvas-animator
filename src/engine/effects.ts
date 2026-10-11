@@ -61,3 +61,12 @@ export function sampleEffects(obj: Animated, frame: number): EffectParams {
 export function hasActiveEffects(fx: EffectParams): boolean {
   return fx.shadowOpacity > 0 || (fx.glowRadius > 0 && fx.glowStrength > 0) || fx.blur > 0 || fx.tintAmount > 0;
 }
+
+/** Effect groups the object ever turns on: its static trigger is above 0, or one of its keys is. */
+export function usedEffectGroups(obj: Animated): EffectGroup[] {
+  const stat = obj.effects ?? DEFAULT_EFFECTS;
+  return EFFECT_GROUPS.filter(({ trigger }) => {
+    const base = stat[trigger];
+    return (typeof base === 'number' && base > 0) || (obj.tracks?.[trigger] ?? []).some((k) => k.value > 0);
+  }).map((g) => g.id);
+}

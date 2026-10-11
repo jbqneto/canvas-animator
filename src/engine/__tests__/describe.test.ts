@@ -26,4 +26,18 @@ describe('describeScene', () => {
     expect(d.items).toEqual([]);
     expect(d.hasCamera).toBe(true);
   });
+  it('lists the effects an object ever turns on', () => {
+    const d = describeScene({
+      ...base,
+      content: {
+        texts: [
+          { id: 'a', text: 'A', startFrame: 1, durationFrames: 24, tracks: { blur: [{ frame: 1, value: 12 }, { frame: 20, value: 0 }] } },
+          { id: 'b', text: 'B', startFrame: 1, durationFrames: 24, tracks: {}, effects: { shadowOpacity: 0.5, glowRadius: 0 } },
+          { id: 'c', text: 'C', startFrame: 1, durationFrames: 24, tracks: {} },
+        ],
+      } as any,
+    });
+    const byId = Object.fromEntries(d.items.map((i) => [i.id, i.effects]));
+    expect(byId).toEqual({ a: ['blur'], b: ['shadow'], c: undefined });
+  });
 });

@@ -55,4 +55,11 @@ describe('lintScene', () => {
     expect(rules(input([label({ text: 'Campo Grande' })]))).toContain('text-too-small');
     expect(rules(input([label({ letterSpacing: 0 })]))).toContain('text-too-small');
   });
+  it('flags text that is blurred for its whole span, not a blur-in that clears', () => {
+    const stuck = text({ effects: { shadowOpacity: 0, shadowBlur: 8, shadowX: 0, shadowY: 4, shadowColor: '#000000', glowRadius: 0, glowStrength: 1, glowColor: '#ffffff', blur: 6, tintAmount: 0, tintColor: '#ff0000' } });
+    expect(rules(input([stuck]))).toContain('blurred-text');
+    const blurIn = text({ tracks: { blur: [{ frame: 1, value: 12 }, { frame: 20, value: 0 }] } as any });
+    expect(rules(input([blurIn]))).not.toContain('blurred-text');
+    expect(rules(input([text()]))).not.toContain('blurred-text');
+  });
 });

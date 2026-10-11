@@ -1,9 +1,10 @@
 import type { ActorOverlay, ChartOverlay, TextOverlay } from '../types';
 import { sampleActor } from './actor';
 import { contrastRatio } from './color';
+import { sampleEffects } from './effects';
 import { textBox } from './overlays';
 
-export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast';
+export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text';
 
 export interface LintIssue {
   rule: LintRule;
@@ -29,6 +30,15 @@ export interface LintOptions {
   /** Margin kept free on every side, as a fraction of the canvas. */
   safeMarginRatio?: number;
   minContrast?: number;
+}
+
+/** Smallest blur over the object's span (sampled; about 60 points), so an entrance that clears to 0 is fine. */
+function minBlur(obj: TextOverlay): number {
+  const last = obj.startFrame + obj.durationFrames - 1;
+  const step = Math.max(1, Math.ceil(obj.durationFrames / 60));
+  let lowest = Infinity;
+  for (let f = obj.startFrame; f <= last; f += step) lowest = Math.min(lowest, sampleEffects(obj, f).blur);
+  return Math.min(lowest, sampleEffects(obj, last).blur);
 }
 
 export function lintScene(input: LintInput, options: LintOptions = {}): LintIssue[] {
@@ -67,6 +77,9 @@ export function lintScene(input: LintInput, options: LintOptions = {}): LintIssu
     const bottom = state.y + (box.y + box.height) * state.scale;
     if (left < mx || right > width - mx || top < my || bottom > height - my) {
       issues.push({ rule: 'outside-safe-area', severity: 'warning', objectId: txt.id, message: `Text box (${Math.round(left)},${Math.round(top)})–(${Math.round(right)},${Math.round(bottom)}) leaves the ${Math.round(safeMarginRatio * 100)}% safe area.` });
+    }
+    if (minBlur(txt) >= 2) {
+      issues.push({ rule: 'blurred-text', severity: 'warning', objectId: txt.id, message: 'Text stays blurred for its whole duration; animate blur to 0 or turn it off.' });
     }
     const ratio = contrastRatio(txt.color || '#ffffff', txt.bgColor ?? input.videoBg.color ?? '');
     if (ratio !== null && ratio < minContrast) {

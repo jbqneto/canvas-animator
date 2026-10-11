@@ -150,14 +150,14 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return { content: [{ type: 'image' as const, data: url.slice('data:image/png;base64,'.length), mimeType: 'image/png' }] };
   }));
   server.registerTool('lint_scene', {
-    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
+    description: 'Check the open scene for common problems before exporting: text too small to read on a phone (min 34 px at 1080p; 24 px for spaced uppercase labels), text outside the 5% safe area, low text/background contrast, empty texts, text blurred for its whole duration, objects past the end of the timeline. Returns { issues: [{ rule, severity, objectId, message }] } (empty = clean).',
     inputSchema: { windowId }, annotations: readOnly,
   }, safe(async ({ windowId }) => {
     const { file } = await call(windowId, { method: 'get_project' });
     return text({ issues: lintScene(file.project) });
   }));
   server.registerTool('describe_scene', {
-    description: 'Compact timeline summary (what appears when, in seconds, plus markers, duration and whether a camera exists). Much cheaper than get_project for orienting yourself.',
+    description: 'Compact timeline summary (what appears when, in seconds, plus markers, duration and whether a camera exists; items list the effects they turn on). Much cheaper than get_project for orienting yourself.',
     inputSchema: { windowId }, annotations: readOnly,
   }, safe(async ({ windowId }) => {
     const { file } = await call(windowId, { method: 'get_project' });

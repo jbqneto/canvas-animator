@@ -113,10 +113,21 @@ em `src/engine/` para criar conteúdo válido.
 
 1. `list_windows` → escolha a janela; `describe_scene` para se orientar.
 2. `list_templates` → `apply_template` (cartão de data, citação, título…) em vez de escrever JSON à mão.
-3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo).
+3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo). `set_effects` para sombra em legendas sobre vídeo, glow de destaque e entradas com desfoque (`blur` 12 → 0).
 4. Ajustes finos com `get_project` → `replace_content` (use `fontFamily`, `fontWeight`, `italic`, `letterSpacing` em textos; famílias: Plus Jakarta Sans, Inter, Cormorant Garamond, JetBrains Mono, IBM Plex Mono).
 5. `render_contact_sheet` (6 quadros) para revisar tudo de uma vez; `render_frame` para um quadro em detalhe.
-6. `lint_scene` antes de exportar; `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
+6. `lint_scene` antes de exportar (inclui `blurred-text`: texto que nunca fica nítido); `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
+
+### Laço de revisão (olhar, dar nota, corrigir)
+
+Um vídeo bom raramente sai na primeira tentativa. Depois de montar a cena:
+
+1. `render_contact_sheet` com `count` 6–12 e dê uma nota de 1 a 10 por plano em: composição, movimento,
+   tipografia/legibilidade e sincronia com marcadores ou áudio.
+2. Anote os três piores problemas e corrija só eles (`set_effects`, `set_camera`, `replace_content`).
+3. `lint_scene` e `describe_scene` (que agora lista os efeitos de cada objeto em `effects`) para conferir.
+4. Repita até todo plano ter nota 8 ou mais. Evite os padrões de fábrica: texto centralizado com fade em
+   tudo, mesma cor e mesma entrada em todos os objetos. Varie entrada, easing e destaque por objeto.
 
 O palco do editor mostra a cena **sem** a câmera (para editar no espaço da cena); a câmera aparece em `render_frame`, contact sheet e exportação.
 
