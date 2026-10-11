@@ -696,6 +696,7 @@ export const ptBR = {
   'captions.file': 'Arquivo: {name}',
   'captions.backToScript': 'Voltar ao roteiro',
   'captions.fileTiming': 'Tempos do arquivo, contados do início do vídeo (0 s = frame 1).',
+  'captions.karaoke': 'Destacar cada palavra quando for falada (karaokê)',
   'captions.download': 'Baixar legendas do projeto (.srt) — {count}',
   'captions.downloadHint': 'Arquivo para subir junto com o vídeo (YouTube, Vimeo, redes)',
   'history.captions': 'Legendas ({count})',

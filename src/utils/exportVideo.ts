@@ -27,6 +27,7 @@ import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
 import { fontCss, loadSceneFonts } from './fonts';
+import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
@@ -765,7 +766,22 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   ctx.shadowBlur = 12;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 2;
-  ctx.fillText(displayedText, 0, offsetY);
+  const karaoke = displayedText === txt.text ? karaokeState(txt, currentFrame) : null;
+  if (karaoke && txt.karaoke) {
+    // Word by word: spoken words in the highlight color, the others in the text color
+    const total = ctx.measureText(displayedText).width;
+    const left = txt.align === 'center' ? -total / 2 : 0;
+    const align = ctx.textAlign;
+    ctx.textAlign = 'left';
+    karaoke.words.forEach((word, i) => {
+      const x = i === 0 ? 0 : ctx.measureText(`${karaoke.words.slice(0, i).join(' ')} `).width;
+      ctx.fillStyle = i < karaoke.spoken ? txt.karaoke!.highlightColor : txt.color || '#ffffff';
+      ctx.fillText(word, left + x, offsetY);
+    });
+    ctx.textAlign = align;
+  } else {
+    ctx.fillText(displayedText, 0, offsetY);
+  }
 
   // Subtitle if provided
   if (txt.subtitle && elapsed > 6) {

@@ -1451,13 +1451,14 @@ export default function App() {
   const CAPTIONS_LAYER_ID = 'layer-captions';
   const [captionsOpen, setCaptionsOpen] = useState(false);
 
-  const handleCreateCaptions = ({ spans, position, fontSize }: CaptionsRequest) => {
+  const handleCreateCaptions = ({ spans, position, fontSize, karaoke }: CaptionsRequest) => {
     const texts = captionTexts(spans, {
       width: canvasDimensions.width,
       height: canvasDimensions.height,
       position,
       fontSize,
       idPrefix: `caption-${Date.now()}`,
+      karaokeColor: karaoke ? '#facc15' : undefined,
     });
     if (texts.length === 0) return;
     const present = history.presentRef.current;

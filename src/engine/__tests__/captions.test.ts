@@ -3,6 +3,7 @@ import {
   captionSpans,
   captionSpansOf,
   captionTexts,
+  karaokeState,
   parseSubtitles,
   readingFrames,
   scriptLines,
@@ -142,5 +143,52 @@ describe('subtitle files', () => {
     const texts = captionTexts(spans, style);
     const title = { ...texts[0], id: 'title', role: undefined };
     expect(captionSpansOf([title, ...texts])).toEqual([spans[1], spans[0]]);
+  });
+});
+
+describe('karaoke (word timing)', () => {
+  const vtt = `WEBVTT
+
+00:00:01.000 --> 00:00:03.000
+Hello<00:00:01.500><c> brave</c><00:00:02.000><c> new world</c>
+
+00:00:03.000 --> 00:00:04.000
+plain line without timing
+`;
+  it('reads inline word timestamps; the first word starts with the cue', () => {
+    const [first, second] = parseSubtitles(vtt, 10);
+    expect(first.text).toBe('Hello brave new world');
+    expect(first.words).toEqual([
+      { text: 'Hello', startFrame: 11 },
+      { text: 'brave', startFrame: 16 },
+      { text: 'new', startFrame: 21 },
+      { text: 'world', startFrame: 21 },
+    ]);
+    expect(second.words).toBeUndefined();
+  });
+  it('uses only the tagged line when auto captions repeat the previous line above it', () => {
+    const rolling = `WEBVTT
+
+00:00:01.000 --> 00:00:03.000
+previous line
+now<00:00:01.400><c> talking</c>
+`;
+    expect(parseSubtitles(rolling, 10)[0].text).toBe('now talking');
+  });
+  it('gives caption texts word offsets from their start, only for spans with timing', () => {
+    const spans = parseSubtitles(vtt, 10);
+    const [a, b] = captionTexts(spans, { width: 1920, height: 1080, position: 'bottom', fontSize: 48, idPrefix: 'c', karaokeColor: '#facc15' });
+    expect(a.karaoke).toEqual({ wordOffsets: [0, 5, 10, 10], highlightColor: '#facc15' });
+    expect(b.karaoke).toBeUndefined();
+    const [plain] = captionTexts(spans, { width: 1920, height: 1080, position: 'bottom', fontSize: 48, idPrefix: 'c' });
+    expect(plain.karaoke).toBeUndefined();
+  });
+  it('counts the words started at a frame and ignores broken data', () => {
+    const t = { text: 'a b c', startFrame: 10, karaoke: { wordOffsets: [0, 5, 10], highlightColor: '#f00' } };
+    expect(karaokeState(t, 9)).toMatchObject({ spoken: 0 });
+    expect(karaokeState(t, 15)).toEqual({ words: ['a', 'b', 'c'], spoken: 2 });
+    expect(karaokeState({ ...t, karaoke: { wordOffsets: [0], highlightColor: '#f00' } }, 15)).toBeNull();
+    expect(karaokeState({ ...t, karaoke: { wordOffsets: 'x', highlightColor: '#f00' } as any }, 15)).toBeNull();
+    expect(karaokeState({ text: 'a', startFrame: 1 }, 5)).toBeNull();
   });
 });

@@ -111,4 +111,28 @@ describe('text rendering', () => {
       expect(layer.calls.some((c) => c.name === 'stroke')).toBe(false);
     });
   });
+
+  describe('karaoke', () => {
+    const karaoke = (over: Partial<TextOverlay> = {}) =>
+      text({ text: 'one two three', align: 'center', color: '#ffffff', karaoke: { wordOffsets: [0, 5, 10], highlightColor: '#facc15' }, ...over });
+    const words = (calls: { name: string; args: unknown[] }[]) => {
+      const out: [string, unknown][] = [];
+      let fill: unknown;
+      for (const c of calls) {
+        if (c.name === 'set:fillStyle') fill = c.args[0];
+        if (c.name === 'fillText') out.push([c.args[0] as string, fill]);
+      }
+      return out;
+    };
+    it('draws each word separately, spoken ones in the highlight color', () => {
+      const { ctx, calls } = createCanvasStub();
+      renderCompositeFrame(ctx, 1280, 720, 7, scene([karaoke()])); // 6 elapsed frames: words 1 and 2 started
+      expect(words(calls)).toEqual([['one', '#facc15'], ['two', '#facc15'], ['three', '#ffffff']]);
+    });
+    it('draws the text in one piece without word timing', () => {
+      const { ctx, calls } = createCanvasStub();
+      renderCompositeFrame(ctx, 1280, 720, 7, scene([karaoke({ karaoke: undefined })]));
+      expect(words(calls).map(([w]) => w)).toEqual(['one two three']);
+    });
+  });
 });

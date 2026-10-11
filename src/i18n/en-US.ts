@@ -695,6 +695,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'captions.file': 'File: {name}',
   'captions.backToScript': 'Back to the script',
   'captions.fileTiming': 'Times from the file, counted from the start of the video (0 s = frame 1).',
+  'captions.karaoke': 'Highlight each word as it is spoken (karaoke)',
   'captions.download': 'Download project captions (.srt) — {count}',
   'captions.downloadHint': 'File to upload with the video (YouTube, Vimeo, social)',
   'history.captions': 'Captions ({count})',

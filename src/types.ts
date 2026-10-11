@@ -177,6 +177,11 @@ export interface TextOverlay extends Animated {
   letterSpacing?: number;
   /** Made by the captions dialog: exported to .srt with the other captions. */
   role?: 'caption';
+  /**
+   * Word-by-word highlight (karaoke): `wordOffsets[i]` is the frame, counted from `startFrame`, where word
+   * i of `text` (split on spaces) starts; spoken words use `highlightColor`, the rest keep `color`.
+   */
+  karaoke?: { wordOffsets: number[]; highlightColor: string };
   effect: TextEffect;
   badge?: string;
   visible: boolean;

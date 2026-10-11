@@ -84,4 +84,9 @@ describe('retiming effect tracks', () => {
     const r = retimeAnimated(a, 30 / 24);
     expect(r.tracks.blur?.map((key) => key.frame)).toEqual([31, 61]);
   });
+  it('scales karaoke word offsets with the frame rate', () => {
+    const text: any = { id: 'k', text: 'a b', startFrame: 1, durationFrames: 24, base: {}, tracks: {}, karaoke: { wordOffsets: [0, 12], highlightColor: '#f00' } };
+    const out = retimeScene({ ...scene(), texts: [text] }, 48, 24, 48);
+    expect(out.scene.texts[0].karaoke).toEqual({ wordOffsets: [0, 24], highlightColor: '#f00' });
+  });
 });

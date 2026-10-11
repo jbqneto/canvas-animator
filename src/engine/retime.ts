@@ -64,7 +64,11 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
     actors: scene.actors.map((a) => retimeAnimated(a, k)),
     sticks: scene.sticks?.map((st) => ({ ...retimeAnimated(st, k), poses: retimeTrack(st.poses, k) ?? [] })),
     charts: scene.charts.map((c) => retimeIntro(retimeAnimated(c, k), k)),
-    texts: scene.texts.map((x) => retimeIntro(retimeAnimated(x, k), k)),
+    texts: scene.texts.map((x) => {
+      const t = retimeIntro(retimeAnimated(x, k), k);
+      // Word starts are offsets from the text start, so they scale like a duration
+      return x.karaoke ? { ...t, karaoke: { ...x.karaoke, wordOffsets: x.karaoke.wordOffsets.map((o) => Math.round(o * k)) } } : t;
+    }),
     paths: scene.paths.map((p) => ({ ...p, ...retimeSpan(p.startFrame, p.durationFrames, k) })),
     images: scene.images.map((img) => ({ ...img, ...retimeSpan(img.startFrame, img.durationFrames, k) })),
     // Audio timing inside the clip is already in seconds; only where it starts moves

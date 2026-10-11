@@ -12,6 +12,8 @@ export interface CaptionsRequest {
   spans: CaptionSpan[];
   position: 'bottom' | 'top';
   fontSize: number;
+  /** Highlight each word as it is spoken (only offered when the file has word timing). */
+  karaoke: boolean;
 }
 
 interface CaptionsDialogProps {
@@ -56,6 +58,7 @@ export const CaptionsDialog: React.FC<CaptionsDialogProps> = ({
   // A loaded subtitle file replaces the script while it is set
   const [imported, setImported] = useState<{ name: string; spans: CaptionSpan[] } | null>(null);
   const [importError, setImportError] = useState(false);
+  const [karaoke, setKaraoke] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const lines = useMemo(() => scriptLines(script), [script]);
@@ -69,6 +72,7 @@ export const CaptionsDialog: React.FC<CaptionsDialogProps> = ({
     [lines, markerFrames, fromFrame, toFrame]
   );
   const spans = imported?.spans ?? scriptSpans;
+  const hasWords = spans.some((s) => s.words && s.words.length > 0);
   const usedMarkers = markerFrames.filter((f) => f >= fromFrame && f < toFrame).length;
 
   if (!isOpen) return null;
@@ -173,6 +177,13 @@ export const CaptionsDialog: React.FC<CaptionsDialogProps> = ({
           </label>
         </div>
 
+        {hasWords && (
+          <label className="flex items-center gap-1.5 text-neutral-200">
+            <input id="captions-karaoke" type="checkbox" checked={karaoke} onChange={(e) => setKaraoke(e.target.checked)} />
+            {t('captions.karaoke')}
+          </label>
+        )}
+
         <p className="text-[10px] text-neutral-500">
           {imported
             ? t('captions.fileTiming')
@@ -196,7 +207,7 @@ export const CaptionsDialog: React.FC<CaptionsDialogProps> = ({
           id="captions-create-btn"
           disabled={spans.length === 0}
           onClick={() => {
-            onCreate({ spans, position, fontSize });
+            onCreate({ spans, position, fontSize, karaoke: hasWords && karaoke });
             setScript('');
             setImported(null);
           }}

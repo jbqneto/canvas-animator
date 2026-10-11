@@ -65,11 +65,21 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 
 1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"), incluindo o MCP `set_effects`
 2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
-3. Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir
+3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
 4. Repetir/ciclo e tremida por propriedade
 5. Máscara; revelar traços e contornos (quadro branco)
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- Karaokê (`TextOverlay.karaoke`, `engine/captions.ts`): `{ wordOffsets, highlightColor }`, um offset por palavra do
+  `text` (separado por espaços), em frames a partir de `startFrame` (por isso mover o clipe não quebra; o retime
+  escala os offsets). `parseSubtitles` lê os timestamps inline do WebVTT (`a<00:00:01.200><c> b</c>`): a primeira
+  palavra começa com o cue; só a linha com tags conta (legenda automática repete a anterior sem tags).
+  `CaptionSpan.words` leva o tempo; `captionTexts` só cria `karaoke` com `karaokeColor` e quando as palavras
+  batem com o texto. `karaokeState(txt, frame)` devolve as palavras e quantas já começaram (null se os dados
+  forem inválidos: cai no texto inteiro). Palavras faladas usam `highlightColor`, as demais `color`. O diálogo
+  oferece a opção só quando o arquivo tem tempo por palavra. Legendas automáticas do YouTube também geram cues
+  curtos de "transição" que repetem texto; não são filtrados.
 
 - Legendas (`engine/captions.ts`): `scriptLines` (uma legenda por linha, vazias fora) e
   `captionSpans(lines, markerFrames, from, to)` (`to` exclusivo): a linha i começa no i-ésimo marcador em
