@@ -63,7 +63,7 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 
 Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
 
-1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"); falta expor efeitos no MCP
+1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"), incluindo o MCP `set_effects`
 2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
 3. Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir
 4. Repetir/ciclo e tremida por propriedade
@@ -245,4 +245,4 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   anterior). Cores são estáticas (não animam); só quantidades/raios animam. Ordem fixa: sombra → glow → objeto.
   Desfoque via `ctx.filter` (ignorado sem suporte do navegador; a UI avisa). Raios em pixels de saída: não
   escalam com o zoom da câmera. O objeto é desenhado numa canvas fora da tela do tamanho da saída (assume sem
-  DPR) que recebe a matriz da câmera. Efeitos via MCP (`set_effects`/`apply_template`) é o próximo passo natural.
+  DPR) que recebe a matriz da câmera. MCP: `set_effects` (um objeto por vez). Modelos (`apply_template`) com efeitos ficam para depois.

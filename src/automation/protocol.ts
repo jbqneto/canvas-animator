@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EASING_NAMES, type EasingName } from '../engine/keyframes';
+import { EFFECT_PROPS } from '../engine/effects';
 
 export const MAX_BRIDGE_BYTES = 50 * 1024 * 1024;
 const easingSchema = z.enum(EASING_NAMES as [EasingName, ...EasingName[]]);
@@ -16,6 +17,18 @@ export const cameraSchema = z
     tracks: z.object({ panX: keysSchema, panY: keysSchema, zoom: keysSchema, rotation: keysSchema }).partial().strict().optional(),
   })
   .strict();
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const effectProps = Object.keys(EFFECT_PROPS) as [keyof typeof EFFECT_PROPS, ...(keyof typeof EFFECT_PROPS)[]];
+const effectNumbers = Object.fromEntries(effectProps.map((p) => [p, z.number().finite()])) as Record<(typeof effectProps)[number], z.ZodNumber>;
+const effectKeys = Object.fromEntries(effectProps.map((p) => [p, keysSchema])) as Record<(typeof effectProps)[number], typeof keysSchema>;
+/** Static effect values (numbers are clamped to their range later; colors are #rrggbb) and keys per numeric property. */
+export const effectsSchema = z
+  .object({
+    objectId: z.string().min(1).max(200),
+    base: z.object({ ...effectNumbers, shadowColor: hexColor, glowColor: hexColor, tintColor: hexColor }).partial().strict().optional(),
+    tracks: z.object(effectKeys).partial().strict().optional(),
+  })
+  .strict();
 export const commandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('get_status') }).strict(),
   z.object({ method: z.literal('get_project') }).strict(),
@@ -29,6 +42,7 @@ export const commandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('export_status') }).strict(),
   z.object({ method: z.literal('export_chunk'), offset: z.number().int().min(0), length: z.number().int().min(1).max(16 * 1024 * 1024) }).strict(),
   z.object({ method: z.literal('set_camera'), camera: cameraSchema.nullable() }).strict(),
+  z.object({ method: z.literal('set_effects') }).merge(effectsSchema).strict(),
   z.object({ method: z.literal('list_templates') }).strict(),
   z.object({
     method: z.literal('render_contact_sheet'),

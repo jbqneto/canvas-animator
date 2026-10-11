@@ -112,7 +112,7 @@ npm run mcp:check    # verifica handshake stdio e ferramentas (após build)
 As ferramentas permitem listar janelas, ler o projeto, substituir conteúdo com desfazer e
 controle de revisão, navegar na timeline, reproduzir/pausar e renderizar PNG.
 A conexão exige o servidor local e uma janela conectada. O MCP exporta vídeo direto para um arquivo
-(`export_video`), insere modelos (`apply_template`), move a câmera (`set_camera`) e verifica a cena
+(`export_video`), insere modelos (`apply_template`), move a câmera (`set_camera`), aplica sombra/glow/desfoque/tint (`set_effects`) e verifica a cena
 (`render_contact_sheet`, `lint_scene`); salvar o `.fmproj` continua sendo feito pela interface (Ctrl+S).
 Veja configuração, exemplos e limites em [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
 A API JavaScript também continua disponível em `/?automation=1` para agentes com acesso

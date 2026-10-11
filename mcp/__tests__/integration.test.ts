@@ -19,7 +19,7 @@ import { createText } from '../../src/engine/overlays';
 /** Every tool the server registers. Add new names here when a task registers a tool. */
 const EXPECTED_TOOLS = [
   'list_windows', 'get_status', 'get_project', 'replace_content', 'seek', 'set_playing', 'render_frame',
-  'load_project', 'export_video', 'set_camera', 'list_templates', 'apply_template',
+  'load_project', 'export_video', 'set_camera', 'set_effects', 'list_templates', 'apply_template',
   'render_contact_sheet', 'lint_scene', 'describe_scene',
 ];
 

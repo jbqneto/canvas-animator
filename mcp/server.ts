@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { evenFrames } from '../src/engine/contactSheet';
 import { describeScene } from '../src/engine/describe';
 import { lintScene } from '../src/engine/lint';
-import { cameraSchema, type BridgeCommand } from '../src/automation/protocol';
+import { cameraSchema, effectsSchema, type BridgeCommand } from '../src/automation/protocol';
 import { resolveAllowedRoots, resolveReadable, resolveWritable } from './paths';
 
 const sessionSchema = z.object({ url: z.string().url(), token: z.string().regex(/^[a-f0-9]{64}$/) });
@@ -127,6 +127,10 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     description: 'Set the virtual camera that moves/zooms/rotates all scene objects (not the background) over time. REPLACES the whole camera; pass camera=null to remove it. base = static pan/zoom/rotation (panX/panY are pixel offsets from the canvas center, zoom 0.05..20, rotation in degrees); tracks = keyframes per property, e.g. a slow push-in: {"tracks":{"zoom":[{"frame":1,"value":1,"easing":"linear"},{"frame":240,"value":1.08}]}}. One undoable edit.',
     inputSchema: { windowId, camera: cameraSchema.nullable() }, annotations: edit,
   }, safe(async ({ windowId, camera }) => text(await call(windowId, { method: 'set_camera', camera }))));
+  server.registerTool('set_effects', {
+    description: 'Set shadow, glow, blur and tint on ONE object (a text, chart, actor or stick figure; objectId from get_project). Each effect is off while its trigger is 0: shadowOpacity (also shadowBlur 0..100, shadowX/shadowY -200..200, shadowColor), glowRadius 0..100 (glowStrength 0..1, glowColor), blur 0..100, tintAmount 0..1 (tintColor). base MERGES into the static values (numbers are clamped; colors are #rrggbb). tracks = keyframes per numeric property and REPLACE that property\'s keys ([] removes them), e.g. blur-in: {"tracks":{"blur":[{"frame":1,"value":12,"easing":"easeOut"},{"frame":20,"value":0}]}}. Radii are in output pixels. One undoable edit.',
+    inputSchema: { windowId, objectId: effectsSchema.shape.objectId, base: effectsSchema.shape.base, tracks: effectsSchema.shape.tracks }, annotations: edit,
+  }, safe(async ({ windowId, objectId, base, tracks }) => text(await call(windowId, { method: 'set_effects', objectId, base, tracks }))));
   server.registerTool('render_contact_sheet', {
     description: 'Render several frames into ONE PNG grid (each cell labeled #frame) to review a whole animation in a single call. Pass frames explicitly, or count (default 6) evenly spaced between startFrame (default 1) and endFrame (default: last frame). Max 24 frames; columns 1-6 (default 3); cellWidth 160-960 (default 480). Playback must be paused.',
     inputSchema: {

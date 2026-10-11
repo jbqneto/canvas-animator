@@ -5,6 +5,8 @@ import { TEMPLATES } from '../templates/library';
 import { coerceTemplateValues, mergeTemplateOutput } from '../templates/insert';
 import { contactSheetLayout } from '../engine/contactSheet';
 import { defaultValues } from '../templates/types';
+import { DEFAULT_EFFECTS, EFFECT_PROPS } from '../engine/effects';
+import type { EffectProp } from '../types';
 
 export interface AutomationStatus {
   name: string;
@@ -75,6 +77,36 @@ export function createBrowserApi(adapter: AutomationAdapter) {
       const file = JSON.parse(adapter.project());
       if (camera === null) delete file.project.content.camera;
       else file.project.content.camera = camera;
+      adapter.replaceContent(parseProject(JSON.stringify(file)).content);
+    },
+    /**
+     * Sets shadow/glow/blur/tint on one object (text, chart, actor or stick figure) as one undoable edit.
+     * `base` merges into the static values (numbers are clamped to their range); each entry of `tracks`
+     * REPLACES that property's keys (an empty list removes them, going back to the static value).
+     */
+    setEffects: (
+      objectId: string,
+      base: Record<string, unknown> = {},
+      tracks: Record<string, { frame: number; value: number; easing?: string }[]> = {},
+    ) => {
+      assertReady();
+      const file = JSON.parse(adapter.project());
+      const content = file.project.content;
+      const target = [content.actors, content.texts, content.charts, content.sticks]
+        .flatMap((list: unknown) => (Array.isArray(list) ? list : []))
+        .find((o: any) => o && o.id === objectId);
+      if (!target) throw new Error('UNKNOWN_OBJECT');
+      const clamp = (prop: EffectProp, v: number) => Math.min(EFFECT_PROPS[prop].max, Math.max(EFFECT_PROPS[prop].min, v));
+      const effects: Record<string, unknown> = { ...DEFAULT_EFFECTS, ...(target.effects ?? {}) };
+      for (const [key, value] of Object.entries(base)) {
+        effects[key] = typeof value === 'number' ? clamp(key as EffectProp, value) : value;
+      }
+      target.effects = effects;
+      target.tracks = target.tracks ?? {};
+      for (const [prop, keys] of Object.entries(tracks)) {
+        if (keys.length === 0) delete target.tracks[prop];
+        else target.tracks[prop] = keys.map((k) => ({ ...k, value: clamp(prop as EffectProp, k.value) }));
+      }
       adapter.replaceContent(parseProject(JSON.stringify(file)).content);
     },
     listTemplates: () =>
