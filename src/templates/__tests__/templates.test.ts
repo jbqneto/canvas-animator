@@ -126,7 +126,7 @@ describe('helpers', () => {
 
   it('dateCard and quote pass the scene lint at 1080p with their default content', async () => {
     const { lintScene } = await import('../../engine/lint');
-    for (const id of ['dateCard', 'quote']) {
+    for (const id of ['dateCard', 'quote', 'glowTitle']) {
       const tpl = TEMPLATES.find((t) => t.id === id)!;
       const out = tpl.build(defaultValues(tpl, (k) => translate('en-US', k)), ctx({ width: 1920, height: 1080, fps: 30, startFrame: 1 }));
       const end = Math.max(...[...out.texts, ...out.actors].map((o) => o.startFrame + o.durationFrames - 1));
@@ -134,5 +134,16 @@ describe('helpers', () => {
         content: { texts: out.texts, actors: out.actors } });
       expect(issues, id).toEqual([]);
     }
+  });
+
+  it('glowTitle keeps a glow on, in the chosen color, and enters blurred', async () => {
+    const tpl = TEMPLATES.find((t) => t.id === 'glowTitle')!;
+    const { sampleEffects } = await import('../../engine/effects');
+    const out = tpl.build({ ...defaultValues(tpl, (k) => k), glow: '#ff00aa', strength: 0.5 }, ctx());
+    const t = out.texts[0];
+    const mid = sampleEffects(t, Math.round(t.startFrame + t.durationFrames / 2));
+    expect(mid).toMatchObject({ glowColor: '#ff00aa', glowStrength: 0.5, blur: 0 });
+    expect(mid.glowRadius).toBeGreaterThan(0);
+    expect(sampleEffects(t, t.startFrame).blur).toBeGreaterThan(8);
   });
 });

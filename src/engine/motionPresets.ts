@@ -7,10 +7,10 @@ import type { Animated } from '../types';
 import { actorPropertyValue } from './actor';
 import { EasingName, setKeyframe, Track, Vec2 } from './keyframes';
 
-export type MotionPreset = 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'pop';
+export type MotionPreset = 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'pop' | 'blurIn';
 
 /** In the order offered in the UI (labels: `motionPreset.<name>`). */
-export const MOTION_PRESETS: MotionPreset[] = ['fade', 'slideUp', 'slideDown', 'slideLeft', 'slideRight', 'pop'];
+export const MOTION_PRESETS: MotionPreset[] = ['fade', 'slideUp', 'slideDown', 'slideLeft', 'slideRight', 'pop', 'blurIn'];
 
 export interface PresetOptions {
   /** Length of the entrance/exit in frames. */
@@ -18,6 +18,9 @@ export interface PresetOptions {
   /** How far a slide travels, in canvas pixels. */
   distance?: number;
 }
+
+/** How out of focus the blur-in preset starts, in output pixels. */
+const BLUR_IN_PX = 12;
 
 /** Direction a slide comes from (entrance) or goes to (exit). */
 const SLIDE_OFFSET: Partial<Record<MotionPreset, Vec2>> = {
@@ -29,7 +32,7 @@ const SLIDE_OFFSET: Partial<Record<MotionPreset, Vec2>> = {
 
 function withKeys<T extends Animated>(
   obj: T,
-  prop: 'position' | 'scale' | 'opacity',
+  prop: 'position' | 'scale' | 'opacity' | 'blur',
   keys: { frame: number; value: any; easing?: EasingName }[]
 ): T {
   let track = obj.tracks[prop] as Track<any> | undefined;
@@ -72,6 +75,10 @@ function apply<T extends Animated>(obj: T, preset: MotionPreset, which: 'in' | '
   // Every other preset fades; slides also move
   const opacity = actorPropertyValue(obj, 'opacity', rest);
   result = withKeys(result, 'opacity', keyPair(opacity, 0));
+  // Blur-in: starts out of focus and sharpens to its resting blur (and the reverse on exit)
+  if (preset === 'blurIn') {
+    result = withKeys(result, 'blur', keyPair(actorPropertyValue(obj, 'blur', rest), BLUR_IN_PX));
+  }
   const dir = SLIDE_OFFSET[preset];
   if (dir && !obj.follow) {
     const distance = opts.distance ?? 120;

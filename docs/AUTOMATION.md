@@ -113,7 +113,7 @@ em `src/engine/` para criar conteúdo válido.
 
 1. `list_windows` → escolha a janela; `describe_scene` para se orientar.
 2. `list_templates` → `apply_template` (cartão de data, citação, título…) em vez de escrever JSON à mão.
-3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo). `set_effects` para sombra em legendas sobre vídeo, glow de destaque e entradas com desfoque (`blur` 12 → 0).
+3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo). `set_effects` para sombra em legendas sobre vídeo, glow de destaque e entradas com desfoque (`blur` 12 → 0). O modelo `glowTitle` (via `apply_template`) já traz glow e entrada desfocada.
 4. Ajustes finos com `get_project` → `replace_content` (use `fontFamily`, `fontWeight`, `italic`, `letterSpacing` em textos; famílias: Plus Jakarta Sans, Inter, Cormorant Garamond, JetBrains Mono, IBM Plex Mono).
 5. `render_contact_sheet` (6 quadros) para revisar tudo de uma vez; `render_frame` para um quadro em detalhe.
 6. `lint_scene` antes de exportar (inclui `blurred-text`, `dead-air` e `uniform-entrance`); `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.

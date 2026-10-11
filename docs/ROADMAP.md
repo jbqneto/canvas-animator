@@ -255,4 +255,4 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   anterior). Cores são estáticas (não animam); só quantidades/raios animam. Ordem fixa: sombra → glow → objeto.
   Desfoque via `ctx.filter` (ignorado sem suporte do navegador; a UI avisa). Raios em pixels de saída: não
   escalam com o zoom da câmera. O objeto é desenhado numa canvas fora da tela do tamanho da saída (assume sem
-  DPR) que recebe a matriz da câmera. MCP: `set_effects` (um objeto por vez). Modelos (`apply_template`) com efeitos ficam para depois.
+  DPR) que recebe a matriz da câmera. MCP: `set_effects` (um objeto por vez). Preset de entrada `blurIn` (desfoque 12 → nítido) e modelo `glowTitle` (glow fixo + entrada desfocada) já usam efeitos.
