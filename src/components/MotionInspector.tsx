@@ -9,6 +9,7 @@ import type { Animated, MotionPath } from '../types';
 import { ActorFollowPanel } from './ActorFollowPanel';
 import { EffectsSection } from './EffectsSection';
 import { ModifiersSection } from './ModifiersSection';
+import { ParallaxField } from './ParallaxField';
 import { MessageKey, useI18n } from '../i18n';
 import {
   ActorProperty,
@@ -262,6 +263,8 @@ export const MotionInspector = <T extends MotionObject>({
           );
         })}
       </div>
+
+      <ParallaxField obj={obj} onChange={onChange} />
 
       <ModifiersSection obj={obj} onChange={onChange} />
 

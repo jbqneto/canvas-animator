@@ -16,7 +16,7 @@ import {
   SceneCamera,
 } from '../types';
 import { sampleActor, trailPoints } from '../engine/actor';
-import { applyCamera, isIdentityCamera, sampleCamera } from '../engine/camera';
+import { applyCamera, isIdentityCamera, parallaxOf, sampleCamera, scaleCamera } from '../engine/camera';
 import { arrowPolygon, fittedRadius } from '../engine/shapes';
 import { localFigure, samplePose } from '../engine/stickActor';
 import { polylineUpTo, samplePath } from '../engine/path';
@@ -161,16 +161,17 @@ export function renderCompositeFrame(
 
   // 2. Collect every visible object with its layer depth, then paint back to front.
   // Objects without a layer keep the historical order: images at the back, texts in front.
-  const drawables: { depth: number; seq: number; draw: () => void }[] = [];
+  const drawables: { depth: number; seq: number; parallax: number; draw: () => void }[] = [];
   const add = (
     targetId: string | undefined,
     type: LayerType,
     fallbackDepth: number,
-    draw: () => void
+    draw: () => void,
+    parallax = 1
   ) => {
     const resolved = resolveLayer(targetId, type);
     if (resolved && !resolved.layer.visible) return;
-    drawables.push({ depth: resolved ? resolved.index : fallbackDepth, seq: drawables.length, draw });
+    drawables.push({ depth: resolved ? resolved.index : fallbackDepth, seq: drawables.length, parallax, draw });
   };
   const BACK = Number.MAX_SAFE_INTEGER;
   const FRONT = -1;
@@ -193,7 +194,7 @@ export function renderCompositeFrame(
       if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state);
       // opacity is applied once, when composing the layer
       drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }), options.createLayer);
-    });
+    }, parallaxOf(actor));
   });
   frameData?.drawings?.forEach((stroke) => {
     if (!stroke.points || stroke.points.length === 0) return;
@@ -225,29 +226,39 @@ export function renderCompositeFrame(
   // Without a layer of their own they follow the drawings layer, as before.
   scene.sticks?.forEach((stick) => {
     const draw = withTransform(stick, (c) => drawStickFigure(c, localFigure(stick, samplePose(stick, currentFrame))));
-    if (draw) add(stick.id, 'drawing', FRONT, draw);
+    if (draw) add(stick.id, 'drawing', FRONT, draw, parallaxOf(stick));
   });
   charts.forEach((chart) => {
     if (!chart.visible) return;
     const draw = withTransform(chart, (c) => drawChart(c, chart, currentFrame));
-    if (draw) add(chart.id, 'chart', FRONT, draw);
+    if (draw) add(chart.id, 'chart', FRONT, draw, parallaxOf(chart));
   });
   texts.forEach((txt) => {
     if (!txt.visible) return;
     const draw = withTransform(txt, (c) => drawText(c, txt, currentFrame, effectRate));
-    if (draw) add(txt.id, 'text', FRONT, draw);
+    if (draw) add(txt.id, 'text', FRONT, draw, parallaxOf(txt));
   });
 
   const camera = options.camera === false ? null : sampleCamera(scene.camera, currentFrame);
   const moved = !!camera && !isIdentityCamera(camera);
-  if (moved) {
-    ctx.save();
-    applyCamera(ctx, camera, width, height);
+  const ordered = drawables.sort((a, b) => b.depth - a.depth || a.seq - b.seq);
+  if (moved && ordered.some((d) => d.parallax !== 1)) {
+    // Layers at different depths each see their own share of the camera
+    ordered.forEach((d) => {
+      const own = scaleCamera(camera, d.parallax);
+      ctx.save();
+      if (!isIdentityCamera(own)) applyCamera(ctx, own, width, height);
+      d.draw();
+      ctx.restore();
+    });
+  } else {
+    if (moved) {
+      ctx.save();
+      applyCamera(ctx, camera, width, height);
+    }
+    ordered.forEach((d) => d.draw());
+    if (moved) ctx.restore();
   }
-  drawables
-    .sort((a, b) => b.depth - a.depth || a.seq - b.seq)
-    .forEach((d) => d.draw());
-  if (moved) ctx.restore();
 
   ctx.restore();
 }

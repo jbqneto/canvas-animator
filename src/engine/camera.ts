@@ -26,6 +26,23 @@ export function sampleCamera(camera: SceneCamera | undefined, frame: number): Ca
   };
 }
 
+export const PARALLAX = { min: 0, max: 3, default: 1 };
+
+/** The parallax factor of an object, repaired: 1 when missing or not a finite number, limited to 0..3. */
+export function parallaxOf(obj: { parallax?: number }): number {
+  const p = obj.parallax;
+  return typeof p === 'number' && Number.isFinite(p) ? Math.min(PARALLAX.max, Math.max(PARALLAX.min, p)) : PARALLAX.default;
+}
+
+/**
+ * The camera as a layer at depth `factor` sees it: pan and rotation scale with it and zoom moves from 1
+ * toward the camera's zoom by the same share. 1 = the camera itself, 0 = no camera at all.
+ */
+export function scaleCamera(s: CameraState, factor: number): CameraState {
+  if (factor === 1) return s;
+  return { panX: s.panX * factor, panY: s.panY * factor, zoom: clampZoom(1 + (s.zoom - 1) * factor), rotation: s.rotation * factor };
+}
+
 export const isIdentityCamera = (s: CameraState) => s.panX === 0 && s.panY === 0 && s.zoom === 1 && s.rotation === 0;
 
 /** Leaves the context transformed so scene coordinates are drawn as the camera sees them. */

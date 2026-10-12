@@ -64,12 +64,21 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
 
 1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"), incluindo o MCP `set_effects`
-2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
+2. ~~Camadas presas à câmera (parallax)~~ — feito (ver contrato "Parallax da câmera")
 3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
 4. ~~Repetir/ciclo e tremida por propriedade~~ — feito (ver contrato "Repetir e tremida")
 5. Máscara; revelar traços e contornos (quadro branco)
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- Parallax da câmera (`Animated.parallax`, `engine/camera.ts`): fator por objeto (texto, gráfico, ator, boneco),
+  padrão 1. `scaleCamera(câmera, f)` escala pan e rotação por `f` e move o zoom de 1 até o da câmera pela mesma
+  fração (`1 + (zoom − 1)·f`, limitado). 0 = fixo na tela (logo, HUD, legenda), < 1 = camada distante, > 1 =
+  primeiro plano. `parallaxOf` repara valores ausentes ou inválidos (1) e limita a 0..3. O renderer só passa a
+  aplicar a câmera objeto a objeto quando algum desenhável tem fator ≠ 1; sem isso o caminho é o de antes
+  (um único save/restore). Caminhos de movimento e imagens legadas seguem a câmera inteira. O palco do editor
+  continua sem câmera (nada muda ao editar). Efeitos recebem a câmera do objeto, pois a camada usa a matriz
+  atual. Via MCP: `replace_content` (campo `parallax`); `describe_scene` lista `parallax` quando ≠ 1.
 
 - Efeitos sonoros gerados (`audio/synth.ts`): `synthSfx(kind)` faz DSP puro e determinístico (ruído com semente,
   44,1 kHz mono) de `whoosh`, `impact`, `riser`, `pop` e `tick`; `encodeWav` escreve PCM 16 bits e `sfxClip`

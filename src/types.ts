@@ -274,6 +274,11 @@ export interface Animated {
   follow?: ActorFollow;
   /** Shadow, glow, blur and tint; absent = all off. Keys for the numbers live in `tracks`. */
   effects?: EffectParams;
+  /**
+   * How much the scene camera moves this object: 1 (default) = fully, 0 = pinned to the screen (a logo or
+   * HUD), below 1 = a distant layer that moves less, above 1 = a foreground layer that moves more.
+   */
+  parallax?: number;
   /** Loop and shake per transform property; absent = plain keys. */
   modifiers?: Partial<Record<ModifiableProperty, PropertyModifier>>;
 }

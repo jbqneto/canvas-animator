@@ -877,6 +877,9 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'stage.history.scale': 'Scale at frame {frame}',
 
   // Object effects
+  'parallax.label': 'Camera (parallax)',
+  'parallax.hint': '1 follows the scene camera; 0 pins the object to the screen (logo, HUD); below 1 looks distant, above 1 looks close.',
+  'parallax.history': 'Camera parallax: {value}',
   'mod.title': 'Loop and shake',
   'mod.hint': 'Loop: after the last key the animation restarts (cycle) or plays back and forth. Shake: smooth noise around the value.',
   'mod.prop.position': 'Position (px)',

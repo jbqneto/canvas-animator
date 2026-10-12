@@ -1,3 +1,4 @@
+import { parallaxOf } from './camera';
 import { usedEffectGroups, type EffectGroup } from './effects';
 import type { ActorOverlay, AudioClip, ChartOverlay, Marker, MotionPath, SceneCamera, TextOverlay, Animated } from '../types';
 
@@ -25,6 +26,8 @@ export interface SceneItem {
   endSec: number;
   /** Effects the object turns on at some point (shadow, glow, blur, tint); absent when none. */
   effects?: EffectGroup[];
+  /** Camera parallax when it is not the default 1 (0 = pinned to the screen). */
+  parallax?: number;
 }
 
 export interface SceneDescription {
@@ -39,7 +42,8 @@ export interface SceneDescription {
 
 const fx = (o: Animated) => {
   const effects = usedEffectGroups(o);
-  return effects.length ? { effects } : {};
+  const parallax = parallaxOf(o);
+  return { ...(effects.length ? { effects } : {}), ...(parallax !== 1 ? { parallax } : {}) };
 };
 const round2 = (n: number) => Math.round(n * 100) / 100;
 

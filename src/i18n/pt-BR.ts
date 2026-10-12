@@ -878,6 +878,9 @@ export const ptBR = {
   'stage.history.scale': 'Escalar no frame {frame}',
 
   // Object effects
+  'parallax.label': 'Câmera (parallax)',
+  'parallax.hint': '1 acompanha a câmera da cena; 0 fixa o objeto na tela (logo, HUD); abaixo de 1 parece distante, acima de 1 parece perto.',
+  'parallax.history': 'Parallax da câmera: {value}',
   'mod.title': 'Repetir e tremida',
   'mod.hint': 'Repetir: depois da última key, a animação volta ao início (ciclo) ou vai e volta. Tremida: ruído suave em torno do valor.',
   'mod.prop.position': 'Posição (px)',
