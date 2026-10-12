@@ -7,20 +7,25 @@ import type { Animated } from '../types';
 import { actorPropertyValue } from './actor';
 import { EasingName, setKeyframe, Track, Vec2 } from './keyframes';
 
-export type MotionPreset = 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'pop' | 'blurIn';
+export type MotionPreset = 'fade' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'pop' | 'blurIn' | 'blurSwap';
 
 /** In the order offered in the UI (labels: `motionPreset.<name>`). */
-export const MOTION_PRESETS: MotionPreset[] = ['fade', 'slideUp', 'slideDown', 'slideLeft', 'slideRight', 'pop', 'blurIn'];
+export const MOTION_PRESETS: MotionPreset[] = ['fade', 'slideUp', 'slideDown', 'slideLeft', 'slideRight', 'pop', 'blurIn', 'blurSwap'];
 
 export interface PresetOptions {
   /** Length of the entrance/exit in frames. */
   frames: number;
   /** How far a slide travels, in canvas pixels. */
   distance?: number;
+  /** Timeline frame rate, used by presets whose timing is defined in seconds. */
+  fps?: number;
 }
 
 /** How out of focus the blur-in preset starts, in output pixels. */
 const BLUR_IN_PX = 12;
+const BLUR_SWAP_WAIT_SECONDS = 0.07;
+const BLUR_SWAP_IN_SECONDS = 0.26;
+const BLUR_SWAP_OUT_SECONDS = 0.12;
 
 /** Direction a slide comes from (entrance) or goes to (exit). */
 const SLIDE_OFFSET: Partial<Record<MotionPreset, Vec2>> = {
@@ -50,7 +55,46 @@ function presetWindow(obj: Animated, which: 'in' | 'out', frames: number): [numb
   return which === 'in' ? [start, start + length] : [end - length, end];
 }
 
+/** Fixed blurSwap windows, clamped to the object span so a short clip remains editable. */
+function blurSwapWindow(obj: Animated, which: 'in' | 'out', fps: number): [number, number, number?] {
+  const start = obj.startFrame;
+  const end = obj.startFrame + obj.durationFrames;
+  const rate = Number.isFinite(fps) && fps > 0 ? fps : 30;
+  if (which === 'out') {
+    const length = Math.max(1, Math.min(Math.round(BLUR_SWAP_OUT_SECONDS * rate), Math.floor(obj.durationFrames)));
+    return [end - length, end];
+  }
+  const wait = Math.min(Math.round(BLUR_SWAP_WAIT_SECONDS * rate), Math.max(0, Math.floor(obj.durationFrames) - 1));
+  const length = Math.max(1, Math.min(Math.round(BLUR_SWAP_IN_SECONDS * rate), Math.floor(obj.durationFrames) - wait));
+  return [start, start + wait, start + wait + length];
+}
+
 function apply<T extends Animated>(obj: T, preset: MotionPreset, which: 'in' | 'out', opts: PresetOptions): T {
+  if (preset === 'blurSwap') {
+    const fps = opts.fps ?? 30;
+    if (which === 'in') {
+      const [start, afterWait, rest] = blurSwapWindow(obj, 'in', fps) as [number, number, number];
+      let result = withKeys(obj, 'opacity', [
+        { frame: start, value: 0, easing: 'hold' },
+        { frame: afterWait, value: 0, easing: 'easeOut' },
+        { frame: rest, value: 1 },
+      ]);
+      result = withKeys(result, 'scale', [
+        { frame: start, value: 0.94, easing: 'hold' },
+        { frame: afterWait, value: 0.94, easing: 'easeOut' },
+        { frame: rest, value: 1 },
+      ]);
+      return withKeys(result, 'blur', [
+        { frame: start, value: BLUR_IN_PX, easing: 'hold' },
+        { frame: afterWait, value: BLUR_IN_PX, easing: 'easeOut' },
+        { frame: rest, value: 0 },
+      ]);
+    }
+    const [rest, end] = blurSwapWindow(obj, 'out', fps) as [number, number];
+    let result = withKeys(obj, 'opacity', [{ frame: rest, value: 1, easing: 'easeIn' }, { frame: end, value: 0 }]);
+    result = withKeys(result, 'scale', [{ frame: rest, value: 1, easing: 'easeIn' }, { frame: end, value: 0.97 }]);
+    return withKeys(result, 'blur', [{ frame: rest, value: 0, easing: 'easeIn' }, { frame: end, value: 9.6 }]);
+  }
   const [a, b] = presetWindow(obj, which, opts.frames);
   // The object's own (resting) values at the inner edge of the window
   const rest = which === 'in' ? b : a;

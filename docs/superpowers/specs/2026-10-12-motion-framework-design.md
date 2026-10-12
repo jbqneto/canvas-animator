@@ -69,7 +69,7 @@ Regra central: **o SDK só produz objetos que a UI sabe editar.** Nada de SVG op
 1. [x] **Easing `spring`**: `Keyframe.easing = 'spring'` + `springParams?: { w, z }` (padrão `MORPH`). `applyEasing` usa a
    resposta ao degrau fechada (normalizada para chegar em 1 no próximo key: amostrar `S(tau·k)` e garantir `t=1` no fim).
    Presets nomeados no inspetor: Morph, Rápido, Lento, Suave, Câmera.
-2. **Preset `blurSwap`** em `motionPresets.ts` com os números da `vis()`.
+2. [x] **Preset `blurSwap`** em `motionPresets.ts` com os números da `vis()`.
 3. **Pivô por objeto** (`anchor`) para escala/rotação — resolve o caso do ✓ sem precisar de camadas pequenas.
 4. **Motion blur no export**: `export_start({ motionBlur: { subframes: 4, shutter: 180 } })`; o renderer desenha
    `subframes` amostras em `frame + k·(shutter/360)/subframes` e acumula (float, `lighter` + divisão). Exige que

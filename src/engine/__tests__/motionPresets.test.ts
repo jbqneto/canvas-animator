@@ -51,4 +51,15 @@ describe('motion presets', () => {
     const blurred = setActorProperty(actor(), 'blur', 11, 4);
     expect(sampleEffects(applyEntrance(blurred, 'blurIn', { frames: 10 }), 21).blur).toBeCloseTo(4);
   });
+
+  it('blurSwap waits 0.07 s, then swaps sharpness, scale and opacity using ordinary keys', () => {
+    const a = applyExit(applyEntrance(actor(), 'blurSwap', { fps: 30, frames: 1 }), 'blurSwap', { fps: 30, frames: 1 });
+
+    expect(a.tracks.opacity?.map((k) => [k.frame, k.value])).toEqual([[11, 0], [13, 0], [21, 1], [47, 1], [51, 0]]);
+    expect(a.tracks.scale?.map((k) => [k.frame, k.value])).toEqual([[11, 0.94], [13, 0.94], [21, 1], [47, 1], [51, 0.97]]);
+    expect(a.tracks.blur?.map((k) => [k.frame, k.value])).toEqual([[11, 12], [13, 12], [21, 0], [47, 0], [51, 9.6]]);
+    expect(sampleActor(a, 12).opacity).toBe(0);
+    expect(sampleActor(a, 21).opacity).toBe(1);
+    expect(sampleEffects(a, 51).blur).toBeCloseTo(9.6);
+  });
 });

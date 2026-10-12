@@ -344,7 +344,7 @@ export const MotionInspector = <T extends MotionObject>({
                 if (!preset) return;
                 const apply = which === 'entrance' ? applyEntrance : applyExit;
                 onChange(
-                  apply(obj, preset, { frames: Math.max(1, Math.round(presetSeconds * fps)) }),
+                  apply(obj, preset, { frames: Math.max(1, Math.round(presetSeconds * fps)), fps }),
                   t(which === 'entrance' ? 'motionPreset.history.entrance' : 'motionPreset.history.exit', {
                     preset: t(`motionPreset.${preset}`),
                   })

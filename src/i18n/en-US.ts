@@ -157,6 +157,7 @@ export const enUS: Record<keyof typeof ptBR | EnglishOnlyKey, string> = {
   'easing.springPreset.slow': 'Slow',
   'easing.springPreset.soft': 'Soft',
   'easing.springPreset.camera': 'Camera',
+  'motionPreset.blurSwap': 'Blur swap',
 
   // Stick figure pose animation
 

@@ -250,9 +250,11 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   sem código novo. O renderer desenha vetor no lugar da imagem (`drawShape`), centrado na âncora; a linha vai
   de ponta a ponta da largura (a caixa tem no mínimo 16 px de altura para dar para clicar).
   `normalizeShape` repara formas lidas de arquivo. Inserção: botões no painel "Inserir".
-- Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance})`
+- Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance, fps?})`
   gravam keys comuns nas bordas do clipe (fade = opacidade; slides = opacidade + posição; pop = escala com
-  `backOut`), a partir dos valores de repouso do objeto. Disponível no `MotionInspector` para qualquer objeto.
+  `backOut`), a partir dos valores de repouso do objeto. `blurSwap` fixa a espera de 0,07 s e entrada de 0,26 s
+  (blur 12→0, escala .94→1, opacidade 0→1), e a saída de 0,12 s (blur 0→9,6, escala 1→.97, opacidade 1→0),
+  convertidas pelo fps; continua sendo apenas keys editáveis. Disponível no `MotionInspector` para qualquer objeto.
   Texto com `effect: 'none'` não tem entrada própria (só keyframes) — usado pelos modelos.
 - Marcadores (`engine/markers.ts`, `HistorySnapshot.markers`): `{id, frame, label, color}`, ordenados, um por
   quadro. Snap: `snapFrame(f, alvos, limiar)` / `snapSpan(início, duração, …)` (a borda mais próxima ganha e o

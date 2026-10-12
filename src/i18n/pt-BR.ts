@@ -155,6 +155,7 @@ export const ptBR = {
   'easing.springPreset.slow': 'Lento',
   'easing.springPreset.soft': 'Suave',
   'easing.springPreset.camera': 'Câmera',
+  'motionPreset.blurSwap': 'Troca com desfoque',
 
   // Stick figure pose animation
 
