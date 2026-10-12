@@ -30,6 +30,7 @@ import { setKeyframe } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
 import { LOCALES, shortMonth, translate, useI18n } from './i18n';
 import { parseProject, ProjectFileError, projectNameFromFile, serializeProject } from './project/projectFile';
+import { createNewProject } from './project/newProject';
 import { openProjectFile, ProjectFileHandle, saveProjectFile } from './project/fileAccess';
 import { AutosaveEntry, clearAutosave, readAutosave } from './project/autosave';
 import { useAutosave } from './project/useAutosave';
@@ -418,6 +419,24 @@ export default function App() {
     } catch (err) {
       alert(err instanceof ProjectFileError ? err.message : t('app.error.open', { error: String(err) }));
     }
+  };
+
+  const handleNewProject = () => {
+    if (isDirty && !confirm(t('app.confirm.newWithUnsaved'))) return;
+    const project = createNewProject();
+    markSavedOnRenderRef.current = true;
+    setFps(project.fps);
+    setTotalFrames(project.totalFrames);
+    setCanvasDimensions(project.canvas);
+    setVideoBg(project.videoBg);
+    setVideoFileName(undefined);
+    setProjectName(project.name);
+    fileHandleRef.current = undefined;
+    history.reset({ description: t('history.newProject'), ...project.content });
+    setCurrentFrame(1);
+    setSelectedObject(null);
+    setSelectedLayerId('layer-drawings');
+    setIsPlaying(false);
   };
 
   // Installed app: files opened from the OS (double-click on .fmproj) arrive through the launch queue
@@ -1634,6 +1653,11 @@ export default function App() {
         handleOpenProject();
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewProject();
+        return;
+      }
       if (isTypingTarget(e.target) || (e.target instanceof Element && e.target.closest('dialog[open]'))) return;
 
       // Ctrl+Z / Cmd+Z -> Undo
@@ -1692,6 +1716,9 @@ export default function App() {
     handleGroupSelected,
     handleUngroupSelected,
     handleDuplicateCurrentFrame,
+    handleNewProject,
+    handleOpenProject,
+    handleSaveProject,
   ]);
 
   // ================= SCENE PRESETS =================
@@ -2088,6 +2115,7 @@ export default function App() {
         autosaveStatus={autosave.status}
         autosaveSavedAt={autosave.savedAt}
         onRetryAutosave={autosave.retry}
+        onNewProject={handleNewProject}
         onOpenProject={handleOpenProject}
         onSaveProject={() => handleSaveProject(false)}
       />

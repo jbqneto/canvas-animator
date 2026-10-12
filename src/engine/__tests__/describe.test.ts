@@ -58,6 +58,8 @@ describe('describeScene', () => {
     expect('mask' in byId.plain).toBe(false);
     expect('maskOnly' in byId.plain).toBe(false);
     expect('maskOnly' in byId.t).toBe(false);
+  });
+
   it('reports a camera parallax other than 1', () => {
     const d = describeScene({
       ...base,

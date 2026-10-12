@@ -227,8 +227,8 @@ export function renderCompositeFrame(
       const fx = sampleEffects(actor, currentFrame);
       if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state, currentFrame);
       // opacity is applied once, when composing the layer
-      drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }), options.createLayer);
-    }, parallaxOf(actor));
+      drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }, currentFrame), options.createLayer);
+    }), parallaxOf(actor));
   });
   frameData?.drawings?.forEach((stroke) => {
     if (!stroke.points || stroke.points.length === 0) return;

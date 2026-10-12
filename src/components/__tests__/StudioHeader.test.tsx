@@ -9,6 +9,7 @@ const noop = () => {};
 let root: Root;
 let container: HTMLDivElement;
 const properties = vi.fn();
+const newProject = vi.fn();
 function header(aiEnabled: boolean, canGroup = false, canUngroup = false) {
   container = document.createElement('div'); document.body.append(container);
   root = createRoot(container);
@@ -20,10 +21,10 @@ function header(aiEnabled: boolean, canGroup = false, canUngroup = false) {
     onGroupSelected={noop} onUngroupSelected={noop} canGroup={canGroup} canUngroup={canUngroup}
     onDocumentProperties={properties}
     projectName="Test" isDirty={false} autosaveStatus="idle" autosaveSavedAt={null}
-    onRetryAutosave={noop} onOpenProject={noop} onSaveProject={noop} /></I18nProvider>));
+    onRetryAutosave={noop} onNewProject={newProject} onOpenProject={noop} onSaveProject={noop} /></I18nProvider>));
 }
 function click(label: string) {
-  const button = Array.from(container.querySelectorAll('button')).find(b => b.textContent === label);
+  const button = Array.from(container.querySelectorAll('button')).find(b => b.textContent === label || b.textContent?.startsWith(label));
   expect(button).toBeDefined(); act(() => { button!.dispatchEvent(new Event('pointerdown', { bubbles: true })); button!.click(); });
 }
 afterEach(() => { act(() => root?.unmount()); container?.remove(); vi.clearAllMocks(); });
@@ -34,12 +35,21 @@ describe('Desktop editor menus', () => {
     expect(container.textContent).not.toContain('Ctrl+Z');
     expect(container.textContent).not.toContain(t('header.snapshot'));
     click(t('workspace.file'));
+    expect(container.textContent).toContain(t('workspace.newProject'));
     expect(container.textContent).toContain(t('workspace.open'));
     expect(container.textContent).toContain(t('workspace.save'));
     click(t('workspace.document'));
     click(t('workspace.documentProperties'));
     expect(properties).toHaveBeenCalledOnce();
     expect(container.querySelector('[role="menu"]')).toBeNull();
+  });
+  it('offers a new project and no language selector', () => {
+    header(false);
+    click(t('workspace.file'));
+    click(t('workspace.newProject'));
+    expect(newProject).toHaveBeenCalledOnce();
+    click(t('workspace.settings'));
+    expect(container.querySelector('select[aria-label]')).toBeNull();
   });
   it.each([false, true])('only exposes AI when enabled: %s', enabled => {
     header(enabled); click(t('workspace.insert'));

@@ -3,7 +3,6 @@ import { Film, Download, Loader2, ChevronDown } from 'lucide-react';
 import { ShapeType } from '../types';
 import { SHAPE_TYPES } from '../engine/shapes';
 import { useI18n } from '../i18n';
-import { LanguageSwitcher } from './LanguageSwitcher';
 import { AutosaveIndicator } from './AutosaveIndicator';
 import type { AutosaveStatus } from '../project/useAutosave';
 
@@ -38,6 +37,7 @@ interface StudioHeaderProps {
   autosaveStatus: AutosaveStatus;
   autosaveSavedAt: number | null;
   onRetryAutosave: () => void;
+  onNewProject: () => void;
   onOpenProject: () => void;
   onSaveProject: () => void;
 }
@@ -96,6 +96,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = props => {
     }} />
     <nav aria-label={t('workspace.file')} className="flex items-center">
       <AppMenu label={t('workspace.file')}>
+        <MenuAction onClick={props.onNewProject} shortcut="Ctrl+N">{t('workspace.newProject')}</MenuAction>
         <MenuAction onClick={props.onOpenProject} shortcut="Ctrl+O">{t('workspace.open')}</MenuAction>
         <MenuAction onClick={props.onSaveProject} shortcut="Ctrl+S">{t('workspace.save')}</MenuAction>
         <Divider />
@@ -130,8 +131,6 @@ export const StudioHeader: React.FC<StudioHeaderProps> = props => {
         <MenuAction onClick={props.onDocumentProperties}>{t('workspace.documentProperties')}</MenuAction>
       </AppMenu>
       <AppMenu label={t('workspace.settings')}>
-        <div className="p-2"><LanguageSwitcher /></div>
-        <Divider />
         <p className="px-3 py-1 text-[10px] uppercase tracking-wider text-neutral-500">{t('workspace.agents')}</p>
         <div className="p-2 text-xs">{props.agentControls}</div>
       </AppMenu>

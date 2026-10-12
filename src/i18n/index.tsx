@@ -8,26 +8,19 @@ import { ptBR } from './pt-BR';
 import { enUS } from './en-US';
 
 export type Locale = 'pt-BR' | 'en-US';
-export type MessageKey = keyof typeof ptBR;
+export type MessageKey = keyof typeof enUS;
 export type MessageParams = Record<string, string | number>;
 
 export const LOCALES: Locale[] = ['pt-BR', 'en-US'];
 export const LOCALE_STORAGE_KEY = 'flashmotion.locale';
 
-const dictionaries: Record<Locale, Record<MessageKey, string>> = { 'pt-BR': ptBR, 'en-US': enUS };
+const dictionaries: Record<Locale, Partial<Record<MessageKey, string>>> = { 'pt-BR': ptBR, 'en-US': enUS };
 
 const isLocale = (value: unknown): value is Locale => LOCALES.includes(value as Locale);
 
-/** Saved choice, else the browser language (Portuguese → pt-BR, anything else → en-US). */
+/** The interface is currently English-only; the legacy dictionaries stay in the bundle for compatibility. */
 export function detectInitialLocale(): Locale {
-  try {
-    const saved = localStorage.getItem(LOCALE_STORAGE_KEY);
-    if (isLocale(saved)) return saved;
-  } catch {
-    // storage blocked (private mode, sandbox): fall back to the browser language
-  }
-  const browser = typeof navigator !== 'undefined' ? navigator.language : 'pt-BR';
-  return browser.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en-US';
+  return 'en-US';
 }
 
 let currentLocale: Locale = detectInitialLocale();
@@ -37,7 +30,7 @@ export function getLocale(): Locale {
 }
 
 export function translate(locale: Locale, key: MessageKey, params?: MessageParams): string {
-  const template = dictionaries[locale][key] ?? dictionaries['pt-BR'][key] ?? key;
+  const template = dictionaries[locale][key] ?? dictionaries['en-US'][key] ?? key;
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match));
 }
