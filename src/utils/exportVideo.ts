@@ -30,6 +30,7 @@ import { fontCss, loadSceneFonts } from './fonts';
 import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
+import { drawProgress, fillAlpha, shapeOutlineLength, validDrawFrames } from '../engine/reveal';
 import { maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
@@ -223,9 +224,9 @@ export function renderCompositeFrame(
     add(actor.id, 'actor', FRONT, masked(actor, () => {
       drawActorTrail(ctx, actor, state, currentFrame, paths);
       const fx = sampleEffects(actor, currentFrame);
-      if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state);
+      if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state, currentFrame);
       // opacity is applied once, when composing the layer
-      drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }), options.createLayer);
+      drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }, currentFrame), options.createLayer);
     }));
   });
   frameData?.drawings?.forEach((stroke) => {
@@ -346,7 +347,7 @@ function drawActorTrail(
   }
 }
 
-function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>) {
+function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>, frame: number) {
   const img = actor.kind === 'shape' ? null : getCachedImage(actor.src);
   if (actor.kind !== 'shape' && !isImageReady(img!)) return;
   ctx.save();
@@ -354,8 +355,13 @@ function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
   ctx.translate(state.x, state.y);
   ctx.rotate((state.rotation * Math.PI) / 180);
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
-  if (actor.kind === 'shape' && actor.shape) drawShape(ctx, actor.shape, actor.width, actor.height);
-  else ctx.drawImage(img!, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
+  if (actor.kind === 'shape' && actor.shape) {
+    const frames = actor.shape.strokeWidth > 0 || actor.shape.type === 'line' ? validDrawFrames(actor.shape.draw) : 0;
+    const reveal = frames
+      ? { progress: drawProgress(actor.startFrame, frames, frame), fill: fillAlpha(actor.startFrame, frames, frame) }
+      : undefined;
+    drawShape(ctx, actor.shape, actor.width, actor.height, reveal);
+  } else ctx.drawImage(img!, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
   ctx.restore();
 }
 
@@ -378,15 +384,25 @@ function drawMaskGhost(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
 }
 
 /** A shape actor's vector shape, centered on the current origin. */
-function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, h: number) {
+function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, h: number, reveal?: { progress: number; fill: number }) {
+  const tracing = !!reveal && reveal.progress < 1;
+  if (tracing && reveal!.progress <= 0 && style.type === 'line') return;
+  /** Dash that exposes `progress` of an outline of `length` px (offset L = hidden, 0 = shown). */
+  const traceDash = (length: number) => {
+    const L = length * 1.02;
+    ctx.setLineDash([L, L]);
+    ctx.lineDashOffset = L * (1 - reveal!.progress);
+  };
   ctx.beginPath();
   if (style.type === 'line') {
     ctx.moveTo(-w / 2, 0);
     ctx.lineTo(w / 2, 0);
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = Math.max(1, style.strokeWidth);
-    ctx.lineCap = 'round';
+    ctx.lineCap = tracing ? 'butt' : 'round';
+    if (tracing) traceDash(w);
     ctx.stroke();
+    if (tracing) ctx.setLineDash([]);
     return;
   }
   if (style.type === 'ellipse') {
@@ -397,13 +413,21 @@ function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, 
   } else {
     ctx.roundRect(-w / 2, -h / 2, w, h, fittedRadius(style.radius, w, h));
   }
-  ctx.fillStyle = style.fill;
-  ctx.fill();
-  if (style.strokeWidth > 0) {
+  const fillOpacity = reveal ? reveal.fill : 1;
+  if (fillOpacity > 0) {
+    const alpha = ctx.globalAlpha;
+    if (fillOpacity < 1) ctx.globalAlpha = alpha * fillOpacity;
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+    if (fillOpacity < 1) ctx.globalAlpha = alpha;
+  }
+  if (style.strokeWidth > 0 && !(tracing && reveal!.progress <= 0)) {
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = style.strokeWidth;
     ctx.lineJoin = 'round';
+    if (tracing) traceDash(shapeOutlineLength(style, w, h));
     ctx.stroke();
+    if (tracing) ctx.setLineDash([]);
   }
 }
 
@@ -422,6 +446,8 @@ function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, followe
     const onPath = followers.filter((a) => a.follow?.pathId === path.id);
     const progress = Math.max(0, ...onPath.map((a) => sampleTrack(a.follow!.progress, frame, 0)));
     points = polylineUpTo(sampler, progress);
+  } else if (path.style.reveal === 'draw') {
+    points = polylineUpTo(sampler, drawProgress(path.startFrame, path.style.drawFrames ?? 24, frame));
   }
   if (points.length < 2) return;
   ctx.save();
