@@ -58,5 +58,15 @@ describe('describeScene', () => {
     expect('mask' in byId.plain).toBe(false);
     expect('maskOnly' in byId.plain).toBe(false);
     expect('maskOnly' in byId.t).toBe(false);
+  it('reports a camera parallax other than 1', () => {
+    const d = describeScene({
+      ...base,
+      content: { texts: [
+        { id: 'a', text: 'A', startFrame: 1, durationFrames: 24, tracks: {}, parallax: 0 },
+        { id: 'b', text: 'B', startFrame: 1, durationFrames: 24, tracks: {}, parallax: 1 },
+        { id: 'c', text: 'C', startFrame: 1, durationFrames: 24, tracks: {} },
+      ] } as any,
+    });
+    expect(Object.fromEntries(d.items.map((i) => [i.id, i.parallax]))).toEqual({ a: 0, b: undefined, c: undefined });
   });
 });

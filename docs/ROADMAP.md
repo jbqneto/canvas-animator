@@ -64,7 +64,7 @@ Implementar a ferramenta genérica (caminho desenhado + objeto que segue) e mont
 Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos testes manuais:
 
 1. ~~Filtros e efeito de cor por objeto (sombra, brilho, desfoque, tint), animáveis~~ — feito (ver contrato "Efeitos por objeto"), incluindo o MCP `set_effects`
-2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
+2. ~~Camadas presas à câmera (parallax)~~ — feito (ver contrato "Parallax da câmera")
 3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
 4. ~~Repetir/ciclo e tremida por propriedade~~ — feito (ver contrato "Repetir e tremida")
 5. ~~Máscara; revelar traços e contornos (quadro branco)~~ — feito (ver contrato "Máscara e revelar traços")

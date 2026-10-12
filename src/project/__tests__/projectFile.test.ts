@@ -269,3 +269,14 @@ describe('loop and shake persistence', () => {
     });
   });
 });
+
+describe('camera parallax persistence', () => {
+  it('round-trips parallax on a text and an actor', () => {
+    const base = state();
+    base.content.texts = [{ id: 't1', text: 'oi', fontSize: 40, align: 'left', startFrame: 1, durationFrames: 30, base: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, tracks: {}, parallax: 0 } as any];
+    base.content.actors = [{ ...base.content.actors[0], parallax: 0.5 } as any];
+    const { content } = parseProject(serializeProject(base));
+    expect(content.texts[0].parallax).toBe(0);
+    expect(content.actors[0].parallax).toBe(0.5);
+  });
+});

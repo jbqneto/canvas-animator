@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addCameraMove, applyCamera, clampZoom, DEFAULT_CAMERA, isIdentityCamera, sampleCamera, sceneToScreen, screenToScene,
+  addCameraMove, applyCamera, clampZoom, DEFAULT_CAMERA, isIdentityCamera, parallaxOf, sampleCamera, scaleCamera, sceneToScreen, screenToScene,
 } from '../camera';
 import { createCanvasStub } from '../../test/canvasStub';
 
@@ -50,5 +50,27 @@ describe('sceneToScreen / screenToScene', () => {
   it('puts the looked-at point at the screen center', () => {
     const s = sceneToScreen({ panX: 100, panY: 50, zoom: 3, rotation: 0 }, { x: 1060, y: 590 }, 1920, 1080);
     expect(s).toEqual({ x: 960, y: 540 });
+  });
+});
+
+describe('parallax', () => {
+  const cam = { panX: 100, panY: -40, zoom: 2, rotation: 10 };
+  it('scales the camera by the layer factor: 1 = the camera, 0 = none, 0.5 = half way', () => {
+    expect(scaleCamera(cam, 1)).toBe(cam);
+    expect(isIdentityCamera(scaleCamera(cam, 0))).toBe(true);
+    expect(scaleCamera(cam, 0.5)).toEqual({ panX: 50, panY: -20, zoom: 1.5, rotation: 5 });
+    expect(scaleCamera(cam, 2)).toEqual({ panX: 200, panY: -80, zoom: 3, rotation: 20 });
+  });
+  it('keeps the zoom inside its limits for extreme factors', () => {
+    expect(scaleCamera({ ...cam, zoom: 20 }, 3).zoom).toBe(20);
+    expect(scaleCamera({ ...cam, zoom: 0.1 }, 3).zoom).toBeGreaterThanOrEqual(0.05);
+  });
+  it('repairs a missing, non-numeric or out-of-range factor', () => {
+    expect(parallaxOf({})).toBe(1);
+    expect(parallaxOf({ parallax: NaN })).toBe(1);
+    expect(parallaxOf({ parallax: '2' as never })).toBe(1);
+    expect(parallaxOf({ parallax: -1 })).toBe(0);
+    expect(parallaxOf({ parallax: 9 })).toBe(3);
+    expect(parallaxOf({ parallax: 0.4 })).toBe(0.4);
   });
 });

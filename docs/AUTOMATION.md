@@ -165,6 +165,9 @@ Repetir e tremida: cada objeto aceita `modifiers` (via `replace_content`), por p
 `loop` (`cycle` | `pingpong`) repete as keys depois da última; `shake` soma ruído suave de ±`amount` (px na posição,
 razão em escala e opacidade, graus na rotação) com novo alvo a cada `periodFrames` quadros.
 
+Parallax: cada objeto aceita `parallax` (via `replace_content`, padrão 1): `0` fixa o objeto na tela (logo, HUD,
+legenda) enquanto a câmera se move; abaixo de 1 parece um fundo distante, acima de 1 um primeiro plano.
+
 O palco do editor mostra a cena **sem** a câmera (para editar no espaço da cena); a câmera aparece em `render_frame`, contact sheet e exportação.
 
 ## Erros e limites

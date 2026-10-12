@@ -891,6 +891,9 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'mask.use.hint': "A shape used as a mask is hidden on the final render and cuts other objects. Lines cannot be masks.",
   'mask.missing': "Missing actor (clear it)",
   // Object effects
+  'parallax.label': 'Camera (parallax)',
+  'parallax.hint': '1 follows the scene camera; 0 pins the object to the screen (logo, HUD); below 1 looks distant, above 1 looks close.',
+  'parallax.history': 'Camera parallax: {value}',
   'mod.title': 'Loop and shake',
   'mod.hint': 'Loop: after the last key the animation restarts (cycle) or plays back and forth. Shake: smooth noise around the value.',
   'mod.prop.position': 'Position (px)',
