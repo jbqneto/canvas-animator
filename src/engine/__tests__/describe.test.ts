@@ -40,4 +40,23 @@ describe('describeScene', () => {
     const byId = Object.fromEntries(d.items.map((i) => [i.id, i.effects]));
     expect(byId).toEqual({ a: ['blur'], b: ['shadow'], c: undefined });
   });
+
+  it('lists maskOnly and mask only when set', () => {
+    const d = describeScene({
+      ...base,
+      content: {
+        texts: [
+          { id: 't', text: 'Hi', startFrame: 1, durationFrames: 24, mask: { actorId: 'm', mode: 'outside' } },
+          { id: 'plain', text: 'No', startFrame: 1, durationFrames: 24 },
+        ],
+        actors: [{ id: 'm', name: 'Cut', startFrame: 1, durationFrames: 48, maskOnly: true }],
+      } as any,
+    });
+    const byId = Object.fromEntries(d.items.map((i) => [i.id, i]));
+    expect(byId.m.maskOnly).toBe(true);
+    expect(byId.t.mask).toEqual({ actorId: 'm', mode: 'outside' });
+    expect('mask' in byId.plain).toBe(false);
+    expect('maskOnly' in byId.plain).toBe(false);
+    expect('maskOnly' in byId.t).toBe(false);
+  });
 });

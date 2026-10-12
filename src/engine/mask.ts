@@ -13,6 +13,11 @@ export interface ResolvedMask {
 const ELLIPSE_POINTS = 64;
 const CORNER_STEPS = 12;
 
+/** A shape actor with an area (not a line) can cut other objects. Shared by the renderer and the lint. */
+export function isUsableMaskShape(actor: ActorOverlay | undefined): actor is ActorOverlay & { shape: NonNullable<ActorOverlay['shape']> } {
+  return !!actor && actor.kind === 'shape' && !!actor.shape && actor.shape.type !== 'line';
+}
+
 /** The mask that applies to `target` at `frame`, or null (drawn whole) when it is missing or not usable. */
 export function resolveMask(
   target: Animated & { id?: string },
@@ -23,7 +28,7 @@ export function resolveMask(
   const ref = target.mask;
   if (!ref || (ref.mode !== 'inside' && ref.mode !== 'outside') || ref.actorId === target.id) return null;
   const shape = actors.find((a) => a.id === ref.actorId);
-  if (!shape || shape.kind !== 'shape' || !shape.shape || shape.shape.type === 'line') return null;
+  if (!isUsableMaskShape(shape)) return null;
   if (!Number.isFinite(shape.width) || !Number.isFinite(shape.height)) return null;
   if (!isActorOnScreen(shape, frame)) return null;
   const state = sampleActor(shape, frame, paths);
@@ -108,6 +113,6 @@ export function deleteActorScene<S extends SceneWithLayers>(scene: S, actorId: s
 /** Actors that can be picked as a mask: flagged `maskOnly`, a shape and not a line (a line has no area). */
 export function maskActorOptions(actors: ActorOverlay[]): { id: string; name: string }[] {
   return actors
-    .filter((a) => a.maskOnly && a.kind === 'shape' && a.shape && a.shape.type !== 'line')
+    .filter((a) => a.maskOnly && isUsableMaskShape(a))
     .map((a) => ({ id: a.id, name: a.name }));
 }

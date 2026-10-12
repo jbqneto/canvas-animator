@@ -67,9 +67,19 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 2. Camadas presas à câmera (parallax); a câmera com keyframes (pan/zoom/rotação da cena) já existe (T32)
 3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
 4. ~~Repetir/ciclo e tremida por propriedade~~ — feito (ver contrato "Repetir e tremida")
-5. Máscara; revelar traços e contornos (quadro branco)
+5. ~~Máscara; revelar traços e contornos (quadro branco)~~ — feito (ver contrato "Máscara e revelar traços")
 
 ## Contratos / decisões (atualizar a cada tarefa)
+
+- Máscara e revelar traços (`Animated.mask`, `ActorOverlay.maskOnly`, `engine/mask.ts`): qualquer texto, ator ou gráfico
+  aceita `mask: { actorId, mode: 'inside' | 'outside' }`, apontando para um ator `shape` (retângulo, elipse ou seta; `line`
+  não tem área). `maskOnly: true` no ator da máscara o tira do desenho (só recorta). Fora do intervalo do ator-máscara
+  (`startFrame` a `startFrame + durationFrames`) ou com referência inválida, o objeto aparece inteiro, sem recorte. O
+  recorte também corta sombra e brilho; `showMasks` só mostra as máscaras no editor (nunca na exportação). Revelar:
+  `shape.draw: { frames }` traça o contorno e depois entra o preenchimento; `style.reveal: 'draw'` (com `drawFrames`,
+  padrão 24) faz o caminho se traçar sozinho. Lint: `mask-missing` (erro) e `mask-span` (aviso); `describe_scene` lista
+  `maskOnly` e `mask`. Fora do escopo: feather (borda suave), máscara de imagem/luminância, várias máscaras por objeto
+  e os traços do lápis (`drawings`).
 
 - Efeitos sonoros gerados (`audio/synth.ts`): `synthSfx(kind)` faz DSP puro e determinístico (ruído com semente,
   44,1 kHz mono) de `whoosh`, `impact`, `riser`, `pop` e `tick`; `encodeWav` escreve PCM 16 bits e `sfxClip`

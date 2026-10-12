@@ -117,7 +117,7 @@ em `src/engine/` para criar conteúdo válido.
 3. `set_camera` para zoom lento/pan (a câmera move os objetos, não o fundo). `add_sfx` para som (whoosh nas entradas, impacto nas revelações, riser antes do momento forte; o `export_video` já mixa). `set_effects` para sombra em legendas sobre vídeo, glow de destaque e entradas com desfoque (`blur` 12 → 0). O modelo `glowTitle` (via `apply_template`) já traz glow e entrada desfocada.
 4. Ajustes finos com `get_project` → `replace_content` (use `fontFamily`, `fontWeight`, `italic`, `letterSpacing` em textos; famílias: Plus Jakarta Sans, Inter, Cormorant Garamond, JetBrains Mono, IBM Plex Mono).
 5. `render_contact_sheet` (6 quadros) para revisar tudo de uma vez; `render_frame` para um quadro em detalhe.
-6. `lint_scene` antes de exportar (inclui `blurred-text`, `dead-air` e `uniform-entrance`); `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
+6. `lint_scene` antes de exportar (inclui `blurred-text`, `dead-air`, `uniform-entrance`, `mask-missing` e `mask-span`); `export_video` (`mp4` ou `webm-alpha`) para o arquivo final.
 
 ### Laço de revisão (olhar, dar nota, corrigir)
 
@@ -129,6 +129,36 @@ Um vídeo bom raramente sai na primeira tentativa. Depois de montar a cena:
 3. `lint_scene` e `describe_scene` (que agora lista os efeitos de cada objeto em `effects`) para conferir.
 4. Repita até todo plano ter nota 8 ou mais. Evite os padrões de fábrica: texto centralizado com fade em
    tudo, mesma cor e mesma entrada em todos os objetos. Varie entrada, easing e destaque por objeto.
+
+### Máscaras e revelar traços
+
+Um ator `shape` com `maskOnly: true` não é desenhado: só recorta outros objetos. O objeto recortado ganha
+`mask: { actorId, mode }` (`inside` mostra só o que está dentro da forma; `outside`, só o que está fora). Serve
+para texto, ator e gráfico; a forma pode ser retângulo, elipse ou seta (não `line`). Via `replace_content`:
+
+```json
+{
+  "actors": [
+    { "id": "cut", "name": "Janela", "kind": "shape", "src": "", "maskOnly": true,
+      "width": 600, "height": 200, "flipX": false, "startFrame": 1, "durationFrames": 96,
+      "shape": { "type": "rect", "fill": "#ffffff", "stroke": "#000000", "strokeWidth": 0, "radius": 24 } },
+    { "id": "box", "name": "Caixa", "kind": "shape", "src": "", "width": 400, "height": 240, "flipX": false,
+      "startFrame": 1, "durationFrames": 96,
+      "shape": { "type": "rect", "fill": "#00000000", "stroke": "#ffffff", "strokeWidth": 6, "radius": 0, "draw": { "frames": 24 } } }
+  ],
+  "texts": [
+    { "id": "t1", "text": "Revelado", "startFrame": 1, "durationFrames": 96, "mask": { "actorId": "cut", "mode": "inside" } }
+  ]
+}
+```
+
+(Os objetos reais têm mais campos: parta de `get_project` e acrescente só os de cima.) Animar a posição ou a escala
+do ator-máscara faz a janela se mover e revelar o texto. `shape.draw.frames` traça o contorno da forma nesse número
+de quadros e depois entra o preenchimento; num caminho (`paths`), `style.reveal: "draw"` com `drawFrames` o traça sozinho.
+
+Duas regras do `lint_scene` cuidam disso: `mask-missing` (erro: o `actorId` não existe, não é `shape`, é `line` ou é o
+próprio objeto) e `mask-span` (aviso: o ator-máscara some antes do fim, ou entra depois do início, do objeto recortado;
+fora do intervalo o objeto aparece inteiro). `describe_scene` lista `maskOnly` e `mask` nos itens.
 
 Repetir e tremida: cada objeto aceita `modifiers` (via `replace_content`), por propriedade de transformação
 (`position`, `scale`, `rotation`, `opacity`): `{"rotation":{"loop":"pingpong"},"position":{"shake":{"amount":4,"periodFrames":6}}}`.

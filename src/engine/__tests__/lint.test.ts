@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lintScene, type LintInput } from '../lint';
 import { createText } from '../overlays';
-import type { TextOverlay } from '../../types';
+import type { ActorOverlay, TextOverlay } from '../../types';
 
 const text = (over: Partial<TextOverlay> = {}, at = { x: 400, y: 500 }) =>
   createText(
@@ -76,5 +76,39 @@ describe('lintScene', () => {
     expect(rules(input(same(4)))).toContain('uniform-entrance');
     expect(rules(input(same(3)))).not.toContain('uniform-entrance');
     expect(rules(input([...same(4), text({ id: 'x', effect: 'typewriter' as any })]))).not.toContain('uniform-entrance');
+  });
+  describe('masks', () => {
+    const shape = (over: Partial<ActorOverlay> = {}) =>
+      ({ id: 'm1', name: 'Mask', kind: 'shape', src: '', width: 100, height: 100, flipX: false, startFrame: 1, durationFrames: 60, maskOnly: true,
+        shape: { type: 'rect', fill: '#fff', stroke: '#000', strokeWidth: 0, radius: 0 }, ...over }) as ActorOverlay;
+    const masked = (actors: ActorOverlay[], mask: any = { actorId: 'm1', mode: 'inside' }, over: Partial<TextOverlay> = {}) =>
+      input([text({ mask, ...over } as any)], { content: { texts: [text({ mask, ...over } as any)], actors } });
+    const issues = (i: LintInput, rule: string) => lintScene(i).filter((x) => x.rule === rule);
+
+    it('flags a mask pointing at a missing id, an image, a line or the object itself', () => {
+      const missing = issues(masked([]), 'mask-missing');
+      expect(missing).toHaveLength(1);
+      expect(missing[0]).toMatchObject({ severity: 'error', objectId: 't1' });
+      expect(missing[0].message).toContain('m1');
+      expect(issues(masked([shape({ kind: 'image', shape: undefined })]), 'mask-missing')).toHaveLength(1);
+      expect(issues(masked([shape({ shape: { type: 'line', fill: '#fff', stroke: '#000', strokeWidth: 2, radius: 0 } })]), 'mask-missing')).toHaveLength(1);
+      expect(issues(masked([shape()], { actorId: 't1', mode: 'inside' }), 'mask-missing')).toHaveLength(1);
+    });
+    it('accepts rect, ellipse and arrow masks and objects without a mask', () => {
+      for (const type of ['rect', 'ellipse', 'arrow'] as const) {
+        const s = shape({ shape: { type, fill: '#fff', stroke: '#000', strokeWidth: 0, radius: 0 } });
+        expect(issues(masked([s]), 'mask-missing')).toHaveLength(0);
+      }
+      expect(rules(input([text()]))).not.toContain('mask-missing');
+    });
+    it('warns when the mask does not cover the whole span of the object', () => {
+      const short = issues(masked([shape({ durationFrames: 10 })]), 'mask-span');
+      expect(short).toHaveLength(1);
+      expect(short[0]).toMatchObject({ severity: 'warning', objectId: 't1' });
+      expect(short[0].message).toContain('m1');
+      expect(issues(masked([shape({ startFrame: 10 })]), 'mask-span')).toHaveLength(1);
+      expect(issues(masked([shape()]), 'mask-span')).toHaveLength(0);
+      expect(issues(masked([]), 'mask-span')).toHaveLength(0);
+    });
   });
 });
