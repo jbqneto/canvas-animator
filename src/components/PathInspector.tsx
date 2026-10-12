@@ -15,6 +15,27 @@ interface PathInspectorProps {
   onSelectActor: (actorId: string) => void;
 }
 
+/** Frames field that can be emptied while typing; only a positive integer is committed, blur restores the value. */
+const DrawFramesInput: React.FC<{ value: number; onCommit: (frames: number) => void }> = ({ value, onCommit }) => {
+  const [text, setText] = React.useState<string | null>(null);
+  return (
+    <input
+      data-path-field="drawFrames"
+      type="number"
+      min={1}
+      max={600}
+      value={text ?? value}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number(e.target.value);
+        if (e.target.value !== '' && Number.isInteger(n) && n > 0) onCommit(n);
+      }}
+      onBlur={() => setText(null)}
+      className="w-16 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 font-mono text-white"
+    />
+  );
+};
+
 const inputClass =
   'w-full bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 text-xs text-white focus:border-sky-500 outline-none';
 const sectionTitle = 'text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block';
@@ -168,16 +189,9 @@ export const PathInspector: React.FC<PathInspectorProps> = ({
             {path.style.reveal === 'draw' && (
               <label className="flex items-center gap-2 text-[10px] text-neutral-400">
                 {t('path.drawFrames')}
-                <input
-                  data-path-field="drawFrames"
-                  type="number"
-                  min={1}
-                  max={600}
+                <DrawFramesInput
                   value={path.style.drawFrames ?? 24}
-                  onChange={(e) =>
-                    setStyle({ drawFrames: Math.max(1, Math.round(Number(e.target.value)) || 1) }, t('path.history.drawFrames'))
-                  }
-                  className="w-16 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 font-mono text-white"
+                  onCommit={(frames) => setStyle({ drawFrames: frames }, t('path.history.drawFrames'))}
                 />
               </label>
             )}

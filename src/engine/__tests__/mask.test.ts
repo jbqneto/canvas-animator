@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearMaskRefs, deleteActorScene, maskActorOptions, maskPath, resolveMask } from '../mask';
+import { clearMaskRefs, deleteActorLayerScene, deleteActorScene, maskActorOptions, maskPath, resolveMask } from '../mask';
 import { createShapeActor, defaultShapeStyle } from '../shapes';
 import { sampleActor } from '../actor';
 import type { ActorOverlay, Animated } from '../../types';
@@ -120,5 +120,32 @@ describe('maskActorOptions', () => {
     const list = [shape('a', 'rect', { maskOnly: true }), shape('b'), shape('c', 'line', { maskOnly: true }),
       { ...shape('d', 'ellipse', { maskOnly: true }), kind: 'image' as const }];
     expect(maskActorOptions(list)).toEqual([{ id: 'a', name: 'a' }]);
+  });
+});
+
+describe('maskActorOptions with a current reference', () => {
+  it('keeps listing a referenced usable shape that is no longer maskOnly, but never a line', () => {
+    const list = [shape('a'), shape('b'), shape('c', 'line')];
+    expect(maskActorOptions(list)).toEqual([]);
+    expect(maskActorOptions(list, 'a')).toEqual([{ id: 'a', name: 'a' }]);
+    expect(maskActorOptions(list, 'c')).toEqual([]);
+  });
+});
+
+describe('deleteActorLayerScene', () => {
+  it('removes the actor and its layer and clears the mask refs in one scene', () => {
+    const scene = {
+      actors: [shape('m', 'rect', { maskOnly: true }), shape('k')],
+      sticks: [target({ actorId: 'm', mode: 'inside' }, 's')],
+      charts: [],
+      texts: [target({ actorId: 'm', mode: 'outside' }, 'x'), target({ actorId: 'k', mode: 'inside' }, 'y')],
+      layers: [{ id: 'L1', targetId: 'm' }, { id: 'L2', targetId: 'k' }],
+    };
+    const next = deleteActorLayerScene(scene, 'L1', 'm');
+    expect(next.actors.map((a) => a.id)).toEqual(['k']);
+    expect(next.layers.map((l) => l.id)).toEqual(['L2']);
+    expect('mask' in next.sticks![0]).toBe(false);
+    expect('mask' in next.texts[0]).toBe(false);
+    expect(next.texts[1].mask).toEqual({ actorId: 'k', mode: 'inside' });
   });
 });

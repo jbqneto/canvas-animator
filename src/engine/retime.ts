@@ -88,7 +88,8 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
     paths: scene.paths.map((p) => ({
       ...p,
       ...retimeSpan(p.startFrame, p.durationFrames, k),
-      style: p.style.drawFrames ? { ...p.style, drawFrames: scaleFrames(p.style.drawFrames, k) } : p.style,
+      // The renderer traces a draw path over 24 frames when none is set, so that default scales too
+      style: p.style.reveal === 'draw' ? { ...p.style, drawFrames: scaleFrames(p.style.drawFrames ?? 24, k) } : p.style,
     })),
     images: scene.images.map((img) => ({ ...img, ...retimeSpan(img.startFrame, img.durationFrames, k) })),
     // Audio timing inside the clip is already in seconds; only where it starts moves

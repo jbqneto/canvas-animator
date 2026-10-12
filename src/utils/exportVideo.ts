@@ -31,7 +31,7 @@ import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
 import { drawProgress, fillAlpha, shapeOutlineLength, validDrawFrames } from '../engine/reveal';
-import { maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
+import { isUsableMaskShape, maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -367,7 +367,7 @@ function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
 
 /** Editor outline of a mask-only actor: dashed, never filled. Skipped when its geometry is not finite. */
 function drawMaskGhost(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>) {
-  if (actor.kind !== 'shape' || !actor.shape) return;
+  if (!isUsableMaskShape(actor)) return;
   const contours = maskPath(actor, state);
   if (!contours.every((c) => c.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)))) return;
   ctx.save();

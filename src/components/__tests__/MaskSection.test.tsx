@@ -114,6 +114,14 @@ describe('ActorInspector "use as mask"', () => {
     expect('maskOnly' in onChange.mock.calls[0][0]).toBe(false);
   });
 
+  it('drops maskOnly when the shape type becomes line', () => {
+    const onChange = inspect(shape({ maskOnly: true }));
+    pick('[data-shape-field="type"]', 'line');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect('maskOnly' in onChange.mock.calls[0][0]).toBe(false);
+    expect(onChange.mock.calls[0][0].shape.type).toBe('line');
+  });
+
   it('is not offered for line shapes', () => {
     inspect(shape({}, 'line'));
     expect(q('[data-mask-only]')).toBeNull();

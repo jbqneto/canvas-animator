@@ -57,4 +57,20 @@ describe('PathInspector draw reveal', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0].style.drawFrames).toBe(40);
   });
+
+  it('can be cleared while typing: empty commits nothing, then 2 gives 2 and blur restores the value', () => {
+    const onChange = render(makePath('draw', 30));
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    const type = (v: string) => act(() => { setter.call(frames(), v); frames().dispatchEvent(new Event('input', { bubbles: true })); });
+    type('');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(frames().value).toBe('');
+    type('2');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].style.drawFrames).toBe(2);
+    expect(frames().value).toBe('2');
+    type('');
+    act(() => { frames().dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    expect(frames().value).toBe('30');
+  });
 });

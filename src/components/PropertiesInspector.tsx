@@ -162,8 +162,6 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   const activeActor =
     selectedObject?.type === 'actor' ? actors.find((a) => a.id === selectedObject.id) : undefined;
 
-  const maskActors = maskActorOptions(actors);
-
   const activePath =
     selectedObject?.type === 'path' ? paths.find((p) => p.id === selectedObject.id) : undefined;
 
@@ -171,6 +169,11 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
     selectedObject?.type === 'stick'
       ? sticks.find((s) => s.id === selectedObject.id)
       : null;
+
+  const maskActors = maskActorOptions(
+    actors,
+    (activeChart ?? activeText ?? activeActor ?? activeStick)?.mask?.actorId
+  );
 
   const activeGroup =
     selectedObject?.type === 'group'

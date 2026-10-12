@@ -61,7 +61,13 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       {actor.kind === 'shape' && actor.shape && (
         <ShapePanel
           style={actor.shape}
-          onChange={(shape, label) => onChange({ ...actor, shape }, t('shape.history.change', { label }))}
+          onChange={(shape, label) => {
+            // A line has no area, so it cannot be a mask: drop the flag when the type becomes line
+            if (shape.type === 'line' && actor.maskOnly) {
+              const { maskOnly: _drop, ...rest } = actor;
+              onChange({ ...rest, shape }, t('shape.history.change', { label }));
+            } else onChange({ ...actor, shape }, t('shape.history.change', { label }));
+          }}
         />
       )}
 

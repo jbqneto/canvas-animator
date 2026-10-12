@@ -134,7 +134,7 @@ Um vídeo bom raramente sai na primeira tentativa. Depois de montar a cena:
 
 Um ator `shape` com `maskOnly: true` não é desenhado: só recorta outros objetos. O objeto recortado ganha
 `mask: { actorId, mode }` (`inside` mostra só o que está dentro da forma; `outside`, só o que está fora). Serve
-para texto, ator e gráfico; a forma pode ser retângulo, elipse ou seta (não `line`). Via `replace_content`:
+para texto, ator, gráfico e boneco; a forma pode ser retângulo, elipse ou seta (não `line`). Via `replace_content`:
 
 ```json
 {

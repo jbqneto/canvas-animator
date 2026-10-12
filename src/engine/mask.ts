@@ -18,6 +18,11 @@ export function isUsableMaskShape(actor: ActorOverlay | undefined): actor is Act
   return !!actor && actor.kind === 'shape' && !!actor.shape && actor.shape.type !== 'line';
 }
 
+/** A mask only cuts in these two modes; anything else renders the object whole. */
+export function isValidMaskMode(mode: unknown): mode is 'inside' | 'outside' {
+  return mode === 'inside' || mode === 'outside';
+}
+
 /** The mask that applies to `target` at `frame`, or null (drawn whole) when it is missing or not usable. */
 export function resolveMask(
   target: Animated & { id?: string },
@@ -26,7 +31,7 @@ export function resolveMask(
   paths: MotionPath[] = []
 ): ResolvedMask | null {
   const ref = target.mask;
-  if (!ref || (ref.mode !== 'inside' && ref.mode !== 'outside') || ref.actorId === target.id) return null;
+  if (!ref || !isValidMaskMode(ref.mode) || ref.actorId === target.id) return null;
   const shape = actors.find((a) => a.id === ref.actorId);
   if (!isUsableMaskShape(shape)) return null;
   if (!Number.isFinite(shape.width) || !Number.isFinite(shape.height)) return null;
@@ -96,7 +101,7 @@ export function clearMaskRefs<S extends WithObjects>(scene: S, actorId: string):
   return next;
 }
 
-type SceneWithLayers = Omit<WithObjects, 'actors'> & { actors: ActorOverlay[]; layers: { targetId?: string }[] };
+type SceneWithLayers = Omit<WithObjects, 'actors'> & { actors: ActorOverlay[]; layers: { id?: string; targetId?: string }[] };
 
 /** The scene after deleting an actor: the actor, its layers and every mask pointing at it go in ONE snapshot. */
 export function deleteActorScene<S extends SceneWithLayers>(scene: S, actorId: string): S {
@@ -110,9 +115,25 @@ export function deleteActorScene<S extends SceneWithLayers>(scene: S, actorId: s
   );
 }
 
-/** Actors that can be picked as a mask: flagged `maskOnly`, a shape and not a line (a line has no area). */
-export function maskActorOptions(actors: ActorOverlay[]): { id: string; name: string }[] {
+/** The scene after deleting an actor through its timeline layer: that layer goes, other layers stay (still one snapshot). */
+export function deleteActorLayerScene<S extends SceneWithLayers>(
+  scene: S,
+  layerId: string,
+  actorId: string
+): S {
+  return clearMaskRefs(
+    { ...scene, actors: scene.actors.filter((a) => a.id !== actorId), layers: scene.layers.filter((l) => l.id !== layerId) },
+    actorId
+  );
+}
+
+/**
+ * Actors that can be picked as a mask: flagged `maskOnly`, a shape and not a line (a line has no area).
+ * `currentId` (the reference already set) is listed too when it is a usable shape, because the renderer
+ * keeps cutting with it after "Use as mask" is unchecked.
+ */
+export function maskActorOptions(actors: ActorOverlay[], currentId?: string): { id: string; name: string }[] {
   return actors
-    .filter((a) => a.maskOnly && isUsableMaskShape(a))
+    .filter((a) => isUsableMaskShape(a) && (a.maskOnly || a.id === currentId))
     .map((a) => ({ id: a.id, name: a.name }));
 }

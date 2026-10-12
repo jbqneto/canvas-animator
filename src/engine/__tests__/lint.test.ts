@@ -77,6 +77,15 @@ describe('lintScene', () => {
     expect(rules(input(same(3)))).not.toContain('uniform-entrance');
     expect(rules(input([...same(4), text({ id: 'x', effect: 'typewriter' as any })]))).not.toContain('uniform-entrance');
   });
+  it('ignores maskOnly actors for dead air, since they are never drawn', () => {
+    const wide = { totalFrames: 120 };
+    const ghost = { id: 'm1', name: 'Mask', kind: 'shape', src: '', width: 10, height: 10, flipX: false, startFrame: 1, durationFrames: 120, maskOnly: true,
+      shape: { type: 'rect', fill: '#fff', stroke: '#000', strokeWidth: 0, radius: 0 } } as ActorOverlay;
+    const i = input([text({ durationFrames: 10 })], { ...wide, content: { texts: [text({ durationFrames: 10 })], actors: [ghost] } });
+    expect(rules(i)).toContain('dead-air');
+    const shown = { ...ghost, maskOnly: undefined } as ActorOverlay;
+    expect(rules({ ...i, content: { ...i.content, actors: [shown] } })).not.toContain('dead-air');
+  });
   describe('masks', () => {
     const shape = (over: Partial<ActorOverlay> = {}) =>
       ({ id: 'm1', name: 'Mask', kind: 'shape', src: '', width: 100, height: 100, flipX: false, startFrame: 1, durationFrames: 60, maskOnly: true,
@@ -93,6 +102,10 @@ describe('lintScene', () => {
       expect(issues(masked([shape({ kind: 'image', shape: undefined })]), 'mask-missing')).toHaveLength(1);
       expect(issues(masked([shape({ shape: { type: 'line', fill: '#fff', stroke: '#000', strokeWidth: 2, radius: 0 } })]), 'mask-missing')).toHaveLength(1);
       expect(issues(masked([shape()], { actorId: 't1', mode: 'inside' }), 'mask-missing')).toHaveLength(1);
+    });
+    it('flags a mask with an invalid mode, which renders whole', () => {
+      expect(issues(masked([shape()], { actorId: 'm1', mode: 'sideways' }), 'mask-missing')).toHaveLength(1);
+      expect(issues(masked([shape()], { actorId: 'm1', mode: 'outside' }), 'mask-missing')).toHaveLength(0);
     });
     it('accepts rect, ellipse and arrow masks and objects without a mask', () => {
       for (const type of ['rect', 'ellipse', 'arrow'] as const) {

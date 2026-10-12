@@ -92,6 +92,16 @@ describe('mask clip in the renderer', () => {
     expect(count(ghost, 'stroke')).toBeGreaterThan(0);
   });
 
+  it('draws no ghost for a maskOnly line or image actor', () => {
+    const line = maskActor({ maskOnly: true, shape: { ...defaultShapeStyle('line') } });
+    const image = maskActor({ maskOnly: true, kind: 'image', shape: undefined });
+    for (const a of [line, image]) {
+      const calls = render(scene([a], []), { showMasks: true });
+      expect(calls.some((c) => c.name === 'setLineDash' && (c.args[0] as number[]).length > 0)).toBe(false);
+      expectBalanced(calls);
+    }
+  });
+
   it('draws the target whole when the mask is out of span or missing', () => {
     for (const actors of [[maskActor({ startFrame: 50 })], []]) {
       const calls = render(scene(actors, [text(inside)]));

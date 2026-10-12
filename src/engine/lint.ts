@@ -1,6 +1,6 @@
 import type { ActorOverlay, ChartOverlay, TextOverlay } from '../types';
 import { sampleActor } from './actor';
-import { isUsableMaskShape } from './mask';
+import { isUsableMaskShape, isValidMaskMode } from './mask';
 import { contrastRatio } from './color';
 import { sampleEffects } from './effects';
 import { textBox } from './overlays';
@@ -92,7 +92,9 @@ export function lintScene(input: LintInput, options: LintOptions = {}): LintIssu
     }
   }
   issues.push(...maskIssues(timed, input.content.actors ?? []));
-  issues.push(...deadAir(input, timed, maxDeadAirSec), ...uniformEntrance(texts, uniformEntranceMin));
+  // Mask-only actors are never drawn, so they do not fill the screen
+  const visibleTimed = timed.filter((o) => !('maskOnly' in o && o.maskOnly));
+  issues.push(...deadAir(input, visibleTimed, maxDeadAirSec), ...uniformEntrance(texts, uniformEntranceMin));
   return issues;
 }
 
@@ -139,8 +141,8 @@ function maskIssues(timed: (TextOverlay | ActorOverlay | ChartOverlay)[], actors
     const ref = obj.mask;
     if (!ref) continue;
     const shape = actors.find((a) => a.id === ref.actorId);
-    if (ref.actorId === obj.id || !isUsableMaskShape(shape)) {
-      issues.push({ rule: 'mask-missing', severity: 'error', objectId: obj.id, message: `Mask "${ref.actorId}" is missing or is not a rectangle, ellipse or arrow shape actor; the object is drawn whole.` });
+    if (ref.actorId === obj.id || !isUsableMaskShape(shape) || !isValidMaskMode(ref.mode)) {
+      issues.push({ rule: 'mask-missing', severity: 'error', objectId: obj.id, message: `Mask "${ref.actorId}" is missing, is not a rectangle, ellipse or arrow shape actor, or has an invalid mode; the object is drawn whole.` });
       continue;
     }
     if (shape.startFrame > obj.startFrame || shape.startFrame + shape.durationFrames < obj.startFrame + obj.durationFrames) {

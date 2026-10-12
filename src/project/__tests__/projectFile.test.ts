@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseProject, ProjectFileError, ProjectState, serializeProject, projectNameFromFile } from '../projectFile';
 import { createActor } from '../../engine/actor';
+import { createShapeActor, defaultShapeStyle } from '../../engine/shapes';
+import { createText } from '../../engine/overlays';
 import { createStickActor, togglePoseKey } from '../../engine/stickActor';
 import type { Keyframe } from '../../engine/keyframes';
 import { DEFAULT_EFFECTS, sampleEffects } from '../../engine/effects';
@@ -233,5 +235,37 @@ describe('loop and shake persistence', () => {
     const { content } = parseProject(serializeProject(base));
     expect(content.texts[0].modifiers).toEqual(modifiers);
     expect(content.actors[0].modifiers).toEqual(modifiers);
+  });
+
+  describe('masks and draw-on', () => {
+    const mask = { actorId: 'm1', mode: 'outside' as const };
+    it('round-trips mask, maskOnly, shape.draw, reveal draw and drawFrames', () => {
+      const base = state();
+      const shape = createShapeActor({ id: 'm1', name: 'M', style: { ...defaultShapeStyle('rect'), draw: { frames: 30 } }, width: 10, height: 10, x: 0, y: 0, startFrame: 1, durationFrames: 30 });
+      const text = { ...createText({ id: 't1', text: 'Hi', fontSize: 40, color: '#fff', effect: 'none', visible: true, startFrame: 1, durationFrames: 30 }, { x: 5, y: 5 }), mask };
+      const stick = { ...createStickActor(createDefaultStickFigure('s1', 'Zé', 100, 200), 1, 60), mask };
+      base.content.actors = [{ ...shape, maskOnly: true }, { ...base.content.actors[0], mask }];
+      base.content.texts = [text];
+      base.content.sticks = [stick];
+      base.content.paths = [{
+        id: 'p1', name: 'P', points: [{ x: 0, y: 0 }, { x: 5, y: 5 }], smooth: false, closed: false,
+        style: { visible: true, color: '#fff', width: 2, stroke: 'solid', reveal: 'draw', drawFrames: 18 }, startFrame: 1, durationFrames: 30,
+      }];
+      const parsed = parseProject(serializeProject(base));
+      expect(parsed.content.actors[0].maskOnly).toBe(true);
+      expect(parsed.content.actors[0].shape!.draw).toEqual({ frames: 30 });
+      expect(parsed.content.actors[1].mask).toEqual(mask);
+      expect(parsed.content.texts[0].mask).toEqual(mask);
+      expect(parsed.content.sticks![0].mask).toEqual(mask);
+      expect(parsed.content.paths[0].style.reveal).toBe('draw');
+      expect(parsed.content.paths[0].style.drawFrames).toBe(18);
+    });
+
+    it('leaves a project without those fields unchanged', () => {
+      const parsed = parseProject(serializeProject(state()));
+      expect('mask' in parsed.content.actors[0]).toBe(false);
+      expect('maskOnly' in parsed.content.actors[0]).toBe(false);
+      expect(parsed.content.actors[0]).toEqual(state().content.actors[0]);
+    });
   });
 });

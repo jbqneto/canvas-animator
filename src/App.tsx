@@ -24,7 +24,7 @@ import {
 import { attachToPath, createActor, isActorOnScreen } from './engine/actor';
 import { createChart, createText } from './engine/overlays';
 import { createShapeActor, defaultShapeStyle } from './engine/shapes';
-import { deleteActorScene } from './engine/mask';
+import { deleteActorLayerScene, deleteActorScene } from './engine/mask';
 import { createStickActor, hasPoseKeys, migrateFrameSticks, samplePose, stickLayer, stickToStrokes } from './engine/stickActor';
 import { setKeyframe } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
@@ -921,7 +921,7 @@ export default function App() {
     let updatedCharts = charts;
     let updatedTexts = texts;
     let updatedSticks = sticks;
-    let updatedActors = actors;
+    const updatedActors = actors;
 
     if (layer.targetIds && layer.type === 'text') {
       // Shared track: its texts go with it
@@ -933,7 +933,7 @@ export default function App() {
       } else if (layer.type === 'text') {
         updatedTexts = texts.filter((t) => t.id !== layer.targetId);
       } else if (layer.type === 'actor') {
-        updatedActors = actors.filter((a) => a.id !== layer.targetId);
+        // handled below by deleteActorLayerScene
       } else if (layer.type === 'group') {
         updatedSticks = sticks.filter((s) => s.id !== layer.targetId);
       }
@@ -944,14 +944,20 @@ export default function App() {
       return;
     }
 
-    history.pushSnapshot(t('history.deleteLayer', { name: layer.name }), {
-      ...history.present,
-      layers: layers.filter((l) => l.id !== layerId),
-      charts: updatedCharts,
-      texts: updatedTexts,
-      sticks: updatedSticks,
-      actors: updatedActors,
-    });
+    // Deleting an actor layer must not leave dangling mask refs (same cleanup as deleting the actor itself)
+    history.pushSnapshot(
+      t('history.deleteLayer', { name: layer.name }),
+      layer.type === 'actor' && layer.targetId
+        ? deleteActorLayerScene(history.present, layerId, layer.targetId)
+        : {
+            ...history.present,
+            layers: layers.filter((l) => l.id !== layerId),
+            charts: updatedCharts,
+            texts: updatedTexts,
+            sticks: updatedSticks,
+            actors: updatedActors,
+          }
+    );
 
     if (selectedLayerId === layerId) {
       setSelectedLayerId(null);

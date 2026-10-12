@@ -114,9 +114,15 @@ describe('retiming draw-on durations', () => {
     expect(retimeScene({ ...scene(), actors: [drawShape(1)] }, 96, 24, 2.4).scene.actors[0].shape!.draw).toEqual({ frames: 1 });
   });
 
-  it('scales path drawFrames and leaves paths without it alone', () => {
-    const { scene: s } = retimeScene({ ...scene(), paths: [path(24), path()] }, 96, 24, 48);
+  it('scales path drawFrames and leaves non-draw paths alone', () => {
+    const plain = { ...path(), style: { ...path().style, reveal: 'full' as const } };
+    const { scene: s } = retimeScene({ ...scene(), paths: [path(24), plain] }, 96, 24, 48);
     expect(s.paths[0].style.drawFrames).toBe(48);
     expect('drawFrames' in s.paths[1].style).toBe(false);
+  });
+
+  it('writes the scaled default 24 for a draw path without drawFrames', () => {
+    const { scene: s } = retimeScene({ ...scene(), paths: [path()] }, 96, 24, 48);
+    expect(s.paths[0].style.drawFrames).toBe(48);
   });
 });

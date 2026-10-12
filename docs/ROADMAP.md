@@ -71,7 +71,7 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
-- Máscara e revelar traços (`Animated.mask`, `ActorOverlay.maskOnly`, `engine/mask.ts`): qualquer texto, ator ou gráfico
+- Máscara e revelar traços (`Animated.mask`, `ActorOverlay.maskOnly`, `engine/mask.ts`): qualquer texto, ator, gráfico ou boneco
   aceita `mask: { actorId, mode: 'inside' | 'outside' }`, apontando para um ator `shape` (retângulo, elipse ou seta; `line`
   não tem área). `maskOnly: true` no ator da máscara o tira do desenho (só recorta). Fora do intervalo do ator-máscara
   (`startFrame` a `startFrame + durationFrames`) ou com referência inválida, o objeto aparece inteiro, sem recorte. O
