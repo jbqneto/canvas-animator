@@ -24,6 +24,7 @@ export function resolveMask(
   if (!ref || (ref.mode !== 'inside' && ref.mode !== 'outside') || ref.actorId === target.id) return null;
   const shape = actors.find((a) => a.id === ref.actorId);
   if (!shape || shape.kind !== 'shape' || !shape.shape || shape.shape.type === 'line') return null;
+  if (!Number.isFinite(shape.width) || !Number.isFinite(shape.height)) return null;
   if (!isActorOnScreen(shape, frame)) return null;
   const state = sampleActor(shape, frame, paths);
   if (![state.x, state.y, state.scale, state.rotation].every(Number.isFinite)) return null;

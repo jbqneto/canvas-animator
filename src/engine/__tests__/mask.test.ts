@@ -34,6 +34,11 @@ describe('resolveMask', () => {
     const bad = shape('m', 'rect', { base: { ...m.base, x: NaN } });
     expect(resolveMask(target({ actorId: 'm', mode: 'inside' }), [bad], 5)).toBeNull();
   });
+  it('is null when the mask size is not finite (corrupt file)', () => {
+    for (const over of [{ width: NaN }, { height: Infinity }]) {
+      expect(resolveMask(target({ actorId: 'm', mode: 'inside' }), [shape('m', 'rect', over)], 5)).toBeNull();
+    }
+  });
   it('does not recurse when two objects mask each other', () => {
     const a = { ...shape('a'), mask: { actorId: 'b', mode: 'inside' as const } };
     const b = { ...shape('b'), mask: { actorId: 'a', mode: 'inside' as const } };

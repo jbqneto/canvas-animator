@@ -30,6 +30,7 @@ import { fontCss, loadSceneFonts } from './fonts';
 import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
+import { maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -64,6 +65,8 @@ export interface RenderOptions {
   camera?: boolean;
   /** Off-screen layer factory for objects with effects; injected in tests */
   createLayer?: LayerFactory;
+  /** Editor only: draw mask-only actors as dashed outlines. */
+  showMasks?: boolean;
 }
 
 /**
@@ -175,6 +178,30 @@ export function renderCompositeFrame(
   const BACK = Number.MAX_SAFE_INTEGER;
   const FRONT = -1;
 
+  // Masks: the clip is set in the current (camera) space, so mask and target move together. Effects
+  // are composed onto `ctx` under the clip, so it also cuts their shadow and glow.
+  const BIG = 1e6;
+  const clipToMask = (mask: ResolvedMask) => {
+    ctx.beginPath();
+    if (mask.mode === 'outside') ctx.rect(-BIG, -BIG, 2 * BIG, 2 * BIG);
+    maskPath(mask.shape, mask.state).forEach((contour) => {
+      contour.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+    });
+    ctx.clip(mask.mode === 'outside' ? 'evenodd' : 'nonzero');
+  };
+  /** Wraps a drawable so it is cut by its mask; the cut is resolved once per frame. */
+  const masked = (target: Animated & { id?: string }, draw: () => void) => {
+    const mask = target.mask ? resolveMask(target, actors, currentFrame, paths) : null;
+    if (!mask) return draw;
+    return () => {
+      ctx.save();
+      clipToMask(mask);
+      draw();
+      ctx.restore();
+    };
+  };
+
   images.forEach((img) => {
     if (currentFrame < img.startFrame || currentFrame > img.startFrame + img.durationFrames) return;
     add(img.id, 'image', BACK, () => drawImageOverlay(ctx, img, currentFrame, width, height, effectRate));
@@ -186,21 +213,27 @@ export function renderCompositeFrame(
   });
   actors.forEach((actor) => {
     const state = sampleActor(actor, currentFrame, paths);
-    if (!state.visible || state.opacity <= 0) return;
-    add(actor.id, 'actor', FRONT, () => {
+    if (!state.visible) return;
+    // A mask-only actor is never painted; the editor shows its outline even when it is transparent
+    if (actor.maskOnly) {
+      if (options.showMasks) add(actor.id, 'actor', FRONT, () => drawMaskGhost(ctx, actor, state));
+      return;
+    }
+    if (state.opacity <= 0) return;
+    add(actor.id, 'actor', FRONT, masked(actor, () => {
       drawActorTrail(ctx, actor, state, currentFrame, paths);
       const fx = sampleEffects(actor, currentFrame);
       if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state);
       // opacity is applied once, when composing the layer
       drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }), options.createLayer);
-    });
+    }));
   });
   frameData?.drawings?.forEach((stroke) => {
     if (!stroke.points || stroke.points.length === 0) return;
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
   });
   // Charts and texts: the same keyframed transform as actors, then their own intro inside it
-  const withTransform = (obj: Animated, draw: (c: CanvasRenderingContext2D) => void) => {
+  const withTransform = (obj: Animated & { id?: string }, draw: (c: CanvasRenderingContext2D) => void) => {
     const state = sampleActor(obj, currentFrame, paths);
     if (!state.visible || state.opacity <= 0) return null;
     const fx = sampleEffects(obj, currentFrame);
@@ -209,7 +242,7 @@ export function renderCompositeFrame(
       c.rotate((state.rotation * Math.PI) / 180);
       c.scale(state.scale, state.scale);
     };
-    return () => {
+    return masked(obj, () => {
       if (hasActiveEffects(fx)) {
         drawWithEffects(ctx, width, height, fx, state.opacity, (c) => { c.save(); place(c); draw(c); c.restore(); }, options.createLayer);
         return;
@@ -219,7 +252,7 @@ export function renderCompositeFrame(
       ctx.globalAlpha *= state.opacity;
       draw(ctx);
       ctx.restore();
-    };
+    });
   };
   // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
   // Without a layer of their own they follow the drawings layer, as before.
@@ -323,6 +356,24 @@ function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
   if (actor.kind === 'shape' && actor.shape) drawShape(ctx, actor.shape, actor.width, actor.height);
   else ctx.drawImage(img!, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
+  ctx.restore();
+}
+
+/** Editor outline of a mask-only actor: dashed, never filled. Skipped when its geometry is not finite. */
+function drawMaskGhost(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>) {
+  if (actor.kind !== 'shape' || !actor.shape) return;
+  const contours = maskPath(actor, state);
+  if (!contours.every((c) => c.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)))) return;
+  ctx.save();
+  ctx.strokeStyle = '#e879f9';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  contours.forEach((contour) => {
+    contour.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+  });
+  ctx.stroke();
   ctx.restore();
 }
 

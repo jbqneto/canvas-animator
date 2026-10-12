@@ -253,16 +253,16 @@ export interface PropertyModifier {
   shake?: { amount: number; periodFrames: number };
 }
 
-/**
- * Anything on the stage that moves the After Effects way: a time span plus a transform whose
- * properties are static (`base`, stopwatch off) or keyframed (`tracks`, stopwatch on), optionally
- * travelling a drawn path. Actors, charts and texts all share it (logic in `engine/actor.ts`).
- */
 export interface MaskRef {
   actorId: string;
   mode: 'inside' | 'outside';
 }
 
+/**
+ * Anything on the stage that moves the After Effects way: a time span plus a transform whose
+ * properties are static (`base`, stopwatch off) or keyframed (`tracks`, stopwatch on), optionally
+ * travelling a drawn path. Actors, charts and texts all share it (logic in `engine/actor.ts`).
+ */
 export interface Animated {
   startFrame: number;
   durationFrames: number;
