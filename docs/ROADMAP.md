@@ -149,9 +149,12 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 - Tempo: quadros começam em 1. `videoTimeForFrame(frame, fps, duration)`.
 - Export: WebCodecs via mediabunny (lazy import), timestamps explícitos.
 - Keyframes (`src/engine/keyframes.ts`): `Track<T> = Keyframe<T>[]` ordenado; easing do key vale para o
-  segmento que COMEÇA nele; clamp antes/depois. `sampleTrack(track, frame, fallback)`,
-  `samplePosition(track, frame, fallback, smooth)` → `{x, y, angle}` (Catmull-Rom centrípeta, velocidade
-  constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam `DEFAULT_EASING`.
+  segmento que COMEÇA nele; clamp antes/depois. Além dos easings geométricos, `spring` é uma resposta ao degrau
+  fechada e sem estado, com `springParams?: { w, z }` por key (Morph `{15, .84}` quando omitido), normalizada
+  para cair exatamente no próximo key; a duração vem da diferença de frames e do fps da cena. `sampleTrack(track,
+  frame, fallback, fps?)`, `samplePosition(track, frame, fallback, smooth, fps?)` → `{x, y, angle}` (Catmull-Rom
+  centrípeta, velocidade constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam
+  `DEFAULT_EASING`.
 - Objetos animados: `Animated` (`types.ts`) = intervalo + `base` + `tracks` + `smoothPath`/`orientToPath` +
   `follow`. `ActorOverlay`, `ChartOverlay` e `TextOverlay` estendem `Animated`; as funções de
   `engine/actor.ts` são genéricas (`<T extends Animated>`, devolvem o mesmo tipo). Âncora: centro da imagem
@@ -247,9 +250,11 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   sem código novo. O renderer desenha vetor no lugar da imagem (`drawShape`), centrado na âncora; a linha vai
   de ponta a ponta da largura (a caixa tem no mínimo 16 px de altura para dar para clicar).
   `normalizeShape` repara formas lidas de arquivo. Inserção: botões no painel "Inserir".
-- Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance})`
+- Entradas/saídas (`engine/motionPresets.ts`): `applyEntrance`/`applyExit(obj, preset, {frames, distance, fps?})`
   gravam keys comuns nas bordas do clipe (fade = opacidade; slides = opacidade + posição; pop = escala com
-  `backOut`), a partir dos valores de repouso do objeto. Disponível no `MotionInspector` para qualquer objeto.
+  `backOut`), a partir dos valores de repouso do objeto. `blurSwap` fixa a espera de 0,07 s e entrada de 0,26 s
+  (blur 12→0, escala .94→1, opacidade 0→1), e a saída de 0,12 s (blur 0→9,6, escala 1→.97, opacidade 1→0),
+  convertidas pelo fps; continua sendo apenas keys editáveis. Disponível no `MotionInspector` para qualquer objeto.
   Texto com `effect: 'none'` não tem entrada própria (só keyframes) — usado pelos modelos.
 - Marcadores (`engine/markers.ts`, `HistorySnapshot.markers`): `{id, frame, label, color}`, ordenados, um por
   quadro. Snap: `snapFrame(f, alvos, limiar)` / `snapSpan(início, duração, …)` (a borda mais próxima ganha e o

@@ -19,6 +19,7 @@ export type EasingName =
   | 'backOut'
   | 'elasticOut'
   | 'bounceOut'
+  | 'spring'
   | 'hold';
 
 /** Easings in the order they are offered in the UI (labels are translated as `easing.<name>`). */
@@ -30,16 +31,36 @@ export const EASING_NAMES: EasingName[] = [
   'backOut',
   'elasticOut',
   'bounceOut',
+  'spring',
   'hold',
 ];
 
 export const DEFAULT_EASING: EasingName = 'easeInOut';
+
+export interface SpringParams {
+  /** Natural angular frequency in radians per second. */
+  w: number;
+  /** Damping ratio. Values below 1 overshoot; 1 is critically damped. */
+  z: number;
+}
+
+export const SPRING_PRESETS = {
+  morph: { w: 15, z: 0.84 },
+  fast: { w: 27, z: 0.86 },
+  slow: { w: 12.5, z: 0.9 },
+  soft: { w: 10, z: 0.95 },
+  camera: { w: 7.5, z: 1 },
+} as const satisfies Record<string, SpringParams>;
+
+export const DEFAULT_SPRING_PARAMS: SpringParams = SPRING_PRESETS.morph;
 
 export interface Keyframe<T> {
   frame: number;
   value: T;
   /** Easing of the segment that starts at this keyframe. */
   easing?: EasingName;
+  /** Parameters for an outgoing spring segment. Omitted keys use the Morph preset. */
+  springParams?: SpringParams;
 }
 
 export type Track<T> = Keyframe<T>[];
@@ -60,9 +81,33 @@ function bounceOut(t: number): number {
   return n1 * (t -= 2.625 / d1) * t + 0.984375;
 }
 
-/** Maps linear progress (0..1) to eased progress. May overshoot 1 for back/elastic. */
-export function applyEasing(name: EasingName | undefined, t: number): number {
+function springStepResponse(timeSeconds: number, { w, z }: SpringParams): number {
+  if (z < 1) {
+    const wd = w * Math.sqrt(1 - z * z);
+    return 1 - Math.exp(-z * w * timeSeconds) * (Math.cos(wd * timeSeconds) + (z * w / wd) * Math.sin(wd * timeSeconds));
+  }
+  return 1 - Math.exp(-w * timeSeconds) * (1 + w * timeSeconds);
+}
+
+/**
+ * Maps linear progress (0..1) to eased progress. May overshoot 1 for back/elastic/spring.
+ * `springDurationSeconds` is the segment duration, so the stateless closed-form response can be
+ * normalized to land exactly on the next keyframe.
+ */
+export function applyEasing(
+  name: EasingName | undefined,
+  t: number,
+  springParams?: SpringParams,
+  springDurationSeconds = 1
+): number {
   const p = clamp01(t);
+  if (name === 'spring') {
+    if (p === 0 || p === 1) return p;
+    const params = springParams ?? DEFAULT_SPRING_PARAMS;
+    const duration = Math.max(0, springDurationSeconds);
+    const end = springStepResponse(duration, params);
+    return Math.abs(end) < 1e-9 ? p : springStepResponse(p * duration, params) / end;
+  }
   switch (name) {
     case 'hold':
       return p < 1 ? 0 : 1;
@@ -91,7 +136,7 @@ export function applyEasing(name: EasingName | undefined, t: number): number {
 }
 
 /** Finds the segment containing `frame`: index of its starting key and eased progress inside it. */
-function locate<T>(track: Track<T>, frame: number): { index: number; t: number } {
+function locate<T>(track: Track<T>, frame: number, fps = 30): { index: number; t: number } {
   const last = track.length - 1;
   if (frame <= track[0].frame) return { index: 0, t: 0 };
   if (frame >= track[last].frame) return { index: last, t: 0 };
@@ -99,13 +144,16 @@ function locate<T>(track: Track<T>, frame: number): { index: number; t: number }
   while (i < last && track[i + 1].frame <= frame) i++;
   const a = track[i];
   const b = track[i + 1];
-  return { index: i, t: applyEasing(a.easing, (frame - a.frame) / (b.frame - a.frame)) };
+  return {
+    index: i,
+    t: applyEasing(a.easing, (frame - a.frame) / (b.frame - a.frame), a.springParams, (b.frame - a.frame) / fps),
+  };
 }
 
 /** Samples a numeric track; returns `fallback` when the track has no keys. */
-export function sampleTrack(track: Track<number> | undefined, frame: number, fallback: number): number {
+export function sampleTrack(track: Track<number> | undefined, frame: number, fallback: number, fps = 30): number {
   if (!track || track.length === 0) return fallback;
-  const { index, t } = locate(track, frame);
+  const { index, t } = locate(track, frame, fps);
   const a = track[index];
   const b = track[index + 1];
   if (!b) return a.value;
@@ -138,6 +186,11 @@ export function moveKeyframe<T>(track: Track<T> | undefined, from: number, to: n
 
 export function setKeyframeEasing<T>(track: Track<T> | undefined, frame: number, easing: EasingName): Track<T> {
   return (track ?? []).map((k) => (k.frame === frame ? { ...k, easing } : k));
+}
+
+/** Changes spring parameters on an existing keyframe without disturbing its value or easing. */
+export function setKeyframeSpringParams<T>(track: Track<T> | undefined, frame: number, springParams: SpringParams): Track<T> {
+  return (track ?? []).map((k) => (k.frame === frame ? { ...k, springParams } : k));
 }
 
 export function hasKeyframeAt<T>(track: Track<T> | undefined, frame: number): boolean {
@@ -216,7 +269,8 @@ export function samplePosition(
   track: Track<Vec2> | undefined,
   frame: number,
   fallback: Vec2,
-  smooth = true
+  smooth = true,
+  fps = 30
 ): PathSample {
   if (!track || track.length === 0) return { ...fallback, angle: 0 };
   const points = track.map((k) => k.value);
@@ -232,7 +286,7 @@ export function samplePosition(
     i = last - 1;
     fraction = 1;
   } else {
-    const loc = locate(track, frame);
+    const loc = locate(track, frame, fps);
     i = loc.index;
     fraction = loc.t;
   }

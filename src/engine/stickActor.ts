@@ -24,7 +24,7 @@ export function localFigure(stick: StickActor, joints: StickPose = stick.joints)
 }
 
 /** Pose at `frame`: rest pose without keys; held before the first and after the last key. */
-export function samplePose(stick: StickActor, frame: number): StickPose {
+export function samplePose(stick: StickActor, frame: number, fps = 30): StickPose {
   const keys = stick.poses;
   if (!keys || keys.length === 0) return stick.joints;
   if (frame <= keys[0].frame) return keys[0].value;
@@ -34,7 +34,7 @@ export function samplePose(stick: StickActor, frame: number): StickPose {
   while (i < keys.length - 1 && keys[i + 1].frame <= frame) i++;
   const a = keys[i];
   const b = keys[i + 1];
-  const t = applyEasing(a.easing, (frame - a.frame) / (b.frame - a.frame));
+  const t = applyEasing(a.easing, (frame - a.frame) / (b.frame - a.frame), a.springParams, (b.frame - a.frame) / fps);
   if (t <= 0) return a.value;
   if (t >= 1) return b.value;
   return interpolateStickPose(localFigure(stick, a.value), localFigure(stick, b.value), t).joints;

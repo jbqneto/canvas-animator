@@ -5,8 +5,9 @@ import { SFX_KINDS, type SfxKind } from '../audio/synth';
 
 export const MAX_BRIDGE_BYTES = 50 * 1024 * 1024;
 const easingSchema = z.enum(EASING_NAMES as [EasingName, ...EasingName[]]);
+const springParamsSchema = z.object({ w: z.number().finite().positive(), z: z.number().finite().min(0) }).strict();
 const keysSchema = z
-  .array(z.object({ frame: z.number().int().min(1), value: z.number().finite(), easing: easingSchema.optional() }).strict())
+  .array(z.object({ frame: z.number().int().min(1), value: z.number().finite(), easing: easingSchema.optional(), springParams: springParamsSchema.optional() }).strict())
   .max(500);
 export const cameraSchema = z
   .object({

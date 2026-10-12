@@ -16,13 +16,13 @@ export const DEFAULT_CAMERA: SceneCamera = { base: { panX: 0, panY: 0, zoom: 1, 
 const finiteOr = (v: number, fallback: number) => (Number.isFinite(v) ? v : fallback);
 export const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, finiteOr(zoom, 1)));
 
-export function sampleCamera(camera: SceneCamera | undefined, frame: number): CameraState {
+export function sampleCamera(camera: SceneCamera | undefined, frame: number, fps = 30): CameraState {
   const c = camera ?? DEFAULT_CAMERA;
   return {
-    panX: finiteOr(sampleTrack(c.tracks.panX, frame, c.base.panX), 0),
-    panY: finiteOr(sampleTrack(c.tracks.panY, frame, c.base.panY), 0),
-    zoom: clampZoom(sampleTrack(c.tracks.zoom, frame, c.base.zoom)),
-    rotation: finiteOr(sampleTrack(c.tracks.rotation, frame, c.base.rotation), 0),
+    panX: finiteOr(sampleTrack(c.tracks.panX, frame, c.base.panX, fps), 0),
+    panY: finiteOr(sampleTrack(c.tracks.panY, frame, c.base.panY, fps), 0),
+    zoom: clampZoom(sampleTrack(c.tracks.zoom, frame, c.base.zoom, fps)),
+    rotation: finiteOr(sampleTrack(c.tracks.rotation, frame, c.base.rotation, fps), 0),
   };
 }
 

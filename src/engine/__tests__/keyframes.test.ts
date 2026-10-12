@@ -27,6 +27,21 @@ describe('applyEasing', () => {
     const max = Math.max(...Array.from({ length: 50 }, (_, i) => applyEasing('backOut', i / 49)));
     expect(max).toBeGreaterThan(1);
   });
+
+  it('spring is deterministic, normalized at both ends, and keeps Morph’s small overshoot', () => {
+    const options = { w: 15, z: 0.84 };
+    const samples = Array.from({ length: 121 }, (_, i) => applyEasing('spring', i / 120, options, 0.6));
+    expect(samples[0]).toBeCloseTo(0);
+    expect(samples.at(-1)).toBeCloseTo(1);
+    expect(Math.max(...samples)).toBeGreaterThan(1);
+    expect(Math.max(...samples)).toBeLessThanOrEqual(1.03);
+    expect(applyEasing('spring', 0.375, options, 0.6)).toBe(applyEasing('spring', 0.375, options, 0.6));
+  });
+
+  it('critically damped Camera spring is monotonic', () => {
+    const samples = Array.from({ length: 121 }, (_, i) => applyEasing('spring', i / 120, { w: 7.5, z: 1 }, 0.6));
+    samples.slice(1).forEach((value, index) => expect(value).toBeGreaterThanOrEqual(samples[index]));
+  });
 });
 
 describe('sampleTrack', () => {
@@ -50,6 +65,15 @@ describe('sampleTrack', () => {
     expect(sampleTrack(track, 15, 0)).toBe(50);
     expect(sampleTrack(track, 25, 0)).toBe(100); // hold
     expect(sampleTrack(track, 30, 0)).toBe(50);
+  });
+
+  it('uses project fps to evaluate spring time and lands exactly on the next key', () => {
+    const springTrack: Track<number> = [
+      { frame: 1, value: 0, easing: 'spring', springParams: { w: 15, z: 0.84 } },
+      { frame: 19, value: 100 },
+    ];
+    expect(sampleTrack(springTrack, 19, -1, 30)).toBe(100);
+    expect(sampleTrack(springTrack, 10, -1, 30)).toBeCloseTo(100 * applyEasing('spring', 0.5, { w: 15, z: 0.84 }, 0.6));
   });
 });
 

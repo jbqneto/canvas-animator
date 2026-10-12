@@ -26,10 +26,13 @@ import {
   EASING_NAMES,
   EasingName,
   DEFAULT_EASING,
+  DEFAULT_SPRING_PARAMS,
   hasKeyframeAt,
   removeKeyframe,
   setKeyframe,
   setKeyframeEasing,
+  setKeyframeSpringParams,
+  SPRING_PRESETS,
   Track,
 } from '../engine/keyframes';
 import { applyEntrance, applyExit, MOTION_PRESETS, MotionPreset } from '../engine/motionPresets';
@@ -119,6 +122,26 @@ export const MotionInspector = <T extends MotionObject>({
       ...obj.follow,
       progress: setKeyframeEasing(obj.follow.progress, currentFrame, easing),
     };
+    onChange({ ...obj, tracks, follow }, t('actor.history.easing', { frame: currentFrame }));
+  };
+
+  const springPresetHere = (() => {
+    const key = [...(Object.values(obj.tracks) as (Track<unknown> | undefined)[]), obj.follow?.progress]
+      .flatMap((tr) => tr ?? [])
+      .find((candidate) => candidate.frame === currentFrame);
+    const params = key?.springParams ?? DEFAULT_SPRING_PARAMS;
+    return (Object.keys(SPRING_PRESETS) as (keyof typeof SPRING_PRESETS)[]).find(
+      (name) => SPRING_PRESETS[name].w === params.w && SPRING_PRESETS[name].z === params.z
+    ) ?? 'morph';
+  })();
+
+  const setSpringPresetHere = (preset: keyof typeof SPRING_PRESETS) => {
+    const springParams = SPRING_PRESETS[preset];
+    const tracks = { ...obj.tracks };
+    (Object.keys(tracks) as ActorProperty[]).forEach((p) => {
+      (tracks as any)[p] = setKeyframeSpringParams(tracks[p] as Track<any>, currentFrame, springParams);
+    });
+    const follow = obj.follow && { ...obj.follow, progress: setKeyframeSpringParams(obj.follow.progress, currentFrame, springParams) };
     onChange({ ...obj, tracks, follow }, t('actor.history.easing', { frame: currentFrame }));
   };
 
@@ -292,6 +315,16 @@ export const MotionInspector = <T extends MotionObject>({
               </option>
             ))}
           </select>
+          {easingHere === 'spring' && (
+            <label className="space-y-0.5 block text-[10px] text-neutral-400">
+              <span>{t('easing.springPreset')}</span>
+              <select value={springPresetHere} onChange={(e) => setSpringPresetHere(e.target.value as keyof typeof SPRING_PRESETS)} className={motionInputClass}>
+                {(Object.keys(SPRING_PRESETS) as (keyof typeof SPRING_PRESETS)[]).map((preset) => (
+                  <option key={preset} value={preset}>{t(`easing.springPreset.${preset}`)}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
 
@@ -311,7 +344,7 @@ export const MotionInspector = <T extends MotionObject>({
                 if (!preset) return;
                 const apply = which === 'entrance' ? applyEntrance : applyExit;
                 onChange(
-                  apply(obj, preset, { frames: Math.max(1, Math.round(presetSeconds * fps)) }),
+                  apply(obj, preset, { frames: Math.max(1, Math.round(presetSeconds * fps)), fps }),
                   t(which === 'entrance' ? 'motionPreset.history.entrance' : 'motionPreset.history.exit', {
                     preset: t(`motionPreset.${preset}`),
                   })
