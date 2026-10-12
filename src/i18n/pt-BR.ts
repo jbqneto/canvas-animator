@@ -233,6 +233,8 @@ export const ptBR = {
   'path.width': 'Espessura',
   'path.reveal.full': 'Linha inteira desde o início',
   'path.reveal.follow': 'Aparece conforme o objeto percorre',
+  'path.reveal.draw': 'Desenha-se',
+  'path.drawFrames': 'Quadros para desenhar',
   'path.shape': 'Forma',
   'path.shapeInfo': '{points} pontos · {length}px. Arraste os pontos no palco para ajustar; arraste a linha para mover tudo.',
   'path.smooth': 'Curva suave entre os pontos',
@@ -246,6 +248,7 @@ export const ptBR = {
   'path.history.color': 'Cor do caminho',
   'path.history.width': 'Espessura do caminho',
   'path.history.reveal': 'Revelar caminho',
+  'path.history.drawFrames': 'Quadros de desenho do caminho',
   'path.history.smooth': 'Curvatura do caminho',
   'path.history.closed': 'Fechar caminho',
   'path.history.start': 'Início do caminho',
@@ -791,6 +794,8 @@ export const ptBR = {
   'shape.stroke': 'Contorno',
   'shape.line': 'Cor da linha',
   'shape.strokeWidth': 'Espessura',
+  'shape.draw': 'Desenhar contorno (quadros, 0 = desligado)',
+  'shape.draw.hint': 'Precisa de contorno: defina uma espessura maior que 0 antes',
   'shape.radius': 'Cantos',
   'shape.width': 'Largura',
   'shape.height': 'Altura',
@@ -877,6 +882,15 @@ export const ptBR = {
   // Stage scale handles
   'stage.history.scale': 'Escalar no frame {frame}',
 
+  // Masks
+  'mask.title': "Máscara",
+  'mask.none': "Nenhuma",
+  'mask.mode.inside': "Dentro da forma",
+  'mask.mode.outside': "Fora da forma",
+  'mask.history': "Máscara",
+  'mask.use': "Usar como máscara",
+  'mask.use.hint': "Uma forma usada como máscara some no render final e recorta outros objetos. Linhas não servem de máscara.",
+  'mask.missing': "Ator ausente (limpe)",
   // Object effects
   'parallax.label': 'Câmera (parallax)',
   'parallax.hint': '1 acompanha a câmera da cena; 0 fixa o objeto na tela (logo, HUD); abaixo de 1 parece distante, acima de 1 parece perto.',

@@ -440,7 +440,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       canvasHeight,
       currentFrame,
       { frames, charts, texts, images, actors, sticks, paths, videoBg, videoElement, layers, fps },
-      { showGrid: true, camera: false }
+      { showGrid: true, camera: false, showMasks: true }
     );
 
     // Optional Onion Skin (previous frame faint silhouette) ONLY IF explicitly turned ON

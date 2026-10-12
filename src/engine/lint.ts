@@ -1,10 +1,11 @@
 import type { ActorOverlay, ChartOverlay, TextOverlay } from '../types';
 import { sampleActor } from './actor';
+import { isUsableMaskShape, isValidMaskMode } from './mask';
 import { contrastRatio } from './color';
 import { sampleEffects } from './effects';
 import { textBox } from './overlays';
 
-export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text' | 'dead-air' | 'uniform-entrance';
+export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text' | 'dead-air' | 'uniform-entrance' | 'mask-missing' | 'mask-span';
 
 export interface LintIssue {
   rule: LintRule;
@@ -90,7 +91,10 @@ export function lintScene(input: LintInput, options: LintOptions = {}): LintIssu
       issues.push({ rule: 'low-contrast', severity: 'warning', objectId: txt.id, message: `Contrast ${ratio.toFixed(1)}:1 is below ${minContrast}:1.` });
     }
   }
-  issues.push(...deadAir(input, timed, maxDeadAirSec), ...uniformEntrance(texts, uniformEntranceMin));
+  issues.push(...maskIssues(timed, input.content.actors ?? []));
+  // Mask-only actors are never drawn, so they do not fill the screen
+  const visibleTimed = timed.filter((o) => !('maskOnly' in o && o.maskOnly));
+  issues.push(...deadAir(input, visibleTimed, maxDeadAirSec), ...uniformEntrance(texts, uniformEntranceMin));
   return issues;
 }
 
@@ -125,6 +129,24 @@ function uniformEntrance(texts: TextOverlay[], min: number): LintIssue[] {
   for (const [effect, n] of counts) {
     if (n >= min && n === texts.length) {
       issues.push({ rule: 'uniform-entrance', severity: 'warning', message: `All ${n} texts use the "${effect}" entrance; vary the entrance, easing or emphasis per object.` });
+    }
+  }
+  return issues;
+}
+
+/** Masks that cannot cut (missing or unusable shape) and masks that stop before the object does. */
+function maskIssues(timed: (TextOverlay | ActorOverlay | ChartOverlay)[], actors: ActorOverlay[]): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const obj of timed) {
+    const ref = obj.mask;
+    if (!ref) continue;
+    const shape = actors.find((a) => a.id === ref.actorId);
+    if (ref.actorId === obj.id || !isUsableMaskShape(shape) || !isValidMaskMode(ref.mode)) {
+      issues.push({ rule: 'mask-missing', severity: 'error', objectId: obj.id, message: `Mask "${ref.actorId}" is missing, is not a rectangle, ellipse or arrow shape actor, or has an invalid mode; the object is drawn whole.` });
+      continue;
+    }
+    if (shape.startFrame > obj.startFrame || shape.startFrame + shape.durationFrames < obj.startFrame + obj.durationFrames) {
+      issues.push({ rule: 'mask-span', severity: 'warning', objectId: obj.id, message: `Mask "${ref.actorId}" (frames ${shape.startFrame}–${shape.startFrame + shape.durationFrames}) does not cover the whole span of the object (${obj.startFrame}–${obj.startFrame + obj.durationFrames}); outside it the object is drawn whole.` });
     }
   }
   return issues;

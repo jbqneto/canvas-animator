@@ -67,18 +67,19 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
 2. ~~Camadas presas à câmera (parallax)~~ — feito (ver contrato "Parallax da câmera")
 3. ~~Legenda palavra por palavra (karaokê), usando o tempo por palavra do VTT quando existir~~ — feito (ver contrato "Karaokê")
 4. ~~Repetir/ciclo e tremida por propriedade~~ — feito (ver contrato "Repetir e tremida")
-5. Máscara; revelar traços e contornos (quadro branco)
+5. ~~Máscara; revelar traços e contornos (quadro branco)~~ — feito (ver contrato "Máscara e revelar traços")
 
 ## Contratos / decisões (atualizar a cada tarefa)
 
-- Parallax da câmera (`Animated.parallax`, `engine/camera.ts`): fator por objeto (texto, gráfico, ator, boneco),
-  padrão 1. `scaleCamera(câmera, f)` escala pan e rotação por `f` e move o zoom de 1 até o da câmera pela mesma
-  fração (`1 + (zoom − 1)·f`, limitado). 0 = fixo na tela (logo, HUD, legenda), < 1 = camada distante, > 1 =
-  primeiro plano. `parallaxOf` repara valores ausentes ou inválidos (1) e limita a 0..3. O renderer só passa a
-  aplicar a câmera objeto a objeto quando algum desenhável tem fator ≠ 1; sem isso o caminho é o de antes
-  (um único save/restore). Caminhos de movimento e imagens legadas seguem a câmera inteira. O palco do editor
-  continua sem câmera (nada muda ao editar). Efeitos recebem a câmera do objeto, pois a camada usa a matriz
-  atual. Via MCP: `replace_content` (campo `parallax`); `describe_scene` lista `parallax` quando ≠ 1.
+- Máscara e revelar traços (`Animated.mask`, `ActorOverlay.maskOnly`, `engine/mask.ts`): qualquer texto, ator, gráfico ou boneco
+  aceita `mask: { actorId, mode: 'inside' | 'outside' }`, apontando para um ator `shape` (retângulo, elipse ou seta; `line`
+  não tem área). `maskOnly: true` no ator da máscara o tira do desenho (só recorta). Fora do intervalo do ator-máscara
+  (`startFrame` a `startFrame + durationFrames`) ou com referência inválida, o objeto aparece inteiro, sem recorte. O
+  recorte também corta sombra e brilho; `showMasks` só mostra as máscaras no editor (nunca na exportação). Revelar:
+  `shape.draw: { frames }` traça o contorno e depois entra o preenchimento; `style.reveal: 'draw'` (com `drawFrames`,
+  padrão 24) faz o caminho se traçar sozinho. Lint: `mask-missing` (erro) e `mask-span` (aviso); `describe_scene` lista
+  `maskOnly` e `mask`. Fora do escopo: feather (borda suave), máscara de imagem/luminância, várias máscaras por objeto
+  e os traços do lápis (`drawings`).
 
 - Efeitos sonoros gerados (`audio/synth.ts`): `synthSfx(kind)` faz DSP puro e determinístico (ruído com semente,
   44,1 kHz mono) de `whoosh`, `impact`, `riser`, `pop` e `tick`; `encodeWav` escreve PCM 16 bits e `sfxClip`

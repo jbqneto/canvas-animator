@@ -9,6 +9,7 @@ import type { Animated, MotionPath } from '../types';
 import { ActorFollowPanel } from './ActorFollowPanel';
 import { EffectsSection } from './EffectsSection';
 import { ModifiersSection } from './ModifiersSection';
+import { MaskSection } from './MaskSection';
 import { ParallaxField } from './ParallaxField';
 import { MessageKey, useI18n } from '../i18n';
 import {
@@ -44,6 +45,8 @@ interface MotionInspectorProps<T extends MotionObject> {
   paths: MotionPath[];
   onAttachToPath: (id: string, pathId: string) => void;
   onSelectPath: (pathId: string) => void;
+  /** Actors that can be picked as a mask (flagged maskOnly). */
+  maskActors?: { id: string; name: string }[];
 }
 
 const PROPS: { id: ActorProperty; labelKey: MessageKey }[] = [
@@ -65,6 +68,7 @@ export const MotionInspector = <T extends MotionObject>({
   paths,
   onAttachToPath,
   onSelectPath,
+  maskActors = [],
 }: MotionInspectorProps<T>) => {
   const { t } = useI18n();
   const following = !!followedPath(obj, paths);
@@ -267,6 +271,8 @@ export const MotionInspector = <T extends MotionObject>({
       <ParallaxField obj={obj} onChange={onChange} />
 
       <ModifiersSection obj={obj} onChange={onChange} />
+
+      <MaskSection obj={obj} maskActors={maskActors} onChange={onChange} />
 
       <EffectsSection obj={obj} currentFrame={currentFrame} onChange={onChange} />
 

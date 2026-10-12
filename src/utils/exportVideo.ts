@@ -30,6 +30,8 @@ import { fontCss, loadSceneFonts } from './fonts';
 import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
+import { drawProgress, fillAlpha, shapeOutlineLength, validDrawFrames } from '../engine/reveal';
+import { isUsableMaskShape, maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -64,6 +66,8 @@ export interface RenderOptions {
   camera?: boolean;
   /** Off-screen layer factory for objects with effects; injected in tests */
   createLayer?: LayerFactory;
+  /** Editor only: draw mask-only actors as dashed outlines. */
+  showMasks?: boolean;
 }
 
 /**
@@ -176,6 +180,30 @@ export function renderCompositeFrame(
   const BACK = Number.MAX_SAFE_INTEGER;
   const FRONT = -1;
 
+  // Masks: the clip is set in the current (camera) space, so mask and target move together. Effects
+  // are composed onto `ctx` under the clip, so it also cuts their shadow and glow.
+  const BIG = 1e6;
+  const clipToMask = (mask: ResolvedMask) => {
+    ctx.beginPath();
+    if (mask.mode === 'outside') ctx.rect(-BIG, -BIG, 2 * BIG, 2 * BIG);
+    maskPath(mask.shape, mask.state).forEach((contour) => {
+      contour.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+    });
+    ctx.clip(mask.mode === 'outside' ? 'evenodd' : 'nonzero');
+  };
+  /** Wraps a drawable so it is cut by its mask; the cut is resolved once per frame. */
+  const masked = (target: Animated & { id?: string }, draw: () => void) => {
+    const mask = target.mask ? resolveMask(target, actors, currentFrame, paths) : null;
+    if (!mask) return draw;
+    return () => {
+      ctx.save();
+      clipToMask(mask);
+      draw();
+      ctx.restore();
+    };
+  };
+
   images.forEach((img) => {
     if (currentFrame < img.startFrame || currentFrame > img.startFrame + img.durationFrames) return;
     add(img.id, 'image', BACK, () => drawImageOverlay(ctx, img, currentFrame, width, height, effectRate));
@@ -187,11 +215,17 @@ export function renderCompositeFrame(
   });
   actors.forEach((actor) => {
     const state = sampleActor(actor, currentFrame, paths);
-    if (!state.visible || state.opacity <= 0) return;
-    add(actor.id, 'actor', FRONT, () => {
+    if (!state.visible) return;
+    // A mask-only actor is never painted; the editor shows its outline even when it is transparent
+    if (actor.maskOnly) {
+      if (options.showMasks) add(actor.id, 'actor', FRONT, () => drawMaskGhost(ctx, actor, state));
+      return;
+    }
+    if (state.opacity <= 0) return;
+    add(actor.id, 'actor', FRONT, masked(actor, () => {
       drawActorTrail(ctx, actor, state, currentFrame, paths);
       const fx = sampleEffects(actor, currentFrame);
-      if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state);
+      if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state, currentFrame);
       // opacity is applied once, when composing the layer
       drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }), options.createLayer);
     }, parallaxOf(actor));
@@ -201,7 +235,7 @@ export function renderCompositeFrame(
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
   });
   // Charts and texts: the same keyframed transform as actors, then their own intro inside it
-  const withTransform = (obj: Animated, draw: (c: CanvasRenderingContext2D) => void) => {
+  const withTransform = (obj: Animated & { id?: string }, draw: (c: CanvasRenderingContext2D) => void) => {
     const state = sampleActor(obj, currentFrame, paths);
     if (!state.visible || state.opacity <= 0) return null;
     const fx = sampleEffects(obj, currentFrame);
@@ -210,7 +244,7 @@ export function renderCompositeFrame(
       c.rotate((state.rotation * Math.PI) / 180);
       c.scale(state.scale, state.scale);
     };
-    return () => {
+    return masked(obj, () => {
       if (hasActiveEffects(fx)) {
         drawWithEffects(ctx, width, height, fx, state.opacity, (c) => { c.save(); place(c); draw(c); c.restore(); }, options.createLayer);
         return;
@@ -220,7 +254,7 @@ export function renderCompositeFrame(
       ctx.globalAlpha *= state.opacity;
       draw(ctx);
       ctx.restore();
-    };
+    });
   };
   // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
   // Without a layer of their own they follow the drawings layer, as before.
@@ -324,7 +358,7 @@ function drawActorTrail(
   }
 }
 
-function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>) {
+function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>, frame: number) {
   const img = actor.kind === 'shape' ? null : getCachedImage(actor.src);
   if (actor.kind !== 'shape' && !isImageReady(img!)) return;
   ctx.save();
@@ -332,21 +366,54 @@ function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
   ctx.translate(state.x, state.y);
   ctx.rotate((state.rotation * Math.PI) / 180);
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
-  if (actor.kind === 'shape' && actor.shape) drawShape(ctx, actor.shape, actor.width, actor.height);
-  else ctx.drawImage(img!, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
+  if (actor.kind === 'shape' && actor.shape) {
+    const frames = actor.shape.strokeWidth > 0 || actor.shape.type === 'line' ? validDrawFrames(actor.shape.draw) : 0;
+    const reveal = frames
+      ? { progress: drawProgress(actor.startFrame, frames, frame), fill: fillAlpha(actor.startFrame, frames, frame) }
+      : undefined;
+    drawShape(ctx, actor.shape, actor.width, actor.height, reveal);
+  } else ctx.drawImage(img!, -actor.width / 2, -actor.height / 2, actor.width, actor.height);
+  ctx.restore();
+}
+
+/** Editor outline of a mask-only actor: dashed, never filled. Skipped when its geometry is not finite. */
+function drawMaskGhost(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state: ReturnType<typeof sampleActor>) {
+  if (!isUsableMaskShape(actor)) return;
+  const contours = maskPath(actor, state);
+  if (!contours.every((c) => c.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)))) return;
+  ctx.save();
+  ctx.strokeStyle = '#e879f9';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  contours.forEach((contour) => {
+    contour.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+  });
+  ctx.stroke();
   ctx.restore();
 }
 
 /** A shape actor's vector shape, centered on the current origin. */
-function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, h: number) {
+function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, h: number, reveal?: { progress: number; fill: number }) {
+  const tracing = !!reveal && reveal.progress < 1;
+  if (tracing && reveal!.progress <= 0 && style.type === 'line') return;
+  /** Dash that exposes `progress` of an outline of `length` px (offset L = hidden, 0 = shown). */
+  const traceDash = (length: number) => {
+    const L = length * 1.02;
+    ctx.setLineDash([L, L]);
+    ctx.lineDashOffset = L * (1 - reveal!.progress);
+  };
   ctx.beginPath();
   if (style.type === 'line') {
     ctx.moveTo(-w / 2, 0);
     ctx.lineTo(w / 2, 0);
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = Math.max(1, style.strokeWidth);
-    ctx.lineCap = 'round';
+    ctx.lineCap = tracing ? 'butt' : 'round';
+    if (tracing) traceDash(w);
     ctx.stroke();
+    if (tracing) ctx.setLineDash([]);
     return;
   }
   if (style.type === 'ellipse') {
@@ -357,13 +424,21 @@ function drawShape(ctx: CanvasRenderingContext2D, style: ShapeStyle, w: number, 
   } else {
     ctx.roundRect(-w / 2, -h / 2, w, h, fittedRadius(style.radius, w, h));
   }
-  ctx.fillStyle = style.fill;
-  ctx.fill();
-  if (style.strokeWidth > 0) {
+  const fillOpacity = reveal ? reveal.fill : 1;
+  if (fillOpacity > 0) {
+    const alpha = ctx.globalAlpha;
+    if (fillOpacity < 1) ctx.globalAlpha = alpha * fillOpacity;
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+    if (fillOpacity < 1) ctx.globalAlpha = alpha;
+  }
+  if (style.strokeWidth > 0 && !(tracing && reveal!.progress <= 0)) {
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = style.strokeWidth;
     ctx.lineJoin = 'round';
+    if (tracing) traceDash(shapeOutlineLength(style, w, h));
     ctx.stroke();
+    if (tracing) ctx.setLineDash([]);
   }
 }
 
@@ -382,6 +457,8 @@ function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, followe
     const onPath = followers.filter((a) => a.follow?.pathId === path.id);
     const progress = Math.max(0, ...onPath.map((a) => sampleTrack(a.follow!.progress, frame, 0)));
     points = polylineUpTo(sampler, progress);
+  } else if (path.style.reveal === 'draw') {
+    points = polylineUpTo(sampler, drawProgress(path.startFrame, path.style.drawFrames ?? 24, frame));
   }
   if (points.length < 2) return;
   ctx.save();

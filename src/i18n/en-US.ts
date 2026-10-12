@@ -232,6 +232,8 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'path.width': 'Width',
   'path.reveal.full': 'Whole line from the start',
   'path.reveal.follow': 'Appears as the object travels',
+  'path.reveal.draw': 'Draws itself',
+  'path.drawFrames': 'Frames to draw',
   'path.shape': 'Shape',
   'path.shapeInfo': '{points} points · {length}px. Drag the points on the stage to adjust; drag the line to move it all.',
   'path.smooth': 'Smooth curve through the points',
@@ -245,6 +247,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'path.history.color': 'Path color',
   'path.history.width': 'Path width',
   'path.history.reveal': 'Path reveal',
+  'path.history.drawFrames': 'Path draw frames',
   'path.history.smooth': 'Path curvature',
   'path.history.closed': 'Close path',
   'path.history.start': 'Path start',
@@ -790,6 +793,8 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   'shape.stroke': 'Outline',
   'shape.line': 'Line color',
   'shape.strokeWidth': 'Thickness',
+  'shape.draw': 'Draw outline (frames, 0 = off)',
+  'shape.draw.hint': 'Needs an outline: set a thickness above 0 first',
   'shape.radius': 'Corners',
   'shape.width': 'Width',
   'shape.height': 'Height',
@@ -876,6 +881,15 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   // Stage scale handles
   'stage.history.scale': 'Scale at frame {frame}',
 
+  // Masks
+  'mask.title': "Mask",
+  'mask.none': "None",
+  'mask.mode.inside': "Inside the shape",
+  'mask.mode.outside': "Outside the shape",
+  'mask.history': "Mask",
+  'mask.use': "Use as mask",
+  'mask.use.hint': "A shape used as a mask is hidden on the final render and cuts other objects. Lines cannot be masks.",
+  'mask.missing': "Missing actor (clear it)",
   // Object effects
   'parallax.label': 'Camera (parallax)',
   'parallax.hint': '1 follows the scene camera; 0 pins the object to the screen (logo, HUD); below 1 looks distant, above 1 looks close.',

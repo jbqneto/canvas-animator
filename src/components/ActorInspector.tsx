@@ -16,6 +16,7 @@ interface ActorInspectorProps {
   paths: MotionPath[];
   onAttachToPath: (actorId: string, pathId: string) => void;
   onSelectPath: (pathId: string) => void;
+  maskActors?: { id: string; name: string }[];
 }
 
 export const ActorInspector: React.FC<ActorInspectorProps> = ({
@@ -29,6 +30,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
   paths,
   onAttachToPath,
   onSelectPath,
+  maskActors = [],
 }) => {
   const { t } = useI18n();
   const endFrame = actor.startFrame + actor.durationFrames;
@@ -59,7 +61,13 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
       {actor.kind === 'shape' && actor.shape && (
         <ShapePanel
           style={actor.shape}
-          onChange={(shape, label) => onChange({ ...actor, shape }, t('shape.history.change', { label }))}
+          onChange={(shape, label) => {
+            // A line has no area, so it cannot be a mask: drop the flag when the type becomes line
+            if (shape.type === 'line' && actor.maskOnly) {
+              const { maskOnly: _drop, ...rest } = actor;
+              onChange({ ...rest, shape }, t('shape.history.change', { label }));
+            } else onChange({ ...actor, shape }, t('shape.history.change', { label }));
+          }}
         />
       )}
 
@@ -78,7 +86,24 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
         paths={paths}
         onAttachToPath={onAttachToPath}
         onSelectPath={onSelectPath}
+        maskActors={maskActors}
       />
+
+      {actor.kind === 'shape' && actor.shape && actor.shape.type !== 'line' && (
+        <label className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer" title={t('mask.use.hint')}>
+          <input
+            data-mask-only
+            type="checkbox"
+            checked={!!actor.maskOnly}
+            onChange={(e) => {
+              const { maskOnly: _drop, ...rest } = actor;
+              onChange(e.target.checked ? { ...rest, maskOnly: true } : rest, t('mask.use'));
+            }}
+            className="accent-orange-500"
+          />
+          {t('mask.use')}
+        </label>
+      )}
 
       <label className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer">
         <input
@@ -229,6 +254,17 @@ const ShapePanel: React.FC<{ style: ShapeStyle; onChange: (style: ShapeStyle, la
   const isLine = style.type === 'line';
   const set = <K extends keyof ShapeStyle>(key: K, value: ShapeStyle[K], label: string) =>
     onChange({ ...style, [key]: value }, label);
+  /** An outline that traces needs an outline: lines always have one. */
+  const drawDisabled = !isLine && style.strokeWidth <= 0;
+  const setDrawFrames = (raw: number) => {
+    const frames = Math.round(raw);
+    if (Number.isFinite(frames) && frames > 0) {
+      onChange({ ...style, draw: { frames } }, t('shape.draw'));
+    } else {
+      const { draw: _draw, ...rest } = style;
+      onChange(rest, t('shape.draw'));
+    }
+  };
   return (
     <div className="space-y-2" data-shape-panel>
       <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">{t('shape.appearance')}</span>
@@ -280,6 +316,20 @@ const ShapePanel: React.FC<{ style: ShapeStyle; onChange: (style: ShapeStyle, la
         />
         px
       </div>
+      <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+        <span className="flex-1 min-w-0">{t('shape.draw')}</span>
+        <input
+          data-shape-field="drawFrames"
+          type="number"
+          min={0}
+          max={600}
+          disabled={drawDisabled}
+          title={drawDisabled ? t('shape.draw.hint') : t('shape.draw')}
+          value={style.draw?.frames ?? 0}
+          onChange={(e) => setDrawFrames(Number(e.target.value))}
+          className={`${inputClass} w-16 disabled:opacity-40`}
+        />
+      </label>
       {style.type === 'rect' && (
         <label className="flex items-center gap-2 text-[10px] text-neutral-400">
           <span className="w-20 shrink-0">{t('shape.radius')}</span>
