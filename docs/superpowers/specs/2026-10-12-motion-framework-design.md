@@ -66,7 +66,7 @@ Regra central: **o SDK só produz objetos que a UI sabe editar.** Nada de SVG op
 
 ### F1 — Qualidade de movimento e export (pequeno, alto impacto)
 
-1. **Easing `spring`**: `Keyframe.easing = 'spring'` + `springParams?: { w, z }` (padrão `MORPH`). `applyEasing` usa a
+1. [x] **Easing `spring`**: `Keyframe.easing = 'spring'` + `springParams?: { w, z }` (padrão `MORPH`). `applyEasing` usa a
    resposta ao degrau fechada (normalizada para chegar em 1 no próximo key: amostrar `S(tau·k)` e garantir `t=1` no fim).
    Presets nomeados no inspetor: Morph, Rápido, Lento, Suave, Câmera.
 2. **Preset `blurSwap`** em `motionPresets.ts` com os números da `vis()`.

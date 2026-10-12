@@ -43,12 +43,12 @@ const clampProp = (prop: EffectProp, v: number) => {
 };
 
 /** Effect values at `frame` (keys win over the static value), clamped to their valid ranges. */
-export function sampleEffects(obj: Animated, frame: number): EffectParams {
+export function sampleEffects(obj: Animated, frame: number, fps = 30): EffectParams {
   const stat = obj.effects ?? DEFAULT_EFFECTS;
   const out = { ...DEFAULT_EFFECTS };
   (Object.keys(EFFECT_PROPS) as EffectProp[]).forEach((prop) => {
     const fallback = typeof stat[prop] === 'number' && Number.isFinite(stat[prop]) ? stat[prop] : DEFAULT_EFFECTS[prop];
-    const v = sampleTrack(obj.tracks[prop], frame, fallback);
+    const v = sampleTrack(obj.tracks[prop], frame, fallback, fps);
     out[prop] = clampProp(prop, Number.isFinite(v) ? v : DEFAULT_EFFECTS[prop]);
   });
   (['shadowColor', 'glowColor', 'tintColor'] as const).forEach((key) => {

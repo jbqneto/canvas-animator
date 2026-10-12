@@ -147,7 +147,14 @@ export const ptBR = {
   'easing.backOut': 'Passa e volta',
   'easing.elasticOut': 'Elástico',
   'easing.bounceOut': 'Quicando',
+  'easing.spring': 'Mola',
   'easing.hold': 'Segurar (salto)',
+  'easing.springPreset': 'Predefinição da mola',
+  'easing.springPreset.morph': 'Morph',
+  'easing.springPreset.fast': 'Rápido',
+  'easing.springPreset.slow': 'Lento',
+  'easing.springPreset.soft': 'Suave',
+  'easing.springPreset.camera': 'Câmera',
 
   // Stick figure pose animation
 

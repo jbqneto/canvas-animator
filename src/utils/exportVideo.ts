@@ -100,6 +100,7 @@ export function renderCompositeFrame(
   options: RenderOptions = {}
 ) {
   const { charts, texts, images, actors, paths, videoBg, videoElement, layers } = scene;
+  const fps = scene.fps ?? EFFECT_FPS;
   const frameData = scene.frames[currentFrame];
   const effectRate = EFFECT_FPS / (scene.fps ?? EFFECT_FPS);
   ctx.save();
@@ -211,10 +212,10 @@ export function renderCompositeFrame(
   paths.forEach((path) => {
     if (!path.style.visible || path.points.length < 2) return;
     if (currentFrame < path.startFrame || currentFrame > path.startFrame + path.durationFrames) return;
-    add(path.id, 'path', FRONT, () => drawMotionPath(ctx, path, [...actors, ...charts, ...texts], currentFrame));
+    add(path.id, 'path', FRONT, () => drawMotionPath(ctx, path, [...actors, ...charts, ...texts], currentFrame, fps));
   });
   actors.forEach((actor) => {
-    const state = sampleActor(actor, currentFrame, paths);
+    const state = sampleActor(actor, currentFrame, paths, fps);
     if (!state.visible) return;
     // A mask-only actor is never painted; the editor shows its outline even when it is transparent
     if (actor.maskOnly) {
@@ -224,7 +225,7 @@ export function renderCompositeFrame(
     if (state.opacity <= 0) return;
     add(actor.id, 'actor', FRONT, masked(actor, () => {
       drawActorTrail(ctx, actor, state, currentFrame, paths);
-      const fx = sampleEffects(actor, currentFrame);
+      const fx = sampleEffects(actor, currentFrame, fps);
       if (!hasActiveEffects(fx)) return drawActorBody(ctx, actor, state, currentFrame);
       // opacity is applied once, when composing the layer
       drawWithEffects(ctx, width, height, fx, state.opacity, (c) => drawActorBody(c, actor, { ...state, opacity: 1 }, currentFrame), options.createLayer);
@@ -236,9 +237,9 @@ export function renderCompositeFrame(
   });
   // Charts and texts: the same keyframed transform as actors, then their own intro inside it
   const withTransform = (obj: Animated & { id?: string }, draw: (c: CanvasRenderingContext2D) => void) => {
-    const state = sampleActor(obj, currentFrame, paths);
+    const state = sampleActor(obj, currentFrame, paths, fps);
     if (!state.visible || state.opacity <= 0) return null;
-    const fx = sampleEffects(obj, currentFrame);
+    const fx = sampleEffects(obj, currentFrame, fps);
     const place = (c: CanvasRenderingContext2D) => {
       c.translate(state.x, state.y);
       c.rotate((state.rotation * Math.PI) / 180);
@@ -259,7 +260,7 @@ export function renderCompositeFrame(
   // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
   // Without a layer of their own they follow the drawings layer, as before.
   scene.sticks?.forEach((stick) => {
-    const draw = withTransform(stick, (c) => drawStickFigure(c, localFigure(stick, samplePose(stick, currentFrame))));
+    const draw = withTransform(stick, (c) => drawStickFigure(c, localFigure(stick, samplePose(stick, currentFrame, fps))));
     if (draw) add(stick.id, 'drawing', FRONT, draw, parallaxOf(stick));
   });
   charts.forEach((chart) => {
@@ -273,7 +274,7 @@ export function renderCompositeFrame(
     if (draw) add(txt.id, 'text', FRONT, draw, parallaxOf(txt));
   });
 
-  const camera = options.camera === false ? null : sampleCamera(scene.camera, currentFrame);
+  const camera = options.camera === false ? null : sampleCamera(scene.camera, currentFrame, fps);
   const moved = !!camera && !isIdentityCamera(camera);
   const ordered = drawables.sort((a, b) => b.depth - a.depth || a.seq - b.seq);
   if (moved && ordered.some((d) => d.parallax !== 1)) {
@@ -449,13 +450,13 @@ export function strokeDash(stroke: MotionPath['style']['stroke'], width: number)
   return [];
 }
 
-function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, followers: Animated[], frame: number) {
+function drawMotionPath(ctx: CanvasRenderingContext2D, path: MotionPath, followers: Animated[], frame: number, fps = 30) {
   const sampler = samplePath(path);
   let points: Vec2[] = sampler.samples;
   if (path.style.reveal === 'follow') {
     // Only the part already travelled by the furthest object following this path
     const onPath = followers.filter((a) => a.follow?.pathId === path.id);
-    const progress = Math.max(0, ...onPath.map((a) => sampleTrack(a.follow!.progress, frame, 0)));
+    const progress = Math.max(0, ...onPath.map((a) => sampleTrack(a.follow!.progress, frame, 0, fps)));
     points = polylineUpTo(sampler, progress);
   } else if (path.style.reveal === 'draw') {
     points = polylineUpTo(sampler, drawProgress(path.startFrame, path.style.drawFrames ?? 24, frame));

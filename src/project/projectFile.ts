@@ -110,6 +110,9 @@ function parseCamera(value: unknown): SceneCamera | undefined {
         frame: Math.max(1, Math.round(k.frame)),
         value: k.value as number,
         ...(EASING_NAMES.includes(k.easing as EasingName) ? { easing: k.easing as EasingName } : {}),
+        ...(isRecord(k.springParams) && Number.isFinite(k.springParams.w) && Number.isFinite(k.springParams.z)
+          ? { springParams: { w: k.springParams.w as number, z: k.springParams.z as number } }
+          : {}),
       }))
       .sort((a, b) => a.frame - b.frame);
     return keys.length ? keys : undefined;

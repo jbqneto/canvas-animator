@@ -149,7 +149,14 @@ export const enUS: Record<keyof typeof ptBR | EnglishOnlyKey, string> = {
   'easing.backOut': 'Overshoot and settle',
   'easing.elasticOut': 'Elastic',
   'easing.bounceOut': 'Bounce',
+  'easing.spring': 'Spring',
   'easing.hold': 'Hold (jump cut)',
+  'easing.springPreset': 'Spring preset',
+  'easing.springPreset.morph': 'Morph',
+  'easing.springPreset.fast': 'Fast',
+  'easing.springPreset.slow': 'Slow',
+  'easing.springPreset.soft': 'Soft',
+  'easing.springPreset.camera': 'Camera',
 
   // Stick figure pose animation
 

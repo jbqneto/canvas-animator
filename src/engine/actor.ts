@@ -27,28 +27,28 @@ export function followedPath(actor: Animated, paths: MotionPath[]): MotionPath |
 }
 
 /** Position (and travel direction) from the followed path, or from the position keys. */
-function samplePlacement(actor: Animated, frame: number, paths: MotionPath[], keyFrame = frame) {
+function samplePlacement(actor: Animated, frame: number, paths: MotionPath[], keyFrame = frame, fps = 30) {
   const path = followedPath(actor, paths);
   if (path && actor.follow) {
-    const p = pointAtProgress(samplePath(path), sampleTrack(actor.follow.progress, frame, 0));
+    const p = pointAtProgress(samplePath(path), sampleTrack(actor.follow.progress, frame, 0, fps));
     return { x: p.x, y: p.y, angle: actor.follow.orient ? p.angle : 0 };
   }
-  const pos = samplePosition(actor.tracks.position, keyFrame, actor.base, actor.smoothPath);
+  const pos = samplePosition(actor.tracks.position, keyFrame, actor.base, actor.smoothPath, fps);
   const animated = (actor.tracks.position?.length ?? 0) >= 2;
   return { x: pos.x, y: pos.y, angle: actor.orientToPath && animated ? pos.angle : 0 };
 }
 
 /** Evaluates every animated property of the actor at `frame` (`paths` resolves "follow path"). */
-export function sampleActor(actor: Animated, frame: number, paths: MotionPath[] = []): ActorState {
+export function sampleActor(actor: Animated, frame: number, paths: MotionPath[] = [], fps = 30): ActorState {
   const { base, tracks, modifiers } = actor;
   if (!modifiers) {
-    const pos = samplePlacement(actor, frame, paths);
+    const pos = samplePlacement(actor, frame, paths, frame, fps);
     return {
       x: pos.x,
       y: pos.y,
-      scale: sampleTrack(tracks.scale, frame, base.scale),
-      rotation: sampleTrack(tracks.rotation, frame, base.rotation) + pos.angle,
-      opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, frame, base.opacity))),
+      scale: sampleTrack(tracks.scale, frame, base.scale, fps),
+      rotation: sampleTrack(tracks.rotation, frame, base.rotation, fps) + pos.angle,
+      opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, frame, base.opacity, fps))),
       visible: isActorOnScreen(actor, frame),
     };
   }
@@ -58,13 +58,13 @@ export function sampleActor(actor: Animated, frame: number, paths: MotionPath[] 
     const s = modifiers[prop]?.shake;
     return s ? shakeOffset(`${(actor as { id?: string }).id ?? ''}:${prop}${axis}`, frame, s.amount, s.periodFrames) : 0;
   };
-  const pos = samplePlacement(actor, frame, paths, at('position'));
+  const pos = samplePlacement(actor, frame, paths, at('position'), fps);
   return {
     x: pos.x + shake('position', 'x'),
     y: pos.y + shake('position', 'y'),
-    scale: sampleTrack(tracks.scale, at('scale'), base.scale) + shake('scale'),
-    rotation: sampleTrack(tracks.rotation, at('rotation'), base.rotation) + pos.angle + shake('rotation'),
-    opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, at('opacity'), base.opacity) + shake('opacity'))),
+    scale: sampleTrack(tracks.scale, at('scale'), base.scale, fps) + shake('scale'),
+    rotation: sampleTrack(tracks.rotation, at('rotation'), base.rotation, fps) + pos.angle + shake('rotation'),
+    opacity: Math.max(0, Math.min(1, sampleTrack(tracks.opacity, at('opacity'), base.opacity, fps) + shake('opacity'))),
     visible: isActorOnScreen(actor, frame),
   };
 }
