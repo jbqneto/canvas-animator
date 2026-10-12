@@ -1,9 +1,12 @@
 import type { ptBR } from './pt-BR';
 
-/** English (US). Typed against the Portuguese dictionary: a missing or extra key is a type error. */
-export const enUS: Record<keyof typeof ptBR, string> = {
+type EnglishOnlyKey = 'workspace.newProject' | 'app.confirm.newWithUnsaved' | 'history.newProject';
+
+/** English (US). Includes every legacy Portuguese key plus English-only additions. */
+export const enUS: Record<keyof typeof ptBR | EnglishOnlyKey, string> = {
   'workspace.open': 'Open project…',
   'workspace.save': 'Save project',
+  'workspace.newProject': 'New project',
   'workspace.undo': 'Undo',
   'workspace.redo': 'Redo',
   'workspace.importImage': 'Import image…',
@@ -583,6 +586,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   // App: messages
   'app.error.save': 'Could not save: {error}',
   'app.confirm.openWithUnsaved': 'There are unsaved changes. Open another project anyway?',
+  'app.confirm.newWithUnsaved': 'There are unsaved changes. Create a new project anyway?',
   'app.confirm.openFileWithUnsaved': 'There are unsaved changes. Open the file anyway?',
   'app.missingVideo': 'This project used the video "{name}". Load it again under Background video.',
   'app.error.open': 'Could not open: {error}',
@@ -595,6 +599,7 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   // App: history (undo) labels
   'history.initial': 'Initial state',
   'history.projectOpened': 'Project opened',
+  'history.newProject': 'New project',
   'history.editStage': 'Edit stage',
   'history.duplicateFrame': 'Duplicate frame {from} → {to}',
   'history.clearFrame': 'Clear frame {frame}',
