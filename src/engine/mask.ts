@@ -90,3 +90,24 @@ export function clearMaskRefs<S extends WithObjects>(scene: S, actorId: string):
   if (scene.sticks) next.sticks = clean(scene.sticks);
   return next;
 }
+
+type SceneWithLayers = Omit<WithObjects, 'actors'> & { actors: ActorOverlay[]; layers: { targetId?: string }[] };
+
+/** The scene after deleting an actor: the actor, its layers and every mask pointing at it go in ONE snapshot. */
+export function deleteActorScene<S extends SceneWithLayers>(scene: S, actorId: string): S {
+  return clearMaskRefs(
+    {
+      ...scene,
+      actors: scene.actors.filter((a) => a.id !== actorId),
+      layers: scene.layers.filter((l) => l.targetId !== actorId),
+    },
+    actorId
+  );
+}
+
+/** Actors that can be picked as a mask: flagged `maskOnly`, a shape and not a line (a line has no area). */
+export function maskActorOptions(actors: ActorOverlay[]): { id: string; name: string }[] {
+  return actors
+    .filter((a) => a.maskOnly && a.kind === 'shape' && a.shape && a.shape.type !== 'line')
+    .map((a) => ({ id: a.id, name: a.name }));
+}

@@ -43,6 +43,7 @@ import {
   ShapeType,
 } from '../types';
 import { ActorInspector } from './ActorInspector';
+import { maskActorOptions } from '../engine/mask';
 import { MotionInspector, motionInputClass } from './MotionInspector';
 import { SHAPE_TYPES } from '../engine/shapes';
 import { DEFAULT_FONT_FAMILY, FONT_FAMILIES } from '../utils/fonts';
@@ -160,6 +161,8 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   const activeActor =
     selectedObject?.type === 'actor' ? actors.find((a) => a.id === selectedObject.id) : undefined;
+
+  const maskActors = maskActorOptions(actors);
 
   const activePath =
     selectedObject?.type === 'path' ? paths.find((p) => p.id === selectedObject.id) : undefined;
@@ -326,6 +329,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                 paths={paths}
                 onAttachToPath={onAttachActorToPath}
                 onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                maskActors={maskActors}
               />
             )}
 
@@ -554,6 +558,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     paths={paths}
                     onAttachToPath={(id, pathId) => onAttachToPath('chart', id, pathId)}
                     onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                    maskActors={maskActors}
                   />
                 </div>
               </div>
@@ -884,6 +889,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                     paths={paths}
                     onAttachToPath={(id, pathId) => onAttachToPath('text', id, pathId)}
                     onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                    maskActors={maskActors}
                   />
                 </div>
               </div>
@@ -994,6 +1000,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                         paths={paths}
                         onAttachToPath={(id, pathId) => onAttachToPath('stick', id, pathId)}
                         onSelectPath={(id) => onSelectObject({ type: 'path', id })}
+                        maskActors={maskActors}
                       />
                     </div>
                   </>

@@ -16,6 +16,7 @@ interface ActorInspectorProps {
   paths: MotionPath[];
   onAttachToPath: (actorId: string, pathId: string) => void;
   onSelectPath: (pathId: string) => void;
+  maskActors?: { id: string; name: string }[];
 }
 
 export const ActorInspector: React.FC<ActorInspectorProps> = ({
@@ -29,6 +30,7 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
   paths,
   onAttachToPath,
   onSelectPath,
+  maskActors = [],
 }) => {
   const { t } = useI18n();
   const endFrame = actor.startFrame + actor.durationFrames;
@@ -78,7 +80,24 @@ export const ActorInspector: React.FC<ActorInspectorProps> = ({
         paths={paths}
         onAttachToPath={onAttachToPath}
         onSelectPath={onSelectPath}
+        maskActors={maskActors}
       />
+
+      {actor.kind === 'shape' && actor.shape && actor.shape.type !== 'line' && (
+        <label className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer" title={t('mask.use.hint')}>
+          <input
+            data-mask-only
+            type="checkbox"
+            checked={!!actor.maskOnly}
+            onChange={(e) => {
+              const { maskOnly: _drop, ...rest } = actor;
+              onChange(e.target.checked ? { ...rest, maskOnly: true } : rest, t('mask.use'));
+            }}
+            className="accent-orange-500"
+          />
+          {t('mask.use')}
+        </label>
+      )}
 
       <label className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer">
         <input

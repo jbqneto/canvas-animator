@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearMaskRefs, maskPath, resolveMask } from '../mask';
+import { clearMaskRefs, deleteActorScene, maskActorOptions, maskPath, resolveMask } from '../mask';
 import { createShapeActor, defaultShapeStyle } from '../shapes';
 import { sampleActor } from '../actor';
 import type { ActorOverlay, Animated } from '../../types';
@@ -98,5 +98,27 @@ describe('clearMaskRefs', () => {
     const next = clearMaskRefs(scene, 'm');
     expect('sticks' in next).toBe(false);
     expect('mask' in next.actors[0]).toBe(false);
+  });
+});
+
+describe('deleteActorScene', () => {
+  it('removes the actor, its layers and the mask references in one scene', () => {
+    const scene = {
+      actors: [shape('m'), target({ actorId: 'm', mode: 'inside' }, 'a1')],
+      layers: [{ targetId: 'm' }, { targetId: 'a1' }],
+      charts: [], texts: [],
+    } as any;
+    const next = deleteActorScene(scene, 'm');
+    expect(next.actors.map((a: any) => a.id)).toEqual(['a1']);
+    expect('mask' in next.actors[0]).toBe(false);
+    expect(next.layers).toEqual([{ targetId: 'a1' }]);
+  });
+});
+
+describe('maskActorOptions', () => {
+  it('lists only maskOnly, non-line shape actors', () => {
+    const list = [shape('a', 'rect', { maskOnly: true }), shape('b'), shape('c', 'line', { maskOnly: true }),
+      { ...shape('d', 'ellipse', { maskOnly: true }), kind: 'image' as const }];
+    expect(maskActorOptions(list)).toEqual([{ id: 'a', name: 'a' }]);
   });
 });

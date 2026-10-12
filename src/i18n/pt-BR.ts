@@ -882,6 +882,15 @@ export const ptBR = {
   // Stage scale handles
   'stage.history.scale': 'Escalar no frame {frame}',
 
+  // Masks
+  'mask.title': "Máscara",
+  'mask.none': "Nenhuma",
+  'mask.mode.inside': "Dentro da forma",
+  'mask.mode.outside': "Fora da forma",
+  'mask.history': "Máscara",
+  'mask.use': "Usar como máscara",
+  'mask.use.hint': "Uma forma usada como máscara some no render final e recorta outros objetos. Linhas não servem de máscara.",
+  'mask.missing': "Ator ausente (limpe)",
   // Object effects
   'mod.title': 'Repetir e tremida',
   'mod.hint': 'Repetir: depois da última key, a animação volta ao início (ciclo) ou vai e volta. Tremida: ruído suave em torno do valor.',

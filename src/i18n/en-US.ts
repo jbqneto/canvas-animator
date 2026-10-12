@@ -881,6 +881,15 @@ export const enUS: Record<keyof typeof ptBR, string> = {
   // Stage scale handles
   'stage.history.scale': 'Scale at frame {frame}',
 
+  // Masks
+  'mask.title': "Mask",
+  'mask.none': "None",
+  'mask.mode.inside': "Inside the shape",
+  'mask.mode.outside': "Outside the shape",
+  'mask.history': "Mask",
+  'mask.use': "Use as mask",
+  'mask.use.hint': "A shape used as a mask is hidden on the final render and cuts other objects. Lines cannot be masks.",
+  'mask.missing': "Missing actor (clear it)",
   // Object effects
   'mod.title': 'Loop and shake',
   'mod.hint': 'Loop: after the last key the animation restarts (cycle) or plays back and forth. Shake: smooth noise around the value.',

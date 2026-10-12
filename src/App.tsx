@@ -24,6 +24,7 @@ import {
 import { attachToPath, createActor, isActorOnScreen } from './engine/actor';
 import { createChart, createText } from './engine/overlays';
 import { createShapeActor, defaultShapeStyle } from './engine/shapes';
+import { deleteActorScene } from './engine/mask';
 import { createStickActor, hasPoseKeys, migrateFrameSticks, samplePose, stickLayer, stickToStrokes } from './engine/stickActor';
 import { setKeyframe } from './engine/keyframes';
 import { isTypingTarget } from './utils/keyboard';
@@ -1605,11 +1606,10 @@ export default function App() {
 
   const handleDeleteActor = (actorId: string) => {
     const actor = history.present.actors.find((a) => a.id === actorId);
-    history.pushSnapshot(t('history.delete', { name: actor?.name ?? t('selection.actor') }), {
-      ...history.present,
-      actors: history.present.actors.filter((a) => a.id !== actorId),
-      layers: history.present.layers.filter((l) => l.targetId !== actorId),
-    });
+    history.pushSnapshot(
+      t('history.delete', { name: actor?.name ?? t('selection.actor') }),
+      deleteActorScene(history.present, actorId)
+    );
     if (selectedObject?.id === actorId) setSelectedObject(null);
   };
 
