@@ -156,13 +156,31 @@ export const PathInspector: React.FC<PathInspectorProps> = ({
               px
             </div>
             <select
+              data-path-field="reveal"
               value={path.style.reveal}
               onChange={(e) => setStyle({ reveal: e.target.value as MotionPath['style']['reveal'] }, t('path.history.reveal'))}
               className={inputClass}
             >
               <option value="full">{t('path.reveal.full')}</option>
               <option value="follow">{t('path.reveal.follow')}</option>
+              <option value="draw">{t('path.reveal.draw')}</option>
             </select>
+            {path.style.reveal === 'draw' && (
+              <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+                {t('path.drawFrames')}
+                <input
+                  data-path-field="drawFrames"
+                  type="number"
+                  min={1}
+                  max={600}
+                  value={path.style.drawFrames ?? 24}
+                  onChange={(e) =>
+                    setStyle({ drawFrames: Math.max(1, Math.round(Number(e.target.value)) || 1) }, t('path.history.drawFrames'))
+                  }
+                  className="w-16 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 font-mono text-white"
+                />
+              </label>
+            )}
           </>
         )}
       </div>

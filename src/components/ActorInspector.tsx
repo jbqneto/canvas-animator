@@ -229,6 +229,17 @@ const ShapePanel: React.FC<{ style: ShapeStyle; onChange: (style: ShapeStyle, la
   const isLine = style.type === 'line';
   const set = <K extends keyof ShapeStyle>(key: K, value: ShapeStyle[K], label: string) =>
     onChange({ ...style, [key]: value }, label);
+  /** An outline that traces needs an outline: lines always have one. */
+  const drawDisabled = !isLine && style.strokeWidth <= 0;
+  const setDrawFrames = (raw: number) => {
+    const frames = Math.round(raw);
+    if (Number.isFinite(frames) && frames > 0) {
+      onChange({ ...style, draw: { frames } }, t('shape.draw'));
+    } else {
+      const { draw: _draw, ...rest } = style;
+      onChange(rest, t('shape.draw'));
+    }
+  };
   return (
     <div className="space-y-2" data-shape-panel>
       <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">{t('shape.appearance')}</span>
@@ -280,6 +291,20 @@ const ShapePanel: React.FC<{ style: ShapeStyle; onChange: (style: ShapeStyle, la
         />
         px
       </div>
+      <label className="flex items-center gap-2 text-[10px] text-neutral-400">
+        <span className="flex-1 min-w-0">{t('shape.draw')}</span>
+        <input
+          data-shape-field="drawFrames"
+          type="number"
+          min={0}
+          max={600}
+          disabled={drawDisabled}
+          title={drawDisabled ? t('shape.draw.hint') : t('shape.draw')}
+          value={style.draw?.frames ?? 0}
+          onChange={(e) => setDrawFrames(Number(e.target.value))}
+          className={`${inputClass} w-16 disabled:opacity-40`}
+        />
+      </label>
       {style.type === 'rect' && (
         <label className="flex items-center gap-2 text-[10px] text-neutral-400">
           <span className="w-20 shrink-0">{t('shape.radius')}</span>
