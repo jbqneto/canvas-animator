@@ -258,6 +258,11 @@ export interface PropertyModifier {
  * properties are static (`base`, stopwatch off) or keyframed (`tracks`, stopwatch on), optionally
  * travelling a drawn path. Actors, charts and texts all share it (logic in `engine/actor.ts`).
  */
+export interface MaskRef {
+  actorId: string;
+  mode: 'inside' | 'outside';
+}
+
 export interface Animated {
   startFrame: number;
   durationFrames: number;
@@ -276,6 +281,8 @@ export interface Animated {
   effects?: EffectParams;
   /** Loop and shake per transform property; absent = plain keys. */
   modifiers?: Partial<Record<ModifiableProperty, PropertyModifier>>;
+  /** Cut this object by a shape actor. */
+  mask?: MaskRef;
 }
 
 /**
@@ -294,6 +301,8 @@ export interface ShapeStyle {
   strokeWidth: number;
   /** Corner radius of rectangles, in pixels. */
   radius: number;
+  /** Outline traces during the first `frames`, then the fill fades in. */
+  draw?: { frames: number };
 }
 
 export interface ActorOverlay extends Animated {
@@ -309,6 +318,8 @@ export interface ActorOverlay extends Animated {
   height: number;
   /** Mirror horizontally (e.g. a plane image drawn facing the other way). */
   flipX: boolean;
+  /** Only a cut for other objects: never drawn in preview or export. */
+  maskOnly?: boolean;
   /** Draws the path already travelled behind the actor (e.g. a dashed flight line). */
   trail?: { enabled: boolean; color: string; width: number; dashed: boolean };
 }
@@ -339,7 +350,9 @@ export interface MotionPath {
     width: number;
     stroke: PathStrokeStyle;
     /** 'full': always drawn; 'follow': only the part already travelled by an actor following it. */
-    reveal: 'full' | 'follow';
+    reveal: 'full' | 'follow' | 'draw';
+    /** Frames the line takes to trace itself when reveal is 'draw' (default 24). */
+    drawFrames?: number;
   };
   startFrame: number;
   durationFrames: number;

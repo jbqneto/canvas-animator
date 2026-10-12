@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { retimeAnimated, retimeFrame, retimeScene, retimeSpan, retimeTrack, SceneData } from '../retime';
 import { createActor, sampleActor, setActorProperty, toggleAnimated } from '../actor';
+import { createShapeActor, defaultShapeStyle } from '../shapes';
 import { createChart } from '../overlays';
 import { createStickActor, togglePoseKey } from '../stickActor';
 import { createDefaultStickFigure } from '../../utils/stickFigurePresets';
@@ -95,5 +96,27 @@ describe('retiming effect tracks', () => {
     const out = retimeAnimated(actor, 2);
     expect(out.modifiers).toEqual({ position: { shake: { amount: 4, periodFrames: 12 } }, rotation: { loop: 'cycle' } });
     expect(retimeAnimated(base, 2).modifiers).toBeUndefined();
+  });
+});
+
+describe('retiming draw-on durations', () => {
+  const drawShape = (frames: number) =>
+    createShapeActor({ id: 'd', name: 'd', style: { ...defaultShapeStyle('rect'), draw: { frames } }, width: 10, height: 10, x: 0, y: 0, startFrame: 1, durationFrames: 48 });
+  const path = (drawFrames?: number) => ({
+    id: 'p', name: 'p', points: [{ x: 0, y: 0 }, { x: 10, y: 10 }], smooth: false, closed: false,
+    style: { visible: true, color: '#fff', width: 2, stroke: 'solid' as const, reveal: 'draw' as const, ...(drawFrames ? { drawFrames } : {}) },
+    startFrame: 1, durationFrames: 48,
+  });
+
+  it('scales shape draw frames with the rate and keeps at least one frame', () => {
+    expect(retimeScene({ ...scene(), actors: [drawShape(24)] }, 96, 24, 48).scene.actors[0].shape!.draw).toEqual({ frames: 48 });
+    expect(retimeScene({ ...scene(), actors: [drawShape(24)] }, 96, 24, 12).scene.actors[0].shape!.draw).toEqual({ frames: 12 });
+    expect(retimeScene({ ...scene(), actors: [drawShape(1)] }, 96, 24, 2.4).scene.actors[0].shape!.draw).toEqual({ frames: 1 });
+  });
+
+  it('scales path drawFrames and leaves paths without it alone', () => {
+    const { scene: s } = retimeScene({ ...scene(), paths: [path(24), path()] }, 96, 24, 48);
+    expect(s.paths[0].style.drawFrames).toBe(48);
+    expect('drawFrames' in s.paths[1].style).toBe(false);
   });
 });

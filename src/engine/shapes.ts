@@ -69,6 +69,8 @@ export function normalizeShape(actor: ActorOverlay): ActorOverlay {
       stroke: typeof s.stroke === 'string' ? s.stroke : base.stroke,
       strokeWidth: num(s.strokeWidth, base.strokeWidth),
       radius: num(s.radius, base.radius),
+      // Same rule as validDrawFrames in reveal.ts (inlined: reveal.ts imports this file)
+      ...(typeof s.draw?.frames === 'number' && Number.isFinite(s.draw.frames) && s.draw.frames > 0 ? { draw: { frames: s.draw.frames } } : {}),
     },
   };
 }

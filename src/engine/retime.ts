@@ -47,6 +47,8 @@ export function retimeAnimated<T extends Animated>(obj: T, k: number): T {
   };
 }
 
+const scaleFrames = (frames: number, k: number) => Math.max(1, Math.round(frames * k));
+
 const retimeIntro = <T extends { animDurationFrames?: number }>(obj: T, k: number): T =>
   obj.animDurationFrames ? { ...obj, animDurationFrames: Math.max(1, Math.round(obj.animDurationFrames * k)) } : obj;
 
@@ -72,7 +74,10 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
   const retimed: SceneData = {
     ...scene,
     frames: resampleFrames(scene.frames, totalFrames, newTotal, k),
-    actors: scene.actors.map((a) => retimeAnimated(a, k)),
+    actors: scene.actors.map((a) => {
+      const r = retimeAnimated(a, k);
+      return r.shape?.draw ? { ...r, shape: { ...r.shape, draw: { frames: scaleFrames(r.shape.draw.frames, k) } } } : r;
+    }),
     sticks: scene.sticks?.map((st) => ({ ...retimeAnimated(st, k), poses: retimeTrack(st.poses, k) ?? [] })),
     charts: scene.charts.map((c) => retimeIntro(retimeAnimated(c, k), k)),
     texts: scene.texts.map((x) => {
@@ -80,7 +85,11 @@ export function retimeScene(scene: SceneData, totalFrames: number, fromFps: numb
       // Word starts are offsets from the text start, so they scale like a duration
       return x.karaoke ? { ...t, karaoke: { ...x.karaoke, wordOffsets: x.karaoke.wordOffsets.map((o) => Math.round(o * k)) } } : t;
     }),
-    paths: scene.paths.map((p) => ({ ...p, ...retimeSpan(p.startFrame, p.durationFrames, k) })),
+    paths: scene.paths.map((p) => ({
+      ...p,
+      ...retimeSpan(p.startFrame, p.durationFrames, k),
+      style: p.style.drawFrames ? { ...p.style, drawFrames: scaleFrames(p.style.drawFrames, k) } : p.style,
+    })),
     images: scene.images.map((img) => ({ ...img, ...retimeSpan(img.startFrame, img.durationFrames, k) })),
     // Audio timing inside the clip is already in seconds; only where it starts moves
     audio: scene.audio?.map((c) => ({ ...c, startFrame: retimeFrame(c.startFrame, k) })),

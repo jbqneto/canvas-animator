@@ -42,3 +42,16 @@ describe('shape actors', () => {
     expect(normalizeShape(image)).toBe(image);
   });
 });
+
+describe('normalizeShape draw and maskOnly', () => {
+  const base = createShapeActor({ id: 's', name: 's', style: defaultShapeStyle('rect'), width: 10, height: 10, x: 0, y: 0, startFrame: 1, durationFrames: 10 });
+  it('keeps a valid draw and drops invalid ones', () => {
+    expect(normalizeShape({ ...base, shape: { ...base.shape!, draw: { frames: 12 } } }).shape!.draw).toEqual({ frames: 12 });
+    for (const frames of [0, -3, NaN, '5' as unknown as number]) {
+      expect('draw' in normalizeShape({ ...base, shape: { ...base.shape!, draw: { frames } } }).shape!).toBe(false);
+    }
+  });
+  it('keeps maskOnly on the actor', () => {
+    expect(normalizeShape({ ...base, maskOnly: true }).maskOnly).toBe(true);
+  });
+});
