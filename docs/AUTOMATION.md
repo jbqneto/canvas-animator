@@ -1,5 +1,59 @@
 # FlashMotion MCP e automação
 
+## Agente headless (`npm run agent`)
+
+O CLI oficial permite validar/lintar/descrever `.fmproj` sem navegador e renderizar ou exportar
+sem abrir o editor do usuário. Os comandos de navegador usam `dist/` e um Chromium headless
+isolado; não compartilham localStorage/IndexedDB, não dependem de uma aba visível e não precisam
+de rede para fontes. Rode `npm run build` antes da primeira renderização.
+
+```bash
+npm run agent -- validate projeto.fmproj
+npm run agent -- lint projeto.fmproj
+npm run agent -- describe projeto.fmproj
+npm run agent -- render-frame projeto.fmproj --frame 30 --out /tmp/frame.png
+npm run agent -- contact-sheet projeto.fmproj --count 6 --start 1 --end 120 --out /tmp/sheet.png
+npm run agent -- contact-sheet projeto.fmproj --frames 1,30,60 --columns 3 --cell-width 480 --out /tmp/sheet.png
+npm run agent -- export projeto.fmproj --out /tmp/video.mp4 --range 1:300 --no-audio
+npm run agent -- apply projeto.fmproj --ops ops.json --out /tmp/editado.fmproj
+npm run agent -- run steps.json
+```
+
+Cada invocação imprime um único objeto JSON em stdout; progresso do export e erros do browser
+vão para stderr. Frames são base 1. `contact-sheet` aceita no máximo 24 frames, 1–6 colunas e
+largura de célula de 160–960 px; `--count` espalha amostras pelo intervalo inclusivo. `apply`
+recebe um array de `{ "op": "addSfx" | "setCamera" | "setEffects" | "applyTemplate" | "replaceContent", "args": [...] }`.
+`run steps.json` executa uma sequência numa sessão só, no formato `{ "steps": [...] }`; cada
+passo é `{ "op": "load", "file": "projeto.fmproj" }`, uma operação com `args`, ou um passo
+`renderFrame`, `contactSheet`, `export` ou `save` com os campos equivalentes aos comandos acima.
+Os caminhos de passos do `run` são relativos ao arquivo JSON de passos.
+
+`validate`, `lint` e `describe` só usam Node e funcionam sem Playwright/Chromium. `validate`
+retorna resumo e avisos; sai com 2 se houver problema de severidade `error`, 1 para arquivo
+inválido e 0 se não houver erros. `lint` retorna `{ issues }`, e `describe` retorna o resumo
+compacto da cena. Os demais códigos são: 0 sucesso, 1 argumentos/entrada inválidos, 3 Chromium
+indisponível, 4 falha de render/export.
+
+Playwright não baixa navegador. Instale um Chromium compatível e indique-o por `--chromium`
+(maior prioridade), `FLASHMOTION_CHROMIUM`, `PLAYWRIGHT_BROWSERS_PATH` ou Chrome do sistema
+(`channel: chrome`). `FLASHMOTION_FFMPEG` pode apontar para o ffmpeg; caso contrário, o CLI
+procura `ffmpeg` no PATH. Os outputs existentes não são substituídos sem `--overwrite`.
+
+Headless Chromium normalmente não inclui encoder H.264: um pedido MP4 pode resultar em WebM.
+Com ffmpeg, o CLI converte para H.264/AAC (ou vídeo sem áudio com `--no-audio`), corta à duração
+exata e retorna `container`, `videoCodec`, `transcoded`, `frames`, `fps` e `durationSec`. Sem
+ffmpeg, salva os bytes como `.webm` — nunca com extensão `.mp4` — e retorna o aviso
+`H264_UNAVAILABLE`.
+
+Exemplo completo — validar, inspecionar e exportar:
+
+```bash
+npm run build
+npm run agent -- validate cena.fmproj
+npm run agent -- contact-sheet cena.fmproj --count 9 --out /tmp/cena.png
+npm run agent -- export cena.fmproj --out /tmp/cena.mp4 --range 1:300
+```
+
 O servidor MCP local está implementado. Ele usa stdio com o SDK oficial e uma ponte
 WebSocket autenticada para a cena aberta no editor. Não depende de cliques automatizados.
 

@@ -118,6 +118,10 @@ Veja configuração, exemplos e limites em [`docs/AUTOMATION.md`](docs/AUTOMATIO
 A API JavaScript também continua disponível em `/?automation=1` para agentes com acesso
 a executar código no contexto da página.
 
+Para agentes em nuvem ou quando o editor não deve depender de uma aba aberta, use `npm run agent`:
+`validate`/`lint`/`describe` funcionam sem browser; renderização e export usam Chromium headless
+isolado, fontes locais e retornam JSON. Consulte [`docs/AUTOMATION.md`](docs/AUTOMATION.md#agente-headless-npm-run-agent).
+
 Requer Node 20+.
 
 ```bash
