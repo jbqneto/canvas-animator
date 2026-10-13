@@ -26,6 +26,7 @@ import {
   sampleActor,
   setActorProperty,
   actorPropertyValue,
+  anchorPoint,
   followedPath,
   toActorLocal,
 } from '../engine/actor';
@@ -681,9 +682,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
         }
         const st = sampleActor(obj, currentFrame, paths);
         ctx.save();
+        const pivot = anchorPoint(obj, box);
         ctx.translate(st.x, st.y);
+        ctx.translate(pivot.x, pivot.y);
         ctx.rotate((st.rotation * Math.PI) / 180);
         ctx.scale(st.scale, st.scale);
+        ctx.translate(-pivot.x, -pivot.y);
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5 / (st.scale || 1);
         ctx.setLineDash(st.visible ? [] : [6, 4]);
@@ -710,10 +714,10 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           ctx.fillRect(box.x + box.width + 3 - dot, box.y + box.height + 3 - dot, dot * 2, dot * 2);
           ctx.strokeRect(box.x + box.width + 3 - dot, box.y + box.height + 3 - dot, dot * 2, dot * 2);
         }
-        // Anchor point (position, center of rotation and scale)
+        // Pivot point (centre of rotation and scale; position remains the legacy local origin)
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(0, 0, dot, 0, Math.PI * 2);
+        ctx.arc(pivot.x, pivot.y, dot, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -770,7 +774,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       if (session.targetType === 'joint' && session.jointId) {
         const stick = latest.sticks?.find((s) => s.id === session.targetId);
         if (stick) {
-          const local = toActorLocal(sampleActor(stick, currentFrame, latest.paths), pt);
+          const stickState = sampleActor(stick, currentFrame, latest.paths);
+          const local = toActorLocal(stickState, pt, anchorPoint(stick, poseBox(stick, currentFrame)));
           const figure = localFigure(stick, samplePose(stick, currentFrame));
           // Default: rotate the bone around its parent and bring the sub-chain along (FK, keeps
           // proportions like Pivot/Flash bones). Alt: move the joint freely (stretch the bone).
@@ -788,7 +793,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       else if (session.targetType === 'rotate' && session.initialObj && session.objectKind) {
         // Accumulated step by step, so turning past half a circle keeps going instead of jumping back
         const st = sampleActor(session.initialObj, currentFrame, paths);
-        const angle = Math.atan2(pt.y - st.y, pt.x - st.x);
+        const pivot = anchorPoint(session.initialObj, boxOf(session.objectKind, session.initialObj));
+        const angle = Math.atan2(pt.y - st.y - pivot.y, pt.x - st.x - pivot.x);
         let delta = ((angle - (session.startAngle ?? angle)) * 180) / Math.PI;
         if (delta > 180) delta -= 360;
         if (delta < -180) delta += 360;
@@ -802,7 +808,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       // Scale handle: the pointer's distance to the anchor, relative to where the drag started
       else if (session.targetType === 'scale' && session.initialObj && session.objectKind) {
         const st = sampleActor(session.initialObj, currentFrame, paths);
-        const ratio = Math.hypot(pt.x - st.x, pt.y - st.y) / (session.startDistance || 1);
+        const pivot = anchorPoint(session.initialObj, boxOf(session.objectKind, session.initialObj));
+        const ratio = Math.hypot(pt.x - st.x - pivot.x, pt.y - st.y - pivot.y) / (session.startDistance || 1);
         const raw = Math.max(0.05, (session.initialScale ?? 1) * ratio);
         const scale = e.shiftKey ? Math.max(0.05, Math.round(raw * 20) / 20) : Math.round(raw * 1000) / 1000;
         transientAnimated(session.objectKind, setActorProperty(session.initialObj, 'scale', currentFrame, scale));
@@ -813,8 +820,9 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       else if (session.targetType === 'chart-resize' && session.initialChart) {
         const init = session.initialChart;
         const st = sampleActor(init, currentFrame, paths);
-        const a = toActorLocal(st, session.startCanvasPt);
-        const b = toActorLocal(st, pt);
+        const pivot = anchorPoint(init, chartBox(init));
+        const a = toActorLocal(st, session.startCanvasPt, pivot);
+        const b = toActorLocal(st, pt, pivot);
         onTransientUpdateChart({
           ...init,
           width: Math.round(Math.max(180, init.width + 2 * (b.x - a.x))),
@@ -1037,7 +1045,8 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     if (selected && isEditable(selectedObject!.id, layerTypeOf(selected.kind))) {
       const st = sampleActor(selected.obj, currentFrame, paths);
       const knob = rotateHandleLocal(selected.box, st.scale);
-      const local = toActorLocal(st, pt);
+      const pivot = anchorPoint(selected.obj, selected.box);
+      const local = toActorLocal(st, pt, pivot);
       if (st.visible && Math.hypot(local.x - knob.x, local.y - knob.y) * (st.scale || 1) <= ROTATE_HANDLE_HIT) {
         dragSessionRef.current = {
           targetType: 'rotate',
@@ -1045,7 +1054,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
           objectKind: selected.kind,
           initialObj: selected.obj,
           initialRotation: actorPropertyValue(selected.obj, 'rotation', currentFrame),
-          startAngle: Math.atan2(pt.y - st.y, pt.x - st.x),
+          startAngle: Math.atan2(pt.y - st.y - pivot.y, pt.x - st.x - pivot.x),
           startCanvasPt: pt,
           baseSnapshot,
           hasMoved: false,
@@ -1061,11 +1070,12 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // 2A'. Scale handles (box corners): drag scales the object around its anchor
     if (selected && isEditable(selectedObject!.id, layerTypeOf(selected.kind))) {
       const st = sampleActor(selected.obj, currentFrame, paths);
-      const local = toActorLocal(st, pt);
+      const pivot = anchorPoint(selected.obj, selected.box);
+      const local = toActorLocal(st, pt, pivot);
       const onCorner = scaleHandlesLocal(selected.box, selected.kind).some(
         (c) => Math.hypot(local.x - c.x, local.y - c.y) * (st.scale || 1) <= SCALE_HANDLE_HIT
       );
-      const distance = Math.hypot(pt.x - st.x, pt.y - st.y);
+      const distance = Math.hypot(pt.x - st.x - pivot.x, pt.y - st.y - pivot.y);
       if (st.visible && onCorner && distance > 1) {
         dragSessionRef.current = {
           targetType: 'scale',
@@ -1089,7 +1099,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
     // 2A. Resize handle of the selected chart (bottom-right corner of its transformed box)
     if (selected?.kind === 'chart' && isEditable(selectedObject!.id, 'chart')) {
       const st = sampleActor(selected.obj, currentFrame, paths);
-      const local = toActorLocal(st, pt);
+      const local = toActorLocal(st, pt, anchorPoint(selected.obj, selected.box));
       const { box } = selected;
       const handleDistance = Math.hypot(local.x - (box.x + box.width + 3), local.y - (box.y + box.height + 3));
       if (st.visible && handleDistance * (st.scale || 1) <= 14) {
@@ -1185,7 +1195,7 @@ export const FlashCanvas: React.FC<FlashCanvasProps> = ({
       if (!isEditable(stick.id, 'drawing')) continue;
       const state = sampleActor(stick, currentFrame, paths);
       if (!state.visible) continue;
-      const local = toActorLocal(state, pt);
+      const local = toActorLocal(state, pt, anchorPoint(stick, poseBox(stick, currentFrame)));
       const tolerance = 16 / (state.scale || 1);
       const pose = samplePose(stick, currentFrame);
       const onBone = stick.bones.some((bone) => {

@@ -148,6 +148,16 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   Listeners de janela devem ler `getCurrentSnapshot()`, nunca props capturadas.
 - Tempo: quadros começam em 1. `videoTimeForFrame(frame, fps, duration)`.
 - Export: WebCodecs via mediabunny (lazy import), timestamps explícitos.
+- Motion blur opcional no export (`motionBlur: {subframes, shutter}`): `renderMotionBlurredFrame` chama
+  exclusivamente `renderCompositeFrame` em amostras fracionárias e calcula a média RGBA em espaço premultiplicado;
+  ausente mantém o render antigo. Limites: 1–16 subquadros, obturador 0–360°. O custo cresce aproximadamente com
+  o número de amostras. A medição com o fixture Mirabilia permanece pendente: o navegador local bloqueou
+  `localhost:3000` por uma preferência de segurança salva durante esta sessão.
+- Texto numérico (`TextOverlay.numerals?: 'lining' | 'oldstyle' | 'default'`): o renderer usa
+  `fontVariantNumeric` quando o contexto Canvas oferece a propriedade; navegadores sem suporte mantêm o
+  estilo padrão da fonte. Cormorant Garamond e Fraunces resolvem para `lining` quando o campo está ausente.
+  O lint mede a largura com `measureText` e aplica margem segura horizontal de 5% por padrão; sem Canvas
+  (Node/testes), usa a estimativa tipográfica por família.
 - Keyframes (`src/engine/keyframes.ts`): `Track<T> = Keyframe<T>[]` ordenado; easing do key vale para o
   segmento que COMEÇA nele; clamp antes/depois. Além dos easings geométricos, `spring` é uma resposta ao degrau
   fechada e sem estado, com `springParams?: { w, z }` por key (Morph `{15, .84}` quando omitido), normalizada
@@ -156,10 +166,11 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   centrípeta, velocidade constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam
   `DEFAULT_EASING`.
 - Objetos animados: `Animated` (`types.ts`) = intervalo + `base` + `tracks` + `smoothPath`/`orientToPath` +
-  `follow`. `ActorOverlay`, `ChartOverlay` e `TextOverlay` estendem `Animated`; as funções de
+  `follow` e `anchor?: {x,y}` (pivô local normalizado; ausente mantém a origem histórica). `ActorOverlay`,
+  `ChartOverlay` e `TextOverlay` estendem `Animated`; as funções de
   `engine/actor.ts` são genéricas (`<T extends Animated>`, devolvem o mesmo tipo). Âncora: centro da imagem
   (ator), centro do cartão (gráfico), início da linha de base (texto). O renderer aplica
-  translate→rotate→scale→opacity e depois desenha o conteúdo; a "entrada" do gráfico/texto (crescer,
+  translate→pivô→rotate/scale→deslocamento inverso do pivô→opacity e depois desenha o conteúdo; a "entrada" do gráfico/texto (crescer,
   máquina de escrever, contador) continua em `animationType`/`effect` + `easing`/`animDurationFrames`.
   Caixas locais para seleção/hit test: `chartBox`/`textBox` (`engine/overlays.ts`), `hitTestBox`.
   Criação: `createChart(conteúdo, centro)`, `createText(conteúdo, âncora)`. Arquivos antigos
@@ -237,6 +248,12 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   no AudioContext a partir do relógio do playback (performance.now continua mestre), `scrubClips` toca
   ~1 quadro com fade, `mixdown` renderiza o trecho exportado num OfflineAudioContext. Export: faixa de áudio
   opcional (AAC no MP4 quando o navegador codifica; senão Opus); WebM transparente começa sem áudio.
+  Cada clipe pode ter `kind: narration | music | sfx`; ausente mantém a mixagem antiga. A opção explícita
+  `audioMaster` aplica medição BS.1770 (K-weighting, blocos 400 ms, gates -70/-10 LU), ganho integrado e
+  limitador com teto de true peak estimado em 4×. O ducking opcional reduz música identificada em ~10 dB
+  sob narração (ataque 25 ms, release 180 ms). Desligado por padrão, tanto na UI quanto na API/MCP.
+  Medições sintéticas EBU Tech 3341 ficam em `src/audio/__tests__/loudness.test.ts`; validar custo e resultado
+  no fixture real permanece pendente (não foi possível executar a verificação manual do app neste ambiente).
   Importar áudio estende a timeline para caber (nunca encolhe). UI: `components/AudioTracks.tsx`.
 - Modelos (`src/templates/`): um modelo é uma função pura `build(valores, contexto) → { actors, charts,
   texts, paths, endFrame }`; nada na cena sabe que veio de um modelo. `params` descreve o formulário

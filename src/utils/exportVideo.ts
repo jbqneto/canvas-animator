@@ -14,11 +14,13 @@ import {
   MotionPath,
   StickActor,
   SceneCamera,
+  AudioMasterOptions,
 } from '../types';
-import { sampleActor, trailPoints } from '../engine/actor';
+import { anchorPoint, sampleActor, trailPoints, type LocalBox } from '../engine/actor';
 import { applyCamera, isIdentityCamera, parallaxOf, sampleCamera, scaleCamera } from '../engine/camera';
 import { arrowPolygon, fittedRadius } from '../engine/shapes';
-import { localFigure, samplePose } from '../engine/stickActor';
+import { localFigure, poseBox, samplePose } from '../engine/stickActor';
+import { chartBox, textBox } from '../engine/overlays';
 import { polylineUpTo, samplePath } from '../engine/path';
 import { sampleTrack, Vec2 } from '../engine/keyframes';
 import { t } from '../i18n';
@@ -26,12 +28,13 @@ import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtil
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
-import { fontCss, loadSceneFonts } from './fonts';
+import { fontCss, loadSceneFonts, resolvedNumerals } from './fonts';
 import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
 import { drawProgress, fillAlpha, shapeOutlineLength, validDrawFrames } from '../engine/reveal';
 import { isUsableMaskShape, maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
+import { masterAudio } from '../audio/loudness';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -70,6 +73,104 @@ export interface RenderOptions {
   showMasks?: boolean;
 }
 
+export interface MotionBlurOptions {
+  subframes: number;
+  shutter: number;
+}
+
+const clampMotionBlur = (options: MotionBlurOptions): MotionBlurOptions => ({
+  subframes: Math.max(1, Math.min(16, Math.round(Number.isFinite(options.subframes) ? options.subframes : 1))),
+  shutter: Math.max(0, Math.min(360, Number.isFinite(options.shutter) ? options.shutter : 180)),
+});
+
+export function motionBlurSampleFrames(frame: number, rawOptions: MotionBlurOptions): number[] {
+  const options = clampMotionBlur(rawOptions);
+  const step = (options.shutter / 360) / options.subframes;
+  return Array.from({ length: options.subframes }, (_, k) => frame + k * step);
+}
+
+/** Average unpremultiplied ImageData samples through premultiplied color to preserve correct alpha. */
+export function averageRgbaSubframes(samples: Uint8ClampedArray[]): Uint8ClampedArray {
+  if (!samples.length || samples.some((sample) => sample.length !== samples[0].length || sample.length % 4 !== 0)) {
+    throw new Error('INVALID_MOTION_BLUR_SAMPLES');
+  }
+  const result = new Uint8ClampedArray(samples[0].length);
+  const n = samples.length;
+  for (let i = 0; i < result.length; i += 4) {
+    let alpha = 0;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    for (const sample of samples) {
+      const a = sample[i + 3];
+      alpha += a;
+      red += sample[i] * a;
+      green += sample[i + 1] * a;
+      blue += sample[i + 2] * a;
+    }
+    result[i + 3] = alpha / n;
+    if (alpha > 0) {
+      result[i] = red / alpha;
+      result[i + 1] = green / alpha;
+      result[i + 2] = blue / alpha;
+    }
+  }
+  return result;
+}
+
+const motionBlurCanvases = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
+/** Renders and averages sub-frame samples through the single scene renderer. */
+export function renderMotionBlurredFrame(
+  canvas: HTMLCanvasElement,
+  frame: number,
+  scene: SceneContent,
+  rawOptions: MotionBlurOptions,
+  renderOptions: RenderOptions = {}
+): void {
+  const options = clampMotionBlur(rawOptions);
+  let sampleCanvas = motionBlurCanvases.get(canvas);
+  if (!sampleCanvas) {
+    sampleCanvas = document.createElement('canvas');
+    motionBlurCanvases.set(canvas, sampleCanvas);
+  }
+  if (sampleCanvas.width !== canvas.width) sampleCanvas.width = canvas.width;
+  if (sampleCanvas.height !== canvas.height) sampleCanvas.height = canvas.height;
+  const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+  const outputCtx = canvas.getContext('2d');
+  if (!sampleCtx || !outputCtx) throw new Error('MOTION_BLUR_CANVAS_UNAVAILABLE');
+  const pixelCount = canvas.width * canvas.height;
+  const premultiplied = new Uint32Array(pixelCount * 3);
+  const alpha = new Uint16Array(pixelCount);
+  motionBlurSampleFrames(frame, options).forEach((sampleFrame) => {
+    renderCompositeFrame(sampleCtx, canvas.width, canvas.height, sampleFrame, scene, renderOptions);
+    const pixels = sampleCtx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let p = 0; p < pixelCount; p++) {
+      const i = p * 4;
+      const a = pixels[i + 3];
+      alpha[p] += a;
+      const j = p * 3;
+      premultiplied[j] += pixels[i] * a;
+      premultiplied[j + 1] += pixels[i + 1] * a;
+      premultiplied[j + 2] += pixels[i + 2] * a;
+    }
+  });
+  const image = outputCtx.createImageData(canvas.width, canvas.height);
+  const n = options.subframes;
+  for (let p = 0; p < pixelCount; p++) {
+    const i = p * 4;
+    const a = alpha[p];
+    image.data[i + 3] = a / n;
+    if (a > 0) {
+      const j = p * 3;
+      image.data[i] = premultiplied[j] / a;
+      image.data[i + 1] = premultiplied[j + 1] / a;
+      image.data[i + 2] = premultiplied[j + 2] / a;
+    }
+  }
+  outputCtx.putImageData(image, 0, 0);
+}
+
 /**
  * An object belongs to the layer that targets it; otherwise to the first layer of its type.
  * Shared by the renderer (order/visibility) and the stage (lock/visibility on hit-testing).
@@ -101,7 +202,8 @@ export function renderCompositeFrame(
 ) {
   const { charts, texts, images, actors, paths, videoBg, videoElement, layers } = scene;
   const fps = scene.fps ?? EFFECT_FPS;
-  const frameData = scene.frames[currentFrame];
+  // Sub-frame samples reuse the drawings/strokes of their containing timeline frame.
+  const frameData = scene.frames[Math.floor(currentFrame)];
   const effectRate = EFFECT_FPS / (scene.fps ?? EFFECT_FPS);
   ctx.save();
   ctx.clearRect(0, 0, width, height);
@@ -236,14 +338,17 @@ export function renderCompositeFrame(
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
   });
   // Charts and texts: the same keyframed transform as actors, then their own intro inside it
-  const withTransform = (obj: Animated & { id?: string }, draw: (c: CanvasRenderingContext2D) => void) => {
+  const withTransform = (obj: Animated & { id?: string }, box: LocalBox, draw: (c: CanvasRenderingContext2D) => void) => {
     const state = sampleActor(obj, currentFrame, paths, fps);
     if (!state.visible || state.opacity <= 0) return null;
     const fx = sampleEffects(obj, currentFrame, fps);
     const place = (c: CanvasRenderingContext2D) => {
       c.translate(state.x, state.y);
+      const pivot = anchorPoint(obj, box);
+      c.translate(pivot.x, pivot.y);
       c.rotate((state.rotation * Math.PI) / 180);
       c.scale(state.scale, state.scale);
+      c.translate(-pivot.x, -pivot.y);
     };
     return masked(obj, () => {
       if (hasActiveEffects(fx)) {
@@ -260,17 +365,18 @@ export function renderCompositeFrame(
   // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
   // Without a layer of their own they follow the drawings layer, as before.
   scene.sticks?.forEach((stick) => {
-    const draw = withTransform(stick, (c) => drawStickFigure(c, localFigure(stick, samplePose(stick, currentFrame, fps))));
+    const pose = samplePose(stick, currentFrame, fps);
+    const draw = withTransform(stick, poseBox(stick, currentFrame), (c) => drawStickFigure(c, localFigure(stick, pose)));
     if (draw) add(stick.id, 'drawing', FRONT, draw, parallaxOf(stick));
   });
   charts.forEach((chart) => {
     if (!chart.visible) return;
-    const draw = withTransform(chart, (c) => drawChart(c, chart, currentFrame));
+    const draw = withTransform(chart, chartBox(chart), (c) => drawChart(c, chart, currentFrame));
     if (draw) add(chart.id, 'chart', FRONT, draw, parallaxOf(chart));
   });
   texts.forEach((txt) => {
     if (!txt.visible) return;
-    const draw = withTransform(txt, (c) => drawText(c, txt, currentFrame, effectRate));
+    const draw = withTransform(txt, textBox(txt), (c) => drawText(c, txt, currentFrame, effectRate));
     if (draw) add(txt.id, 'text', FRONT, draw, parallaxOf(txt));
   });
 
@@ -365,8 +471,11 @@ function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
   ctx.save();
   ctx.globalAlpha = state.opacity;
   ctx.translate(state.x, state.y);
+  const pivot = anchorPoint(actor, { x: -actor.width / 2, y: -actor.height / 2, width: actor.width, height: actor.height });
+  ctx.translate(pivot.x, pivot.y);
   ctx.rotate((state.rotation * Math.PI) / 180);
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
+  ctx.translate(-pivot.x, -pivot.y);
   if (actor.kind === 'shape' && actor.shape) {
     const frames = actor.shape.strokeWidth > 0 || actor.shape.type === 'line' ? validDrawFrames(actor.shape.draw) : 0;
     const reveal = frames
@@ -773,6 +882,13 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   const elapsed = rawElapsed * effectRate;
   // Already translated to the text anchor by the caller; effects work relative to it
   ctx.save();
+  const numericContext = ctx as CanvasRenderingContext2D & { fontVariantNumeric: string };
+  const supportsNumeralVariant = 'fontVariantNumeric' in ctx;
+  const previousNumeralVariant = supportsNumeralVariant ? numericContext.fontVariantNumeric : undefined;
+  if (supportsNumeralVariant) {
+    const numerals = resolvedNumerals(txt);
+    numericContext.fontVariantNumeric = numerals === 'default' ? 'normal' : `${numerals}-nums`;
+  }
   const parentAlpha = ctx.globalAlpha;
 
   let displayedText = txt.text;
@@ -882,6 +998,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   }
 
   ctx.restore();
+  if (supportsNumeralVariant) numericContext.fontVariantNumeric = previousNumeralVariant ?? 'normal';
 }
 
 function roundRect(
@@ -1010,6 +1127,9 @@ export async function exportVideoSequence(
     /** Inclusive frame range; defaults to the whole timeline. */
     startFrame?: number;
     endFrame?: number;
+    /** Temporal samples per output frame; omitted leaves legacy rendering untouched. */
+    motionBlur?: MotionBlurOptions;
+    audioMaster?: AudioMasterOptions;
     /** Sound for the exported range (already mixed and exactly as long as it). */
     audio?: AudioBuffer | null;
     /** Prepare audio after choosing the destination, while the picker still has user activation. */
@@ -1084,7 +1204,15 @@ export async function exportVideoSequence(
     try {
       video?.pause();
       output.addVideoTrack(source, { frameRate: fps });
-      const audio = options.prepareAudio ? await withAbort(options.prepareAudio(), signal) : options.audio ?? null;
+      const rawAudio = options.prepareAudio ? await withAbort(options.prepareAudio(), signal) : options.audio ?? null;
+      let audio: AudioBuffer | null = rawAudio;
+      if (rawAudio && options.audioMaster) {
+        const channels = Array.from({ length: rawAudio.numberOfChannels }, (_, i) => rawAudio.getChannelData(i));
+        const mastered = masterAudio(channels, rawAudio.sampleRate, options.audioMaster);
+        const audioContext = new OfflineAudioContext(rawAudio.numberOfChannels, rawAudio.length, rawAudio.sampleRate);
+        audio = audioContext.createBuffer(rawAudio.numberOfChannels, rawAudio.length, rawAudio.sampleRate);
+        mastered.channels.forEach((channel, i) => audio!.copyToChannel(new Float32Array(channel), i));
+      }
       const audioCodec = audio ? await withAbort(pickAudioCodec(picked.format, audio), signal) : null;
       const audioSource = audio && audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: QUALITY_HIGH }) : null;
       audioDropped = !!audio && !audioSource;
@@ -1100,7 +1228,8 @@ export async function exportVideoSequence(
           await seekVideo(video, videoTimeForFrame(f, fps, video.duration), 3000, signal);
         }
 
-        renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
+        if (options.motionBlur) renderMotionBlurredFrame(exportCanvas, f, { ...scene, videoElement: video }, options.motionBlur, { transparent });
+        else renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
         await withAbort(source.add((f - first) * frameDuration, frameDuration), signal);
 
         if (onProgress) {

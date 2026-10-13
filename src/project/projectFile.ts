@@ -55,6 +55,11 @@ export class ProjectFileError extends Error {}
 const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const asNumber = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 const isRecord = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+const normalizedAnchor = <T extends Record<string, any>>(object: T): T => {
+  if (!isRecord(object.anchor)) return object;
+  const clamp = (value: unknown) => Math.max(0, Math.min(1, asNumber(value, 0.5)));
+  return { ...object, anchor: { x: clamp(object.anchor.x), y: clamp(object.anchor.y) } };
+};
 
 /** Missing settings are supported for older files; supplied invalid settings are not repaired silently. */
 function setting(value: unknown, fallback: number, min: number, max: number): number {
@@ -145,6 +150,7 @@ function parseAudio(value: unknown): AudioClip[] {
         duration: Math.min(sourceDuration - offset, Math.max(0, asNumber(c.duration, sourceDuration - offset))),
         volume: Math.min(2, Math.max(0, asNumber(c.volume, 1))),
         muted: c.muted === true,
+        ...(c.kind === 'narration' || c.kind === 'music' || c.kind === 'sfx' ? { kind: c.kind } : {}),
       };
     });
 }
@@ -153,7 +159,7 @@ function parseAudio(value: unknown): AudioClip[] {
 function parseSticks(value: unknown): StickActor[] {
   return asArray<any>(value)
     .filter((s) => s && typeof s.id === 'string' && s.joints && Array.isArray(s.bones) && s.base)
-    .map((s) => ({
+    .map((s) => normalizedAnchor({
       ...s,
       tracks: s.tracks ?? {},
       poses: asArray(s.poses),
@@ -251,10 +257,10 @@ export function parseProject(text: string): ProjectState & { missingVideo?: stri
       frames: legacy.frames,
       sticks,
       // Older files stored charts/texts with x/y and a P1→P2 tween: converted to the keyframe model
-      charts: asArray(c.charts).map(migrateChart),
-      texts: asArray(c.texts).map(migrateText),
-      images: asArray(c.images),
-      actors: asArray<ActorOverlay>(c.actors).map(normalizeShape),
+      charts: asArray(c.charts).map(migrateChart).map(normalizedAnchor),
+      texts: asArray(c.texts).map(migrateText).map(normalizedAnchor),
+      images: asArray<import('../types').ImageOverlay>(c.images).map(normalizedAnchor),
+      actors: asArray<ActorOverlay>(c.actors).map(normalizeShape).map(normalizedAnchor),
       paths: asArray(c.paths),
       audio: parseAudio(c.audio),
       markers: parseMarkers(c.markers),

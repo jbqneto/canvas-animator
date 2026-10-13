@@ -31,7 +31,7 @@ export async function executeBridgeCommand(api: BrowserAutomationApi, command: B
     case 'set_playing': flushSync(() => api.setPlaying(command.playing)); return api.getStatus();
     case 'render_frame': return api.renderFrame(command.frame);
     case 'load_project': flushSync(() => api.loadProject(command.file)); return api.getStatus();
-    case 'export_start': return api.startExport({ format: command.format, includeAudio: command.includeAudio, startFrame: command.startFrame, endFrame: command.endFrame });
+    case 'export_start': return api.startExport({ format: command.format, includeAudio: command.includeAudio, startFrame: command.startFrame, endFrame: command.endFrame, motionBlur: command.motionBlur, audioMaster: command.audioMaster });
     case 'export_status': return api.exportStatus();
     case 'export_chunk': return api.exportChunk(command.offset, command.length);
     case 'set_camera': flushSync(() => api.setCamera(command.camera)); return api.getStatus();

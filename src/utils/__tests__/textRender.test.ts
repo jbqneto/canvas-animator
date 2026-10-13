@@ -5,6 +5,7 @@ import { createCanvasStub } from '../../test/canvasStub';
 import { DEFAULT_EFFECTS } from '../../engine/effects';
 import { createShapeActor } from '../../engine/shapes';
 import type { TextOverlay } from '../../types';
+import { resolvedNumerals } from '../fonts';
 
 const scene = (texts: TextOverlay[]): SceneContent => ({
   frames: {}, charts: [], texts, images: [], actors: [], paths: [], layers: [],
@@ -17,6 +18,24 @@ const text = (over: Partial<TextOverlay> = {}) =>
   );
 
 describe('text rendering', () => {
+  it('defaults serif numerals to lining and permits an explicit oldstyle choice', () => {
+    expect(resolvedNumerals(text({ text: '15', fontFamily: 'Cormorant Garamond' }))).toBe('lining');
+    expect(resolvedNumerals(text({ text: '15', fontFamily: 'Fraunces' }))).toBe('lining');
+    expect(resolvedNumerals(text({ text: '15', fontFamily: 'Cormorant Garamond', numerals: 'oldstyle' }))).toBe('oldstyle');
+  });
+
+  it('sets and resets fontVariantNumeric only when the canvas supports it', () => {
+    const supported = createCanvasStub();
+    supported.props.fontVariantNumeric = 'normal';
+    renderCompositeFrame(supported.ctx, 1280, 720, 5, scene([text({ text: '15', fontFamily: 'Cormorant Garamond' })]));
+    expect(supported.calls).toContainEqual({ name: 'set:fontVariantNumeric', args: ['lining-nums'] });
+    expect(supported.calls.filter((call) => call.name === 'set:fontVariantNumeric').at(-1)).toEqual({ name: 'set:fontVariantNumeric', args: ['normal'] });
+
+    const unsupported = createCanvasStub();
+    expect(() => renderCompositeFrame(unsupported.ctx, 1280, 720, 5, scene([text()]))).not.toThrow();
+    expect(unsupported.calls.some((call) => call.name === 'set:fontVariantNumeric')).toBe(false);
+  });
+
   it('uses the default font when no typography is set', () => {
     const { ctx, calls } = createCanvasStub();
     renderCompositeFrame(ctx, 1280, 720, 5, scene([text()]));

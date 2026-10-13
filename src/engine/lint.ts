@@ -1,11 +1,12 @@
 import type { ActorOverlay, ChartOverlay, TextOverlay } from '../types';
-import { sampleActor } from './actor';
+import { anchorPoint, sampleActor } from './actor';
 import { isUsableMaskShape, isValidMaskMode } from './mask';
 import { contrastRatio } from './color';
 import { sampleEffects } from './effects';
 import { textBox } from './overlays';
+import { charWidthEm, fontCss, resolvedNumerals } from '../utils/fonts';
 
-export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text' | 'dead-air' | 'uniform-entrance' | 'mask-missing' | 'mask-span';
+export type LintRule = 'text-too-small' | 'text-empty' | 'beyond-timeline' | 'outside-safe-area' | 'low-contrast' | 'blurred-text' | 'dead-air' | 'uniform-entrance' | 'mask-missing' | 'mask-span' | 'oldstyle-digits' | 'text-overflow';
 
 export interface LintIssue {
   rule: LintRule;
@@ -65,16 +66,45 @@ export function lintScene(input: LintInput, options: LintOptions = {}): LintIssu
   const isLabel = (txt: TextOverlay) => (txt.letterSpacing ?? 0) > 0 && /[A-Z]/.test(txt.text) && txt.text === txt.text.toUpperCase();
   const mx = width * safeMarginRatio;
   const my = height * safeMarginRatio;
+  const measureContext = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
   for (const txt of texts) {
     if (!txt.text.trim() && !txt.isNumberCounter && txt.effect !== 'numberRoll') {
       issues.push({ rule: 'text-empty', severity: 'warning', objectId: txt.id, message: 'Text is empty.' });
       continue;
     }
     const minFont = ((isLabel(txt) ? minLabelPx1080 : minFontPx1080) * scale);
+    const state = sampleActor(txt, Math.round(txt.startFrame + txt.durationFrames / 2));
     if (txt.fontSize < minFont) {
       issues.push({ rule: 'text-too-small', severity: 'warning', objectId: txt.id, message: `Font ${txt.fontSize}px is below ${Math.round(minFont)}px for a ${height}p canvas.` });
     }
-    const state = sampleActor(txt, Math.round(txt.startFrame + txt.durationFrames / 2));
+    if (/[0-9]/.test(txt.text) && (txt.fontFamily === 'Cormorant Garamond' || txt.fontFamily === 'Fraunces') && resolvedNumerals(txt) !== 'lining') {
+      issues.push({ rule: 'oldstyle-digits', severity: 'warning', objectId: txt.id, message: `Text contains digits in ${txt.fontFamily} without lining numerals; set numerals to "lining".` });
+    }
+    let measuredWidth: number;
+    if (measureContext) {
+      measureContext.save();
+      measureContext.font = fontCss(txt, txt.fontSize);
+      measureContext.textAlign = 'left';
+      const supportsLetterSpacing = 'letterSpacing' in measureContext;
+      if (supportsLetterSpacing) (measureContext as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${txt.letterSpacing ?? 0}px`;
+      measuredWidth = measureContext.measureText(txt.text).width;
+      if (!supportsLetterSpacing && txt.text.length > 1) measuredWidth += (txt.text.length - 1) * (txt.letterSpacing ?? 0);
+      measureContext.restore();
+    } else {
+      measuredWidth = txt.text.length * (txt.fontSize * charWidthEm(txt.fontFamily) + (txt.letterSpacing ?? 0));
+    }
+    const localLeft = txt.align === 'center' ? -measuredWidth / 2 : 0;
+    const pivot = anchorPoint(txt, textBox(txt));
+    const cos = Math.cos((state.rotation * Math.PI) / 180);
+    const sin = Math.sin((state.rotation * Math.PI) / 180);
+    const worldX = (x: number, y: number) => state.x + pivot.x + state.scale * ((x - pivot.x) * cos - (y - pivot.y) * sin);
+    const extents = [worldX(localLeft, -txt.fontSize), worldX(localLeft + measuredWidth, -txt.fontSize), worldX(localLeft, 0), worldX(localLeft + measuredWidth, 0)];
+    const measuredLeft = Math.min(...extents);
+    const measuredRight = Math.max(...extents);
+    const renderedWidth = measuredRight - measuredLeft;
+    if (measuredLeft < mx || measuredRight > width - mx) {
+      issues.push({ rule: 'text-overflow', severity: 'warning', objectId: txt.id, message: `Measured text width ${Math.round(renderedWidth)}px exceeds or crosses the ${Math.round(width - 2 * mx)}px safe canvas width.` });
+    }
     const box = textBox(txt);
     const left = state.x + box.x * state.scale;
     const right = state.x + (box.x + box.width) * state.scale;

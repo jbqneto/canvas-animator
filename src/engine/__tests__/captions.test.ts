@@ -191,4 +191,9 @@ now<00:00:01.400><c> talking</c>
     expect(karaokeState({ ...t, karaoke: { wordOffsets: 'x', highlightColor: '#f00' } as any }, 15)).toBeNull();
     expect(karaokeState({ text: 'a', startFrame: 1 }, 5)).toBeNull();
   });
+  it('updates karaoke at fractional sample times', () => {
+    const t = { text: 'one two', startFrame: 1, karaoke: { wordOffsets: [0, 1], highlightColor: '#f00' } };
+    expect(karaokeState(t, 1.9)?.spoken).toBe(1);
+    expect(karaokeState(t, 2)?.spoken).toBe(2);
+  });
 });

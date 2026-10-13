@@ -1901,8 +1901,10 @@ export default function App() {
         format: request.format,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
+        motionBlur: request.motionBlur,
+        audioMaster: request.audioMaster,
         prepareAudio: () => request.includeAudio
-          ? mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal)
+          ? mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal, { duckMusicUnder: request.audioMaster?.duckMusicUnder })
           : Promise.resolve(null),
         openFile: request.directToFile
           ? (extension) => openVideoFile(`${projectName}${request.format === 'webm-alpha' ? '-transparente' : ''}`, extension)
@@ -2007,7 +2009,7 @@ export default function App() {
       });
       return composeContactSheet(urls, frames.map((f) => `#${f}`), layout);
     },
-    exportVideo: async ({ format, includeAudio, startFrame, endFrame, onProgress }) => {
+    exportVideo: async ({ format, includeAudio, startFrame, endFrame, motionBlur, audioMaster, onProgress }) => {
       if (exportControllerRef.current) throw new Error('EXPORT_IN_PROGRESS');
       const controller = new AbortController();
       exportControllerRef.current = controller;
@@ -2015,9 +2017,9 @@ export default function App() {
       try {
         const { blob, extension } = await exportVideoSequence(sceneContent(), {
           totalFrames, fps, width: canvasDimensions.width, height: canvasDimensions.height,
-          onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame,
+          onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame, motionBlur, audioMaster,
           prepareAudio: () => includeAudio
-            ? mixdown(audio, fps, startFrame ?? 1, endFrame ?? totalFrames, 48000, controller.signal)
+            ? mixdown(audio, fps, startFrame ?? 1, endFrame ?? totalFrames, 48000, controller.signal, { duckMusicUnder: audioMaster?.duckMusicUnder })
             : Promise.resolve(null),
         });
         if (!blob) throw new Error('EXPORT_EMPTY');
@@ -2398,6 +2400,8 @@ export default function App() {
         height={canvasDimensions.height}
         hasBackgroundVideo={videoBg.type !== 'color' && !!videoBg.url}
         audibleClips={audio.filter((c) => !c.muted && c.volume > 0).length}
+        hasMusicClip={audio.some((c) => !c.muted && c.kind === 'music')}
+        hasNarrationClip={audio.some((c) => !c.muted && c.kind === 'narration')}
       />
 
       <DocumentPropertiesDialog open={documentPropertiesOpen} onClose={() => setDocumentPropertiesOpen(false)}

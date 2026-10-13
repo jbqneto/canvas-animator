@@ -118,5 +118,6 @@ export function sfxClip(kind: SfxKind, startFrame: number, id: string, name: str
     duration: SFX_SECONDS[kind],
     volume: Math.min(2, Math.max(0, volume)),
     muted: false,
+    kind: 'sfx',
   };
 }

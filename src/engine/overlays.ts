@@ -77,11 +77,12 @@ function migrateMotion(raw: Partial<Animated> & LegacyMotion, offset: Vec2): Ani
       smoothPath: raw.smoothPath ?? true,
       orientToPath: raw.orientToPath ?? false,
       follow: raw.follow,
+      anchor: raw.anchor,
     };
   }
   const x = num(raw.x, 0) + offset.x;
   const y = num(raw.y, 0) + offset.y;
-  const motion: Animated = { startFrame, durationFrames, ...staticMotion(x, y) };
+  const motion: Animated = { startFrame, durationFrames, ...staticMotion(x, y), anchor: raw.anchor };
   if (raw.hasMotionTween && raw.endX !== undefined && raw.endY !== undefined) {
     const position: Track<Vec2> = [
       { frame: startFrame, value: { x, y }, easing: INTRO_TO_KEY_EASING[raw.easing ?? 'easeOut'] ?? 'easeOut' },

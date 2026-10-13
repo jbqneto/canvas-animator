@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { exportVideoSequence, SceneContent, seekVideo } from '../exportVideo';
+import { exportVideoSequence, SceneContent, seekVideo, averageRgbaSubframes, motionBlurSampleFrames } from '../exportVideo';
 
 const encoder = vi.hoisted(() => ({
   target: null as WritableStream | null, mp4Options: null as any,
@@ -45,6 +45,23 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('video export lifecycle', () => {
+  it('averages static RGBA samples without changing their pixels', () => {
+    const staticFrame = new Uint8ClampedArray([20, 40, 80, 128, 255, 100, 0, 255]);
+    expect(averageRgbaSubframes([staticFrame, staticFrame, staticFrame, staticFrame])).toEqual(staticFrame);
+  });
+
+  it('averages moving opaque samples into a translucent trail over the shutter travel', () => {
+    const sample = (left: number) => {
+      const pixels = new Uint8ClampedArray(8 * 4);
+      for (let x = left; x < left + 2; x++) pixels.set([255, 255, 255, 255], x * 4);
+      return pixels;
+    };
+    const blurred = averageRgbaSubframes([sample(0), sample(1), sample(2), sample(3)]);
+    expect(Array.from({ length: 8 }, (_, x) => blurred[x * 4 + 3] > 0)).toEqual([true, true, true, true, true, false, false, false]);
+    expect(blurred[3]).toBe(64);
+    expect(motionBlurSampleFrames(10, { subframes: 4, shutter: 180 })).toEqual([10, 10.125, 10.25, 10.375]);
+  });
+
   it('encodes the requested range with exact timestamps and reports 100 only after finalization', async () => {
     const phases: string[] = [];
     const progress: number[] = [];

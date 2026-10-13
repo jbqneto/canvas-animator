@@ -35,6 +35,11 @@ describe('shakeOffset', () => {
     expect(xs).not.toEqual(ys);
     expect(new Set(xs).size).toBeGreaterThan(10);
   });
+  it('smoothly evaluates a deterministic shake at fractional frames', () => {
+    const a = shakeOffset('motion:position', 18.25, 5, 4);
+    expect(a).toBe(shakeOffset('motion:position', 18.25, 5, 4));
+    expect(a).not.toBe(shakeOffset('motion:position', 18.75, 5, 4));
+  });
   it('is smooth: neighbouring frames are close compared with the amount', () => {
     for (let f = 1; f < 100; f++) expect(Math.abs(shakeOffset('s', f + 1, 10, 8) - shakeOffset('s', f, 10, 8))).toBeLessThan(4);
   });

@@ -50,12 +50,37 @@ describe('actor', () => {
     expect(sampleActor(a, 16).visible).toBe(false);
   });
 
+  it('samples visibility and keyframed transforms at fractional frames', () => {
+    const a = {
+      ...plane(), startFrame: 1, durationFrames: 1,
+      tracks: { position: [{ frame: 1, value: { x: 0, y: 0 }, easing: 'linear' as const }, { frame: 2, value: { x: 10, y: 0 } }] },
+    };
+    expect(sampleActor(a, 1.5).x).toBeCloseTo(5);
+    expect(sampleActor(a, 1.5).visible).toBe(true);
+    expect(sampleActor(a, 2.01).visible).toBe(false);
+  });
+
   it('hit tests in rotated/scaled local space', () => {
     let a = setActorProperty(plane(), 'rotation', 1, 90);
     expect(hitTestActor(a, 1, { x: 0, y: 45 })).toBe(true); // along the rotated long side
     expect(hitTestActor(a, 1, { x: 45, y: 0 })).toBe(false);
     a = setActorProperty(a, 'scale', 1, 2);
     expect(hitTestActor(a, 1, { x: 0, y: 95 })).toBe(true);
+  });
+
+  it('uses a normalized anchor as the scale and rotation pivot', () => {
+    const centered = {
+      ...plane(),
+      base: { ...plane().base, x: 100, y: 100, scale: 0.5 },
+    };
+    const topLeft = { ...centered, anchor: { x: 0, y: 0 } };
+
+    // The legacy centre pivot keeps the centre fixed; its top-left corner moves inward.
+    expect(hitTestActor(centered, 1, { x: 100, y: 100 })).toBe(true);
+    expect(hitTestActor(centered, 1, { x: 50, y: 75 })).toBe(false);
+
+    // With a top-left pivot, that corner is fixed at its resting canvas position.
+    expect(hitTestActor(topLeft, 1, { x: 50, y: 75 })).toBe(true);
   });
 });
 

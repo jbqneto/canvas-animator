@@ -175,6 +175,8 @@ export interface TextOverlay extends Animated {
   typewriterCursor?: boolean;
   /** Extra space between letters, in canvas pixels (0 = none). */
   letterSpacing?: number;
+  /** Numeric glyph style; absent defaults to lining figures for Cormorant Garamond and Fraunces. */
+  numerals?: 'lining' | 'oldstyle' | 'default';
   /** Made by the captions dialog: exported to .srt with the other captions. */
   role?: 'caption';
   /**
@@ -272,6 +274,11 @@ export interface Animated {
   smoothPath: boolean;
   /** Rotate to follow the direction of travel (Flash "Orient to path"). */
   orientToPath: boolean;
+  /**
+   * Normalized local pivot for rotation and scale. Omitted keeps the historical origin for the
+   * concrete object type, so older .fmproj files render exactly as before.
+   */
+  anchor?: { x: number; y: number };
   /**
    * Follow a motion path (Flash "motion guide"): while set, the position comes from the path and
    * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
@@ -383,6 +390,15 @@ export interface AudioClip {
   /** Gain, 0..2 (1 = original level). */
   volume: number;
   muted: boolean;
+  /** Optional mix role for export ducking; omitted preserves the existing unclassified bus. */
+  kind?: 'narration' | 'music' | 'sfx';
+}
+
+/** Optional export loudness target and true-peak ceiling. */
+export interface AudioMasterOptions {
+  targetLufs: number;
+  truePeakDb: number;
+  duckMusicUnder?: 'narration';
 }
 
 /** A named point in time on the timeline (a word, a beat) that edits snap to. */

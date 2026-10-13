@@ -1,6 +1,6 @@
 /** Masks: a shape actor cuts another object. Pure geometry; the renderer applies it with `ctx.clip`. */
 import type { ActorOverlay, Animated, MotionPath } from '../types';
-import { isActorOnScreen, sampleActor, type ActorState } from './actor';
+import { anchorPoint, isActorOnScreen, sampleActor, type ActorState } from './actor';
 import type { Vec2 } from './keyframes';
 import { arrowPolygon, fittedRadius } from './shapes';
 
@@ -77,11 +77,15 @@ export function maskPath(shape: ActorOverlay, state: ActorState): Vec2[][] {
   const rad = (state.rotation * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
+  const pivot = anchorPoint(shape, { x: -shape.width / 2, y: -shape.height / 2, width: shape.width, height: shape.height });
   return [
     localOutline(shape).map((p) => {
-      const x = p.x * sx;
-      const y = p.y * sy;
-      return { x: state.x + x * cos - y * sin, y: state.y + x * sin + y * cos };
+      const x = (p.x - pivot.x) * sx;
+      const y = (p.y - pivot.y) * sy;
+      return {
+        x: state.x + pivot.x + x * cos - y * sin,
+        y: state.y + pivot.y + x * sin + y * cos,
+      };
     }),
   ];
 }

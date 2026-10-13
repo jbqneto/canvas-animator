@@ -91,14 +91,16 @@ export function createFlashmotionMcp(request: ReturnType<typeof createBridgeClie
     return text(await call(windowId, { method: 'load_project', file }));
   }));
   server.registerTool('export_video', {
-    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path. The extension must match the format (.mp4 / .webm); the path must be inside an allowed folder (the project folder, the system temp folder, or one added with --allow-root / FLASHMOTION_MCP_ROOTS); an existing file is only replaced with overwrite=true. The result includes the audio clips of the timeline (narration, music, add_sfx effects) mixed in unless includeAudio=false (a browser that cannot encode the audio leaves it out). Waits until the export finishes (it may take a while for long timelines).',
+    description: 'Render the selected editor timeline (or an inclusive frame range) to MP4 (or transparent WebM with format=webm-alpha) and write it to an absolute path. The extension must match the format (.mp4 / .webm); the path must be inside an allowed folder (the project folder, the system temp folder, or one added with --allow-root / FLASHMOTION_MCP_ROOTS); an existing file is only replaced with overwrite=true. Optional motionBlur {subframes: 1..16, shutter: 0..360} averages fractional-time samples per output frame and increases render time. Optional audioMaster {targetLufs, truePeakDb, duckMusicUnder: "narration"} normalizes loudness and limits true peaks; ducking works on clips tagged Music/Narration. The result includes the audio clips mixed in unless includeAudio=false (a browser that cannot encode the audio leaves it out). Waits until the export finishes (it may take a while for long timelines).',
     inputSchema: { windowId, outputPath: z.string().min(1), format: z.enum(['mp4', 'webm-alpha']).optional(), overwrite: z.boolean().optional(), includeAudio: z.boolean().optional(),
+      motionBlur: z.object({ subframes: z.number().int().min(1).max(16), shutter: z.number().finite().min(0).max(360) }).strict().optional(),
+      audioMaster: z.object({ targetLufs: z.number().finite().min(-36).max(0), truePeakDb: z.number().finite().min(-20).max(0), duckMusicUnder: z.literal('narration').optional() }).strict().optional(),
       startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional() }, annotations: edit,
-  }, safe(async ({ windowId, outputPath, format, overwrite, includeAudio, startFrame, endFrame }) => {
+  }, safe(async ({ windowId, outputPath, format, overwrite, includeAudio, startFrame, endFrame, motionBlur, audioMaster }) => {
     if (!isAbsolute(outputPath)) throw new Error('ABSOLUTE_PATH_REQUIRED');
     // Validate before the (slow) export so a bad path fails fast
     await resolveWritable(outputPath, format ?? 'mp4', roots, overwrite);
-    await call(windowId, { method: 'export_start', format, includeAudio, startFrame, endFrame });
+    await call(windowId, { method: 'export_start', format, includeAudio, startFrame, endFrame, motionBlur, audioMaster });
     let status: any;
     for (;;) {
       await new Promise((r) => setTimeout(r, 1000));

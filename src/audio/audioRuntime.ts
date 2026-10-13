@@ -6,6 +6,7 @@ import type { AudioClip } from '../types';
 import { t } from '../i18n';
 import { clipPlayback, computePeaks, frameTime, PEAKS_PER_SECOND } from '../engine/audio';
 import { throwIfAborted, withAbort } from '../utils/abort';
+import { duckMusic } from './loudness';
 
 let context: AudioContext | null = null;
 
@@ -156,7 +157,8 @@ export async function mixdown(
   firstFrame: number,
   lastFrame: number,
   sampleRate = 48000,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options: { duckMusicUnder?: 'narration' } = {}
 ): Promise<AudioBuffer | null> {
   throwIfAborted(signal);
   const from = frameTime(firstFrame, fps);
@@ -164,20 +166,44 @@ export async function mixdown(
   const audible = clips.filter((c) => !c.muted && c.volume > 0 && clipPlayback(c, fps, from, to));
   if (audible.length === 0) return null;
 
-  const offline = new OfflineAudioContext(2, Math.ceil((to - from) * sampleRate), sampleRate);
-  for (const clip of audible) {
-    const { buffer } = await withAbort(decodeClip(clip), signal);
+  const length = Math.ceil((to - from) * sampleRate);
+  const renderBus = async (bus: AudioClip[]) => {
+    if (!bus.length) return null;
+    const offline = new OfflineAudioContext(2, length, sampleRate);
+    for (const clip of bus) {
+      const { buffer } = await withAbort(decodeClip(clip), signal);
+      throwIfAborted(signal);
+      const p = clipPlayback(clip, fps, from, to);
+      if (!p) continue;
+      const source = offline.createBufferSource();
+      source.buffer = buffer;
+      const gain = offline.createGain();
+      gain.gain.value = clip.volume;
+      source.connect(gain).connect(offline.destination);
+      source.start(p.at, p.offset, p.duration);
+    }
     throwIfAborted(signal);
-    const p = clipPlayback(clip, fps, from, to)!;
-    const source = offline.createBufferSource();
-    source.buffer = buffer;
-    const gain = offline.createGain();
-    gain.gain.value = clip.volume;
-    source.connect(gain).connect(offline.destination);
-    source.start(p.at, p.offset, p.duration);
-  }
+    return withAbort(offline.startRendering(), signal);
+  };
+
+  const music = options.duckMusicUnder ? audible.filter((clip) => clip.kind === 'music') : [];
+  const narration = options.duckMusicUnder ? audible.filter((clip) => clip.kind === 'narration') : [];
+  if (!music.length || !narration.length) return renderBus(audible);
+  const other = audible.filter((clip) => clip.kind !== 'music' && clip.kind !== 'narration');
+  const [musicBus, narrationBus, otherBus] = await Promise.all([renderBus(music), renderBus(narration), renderBus(other)]);
   throwIfAborted(signal);
-  return withAbort(offline.startRendering(), signal);
+  const outCtx = new OfflineAudioContext(2, length, sampleRate);
+  const output = outCtx.createBuffer(2, length, sampleRate);
+  const musicChannels = [0, 1].map((channel) => musicBus!.getChannelData(channel));
+  const narrationChannels = [0, 1].map((channel) => narrationBus!.getChannelData(channel));
+  const ducked = duckMusic(musicChannels, narrationChannels, sampleRate);
+  for (let channel = 0; channel < 2; channel++) {
+    const dest = output.getChannelData(channel);
+    const voice = narrationBus!.getChannelData(channel);
+    const sfx = otherBus?.getChannelData(channel);
+    for (let i = 0; i < length; i++) dest[i] = ducked[channel][i] + voice[i] + (sfx?.[i] ?? 0);
+  }
+  return output;
 }
 
 function readAsDataURL(blob: Blob): Promise<string> {

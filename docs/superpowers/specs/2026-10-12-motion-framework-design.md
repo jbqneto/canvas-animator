@@ -70,14 +70,17 @@ Regra central: **o SDK só produz objetos que a UI sabe editar.** Nada de SVG op
    resposta ao degrau fechada (normalizada para chegar em 1 no próximo key: amostrar `S(tau·k)` e garantir `t=1` no fim).
    Presets nomeados no inspetor: Morph, Rápido, Lento, Suave, Câmera.
 2. [x] **Preset `blurSwap`** em `motionPresets.ts` com os números da `vis()`.
-3. **Pivô por objeto** (`anchor`) para escala/rotação — resolve o caso do ✓ sem precisar de camadas pequenas.
-4. **Motion blur no export**: `export_start({ motionBlur: { subframes: 4, shutter: 180 } })`; o renderer desenha
+3. [x] **Pivô por objeto** (`anchor`) para escala/rotação — resolve o caso do ✓ sem precisar de camadas pequenas.
+4. [x] **Motion blur no export**: `export_start({ motionBlur: { subframes: 4, shutter: 180 } })`; o renderer desenha
    `subframes` amostras em `frame + k·(shutter/360)/subframes` e acumula (float, `lighter` + divisão). Exige que
    `startFrame`/visibilidade, typewriter e karaokê aceitem frame fracionário (o `sampleTrack` já aceita).
-5. **Algarismos alinhados**: `TextOverlay.numerals: 'lining' | 'oldstyle'` (padrão `lining` para serifadas) via
-   `font-variant-numeric`; lint `oldstyle-digits` quando Cormorant/Fraunces mostram dígitos isolados.
-6. **Loudness e ducking no export**: `audio: { targetLufs: -16, truePeak: -1.5, duckMusicUnder: 'narration' }` (dois
-   passes; mesmo padrão do canal).
+5. [x] **Algarismos alinhados**: `TextOverlay.numerals: 'lining' | 'oldstyle' | 'default'` (padrão `lining` para
+   Cormorant/Fraunces) via `font-variant-numeric`; lint `oldstyle-digits` e `text-overflow` medido com Canvas.
+6. [x] **Loudness e ducking no export**: `audioMaster: { targetLufs: -16, truePeakDb: -1.5, duckMusicUnder: 'narration' }`.
+   Módulo puro `src/audio/loudness.ts` (BS.1770/EBU R128, true-peak 4× e limiter); papéis de clipe
+   selecionáveis no inspetor; controles na UI/MCP. Testes geram os sinais Tech 3341 #1, #2, #4 e #5,
+   além de inter-sample peak, teto do limiter e envelope de ducking. A medição/export manual do fixture e
+   custo real de exportação ainda precisam ser coletados no app.
 
 ### F2 — Componentes e marca
 
