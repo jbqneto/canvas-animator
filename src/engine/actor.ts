@@ -153,15 +153,35 @@ export function actorHasKeyAt(actor: Animated, frame: number): boolean {
   return allTracks(actor).some((track) => hasKeyframeAt(track, frame));
 }
 
-/** Converts a canvas point into the actor's local, unscaled/unrotated space (origin = anchor). */
-export function toActorLocal(state: ActorTransform, point: Vec2): Vec2 {
-  const dx = point.x - state.x;
-  const dy = point.y - state.y;
+const clampUnit = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+
+/** The normalized pivot; `fallback` preserves the old local origin for objects without an anchor. */
+export function anchorOf(obj: Pick<Animated, 'anchor'>, fallback: Vec2): Vec2 {
+  return {
+    x: clampUnit(obj.anchor?.x ?? fallback.x),
+    y: clampUnit(obj.anchor?.y ?? fallback.y),
+  };
+}
+
+/** Pixel position of an object's normalized pivot inside its untransformed local bounds. */
+export function anchorPoint(obj: Pick<Animated, 'anchor'>, box: LocalBox): Vec2 {
+  // Every current renderer historically transforms around its local origin; that origin is not
+  // guaranteed to sit inside a stick figure's pose bounds, so omission must bypass normalization.
+  if (!obj.anchor) return { x: 0, y: 0 };
+  const fallback = { x: 0.5, y: 0.5 };
+  const anchor = anchorOf(obj, fallback);
+  return { x: box.x + box.width * anchor.x, y: box.y + box.height * anchor.y };
+}
+
+/** Converts a canvas point into local, unscaled/unrotated object space around its pivot. */
+export function toActorLocal(state: ActorTransform, point: Vec2, pivot: Vec2 = { x: 0, y: 0 }): Vec2 {
+  const dx = point.x - state.x - pivot.x;
+  const dy = point.y - state.y - pivot.y;
   const rad = (-state.rotation * Math.PI) / 180;
   const s = state.scale || 1e-6;
   return {
-    x: (dx * Math.cos(rad) - dy * Math.sin(rad)) / s,
-    y: (dx * Math.sin(rad) + dy * Math.cos(rad)) / s,
+    x: pivot.x + (dx * Math.cos(rad) - dy * Math.sin(rad)) / s,
+    y: pivot.y + (dx * Math.sin(rad) + dy * Math.cos(rad)) / s,
   };
 }
 
@@ -174,8 +194,7 @@ export function hitTestActor(
 ): boolean {
   const state = sampleActor(actor, frame, paths);
   if (!state.visible) return false;
-  const local = toActorLocal(state, point);
-  return Math.abs(local.x) <= actor.width / 2 + padding && Math.abs(local.y) <= actor.height / 2 + padding;
+  return hitTestBox(actor, { x: -actor.width / 2, y: -actor.height / 2, width: actor.width, height: actor.height }, frame, point, paths, padding);
 }
 
 export function createActor(params: {
@@ -279,7 +298,7 @@ export function hitTestBox(
 ): boolean {
   const state = sampleActor(obj, frame, paths);
   if (!state.visible) return false;
-  const local = toActorLocal(state, point);
+  const local = toActorLocal(state, point, anchorPoint(obj, box));
   return (
     local.x >= box.x - padding &&
     local.x <= box.x + box.width + padding &&

@@ -57,6 +57,21 @@ describe('actor', () => {
     a = setActorProperty(a, 'scale', 1, 2);
     expect(hitTestActor(a, 1, { x: 0, y: 95 })).toBe(true);
   });
+
+  it('uses a normalized anchor as the scale and rotation pivot', () => {
+    const centered = {
+      ...plane(),
+      base: { ...plane().base, x: 100, y: 100, scale: 0.5 },
+    };
+    const topLeft = { ...centered, anchor: { x: 0, y: 0 } };
+
+    // The legacy centre pivot keeps the centre fixed; its top-left corner moves inward.
+    expect(hitTestActor(centered, 1, { x: 100, y: 100 })).toBe(true);
+    expect(hitTestActor(centered, 1, { x: 50, y: 75 })).toBe(false);
+
+    // With a top-left pivot, that corner is fixed at its resting canvas position.
+    expect(hitTestActor(topLeft, 1, { x: 50, y: 75 })).toBe(true);
+  });
 });
 
 describe('actor timing', () => {

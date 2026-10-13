@@ -65,6 +65,11 @@ describe('maskPath', () => {
     const [plain] = maskPath(shape('p', 'arrow'), sampleActor(shape('p', 'arrow'), 5));
     expect(fc[0].x).toBeCloseTo(400 - plain[0].x, 5);
   });
+  it('keeps a custom normalized pivot fixed while scaling a mask', () => {
+    const m = shape('m', 'rect', { anchor: { x: 0, y: 0 } });
+    const [c] = maskPath(m, { ...sampleActor(m, 5), scale: 2 });
+    expect(c[0]).toEqual({ x: 150, y: 75 });
+  });
   it('uses a dense polygon for ellipses and rounded corners, never NaN', () => {
     const e = shape('e', 'ellipse');
     expect(maskPath(e, sampleActor(e, 5))[0].length).toBeGreaterThanOrEqual(48);

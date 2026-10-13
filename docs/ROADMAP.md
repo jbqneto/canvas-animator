@@ -156,10 +156,11 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   centrípeta, velocidade constante por comprimento de arco), `pathPolyline` para desenhar a guia. Novos keys usam
   `DEFAULT_EASING`.
 - Objetos animados: `Animated` (`types.ts`) = intervalo + `base` + `tracks` + `smoothPath`/`orientToPath` +
-  `follow`. `ActorOverlay`, `ChartOverlay` e `TextOverlay` estendem `Animated`; as funções de
+  `follow` e `anchor?: {x,y}` (pivô local normalizado; ausente mantém a origem histórica). `ActorOverlay`,
+  `ChartOverlay` e `TextOverlay` estendem `Animated`; as funções de
   `engine/actor.ts` são genéricas (`<T extends Animated>`, devolvem o mesmo tipo). Âncora: centro da imagem
   (ator), centro do cartão (gráfico), início da linha de base (texto). O renderer aplica
-  translate→rotate→scale→opacity e depois desenha o conteúdo; a "entrada" do gráfico/texto (crescer,
+  translate→pivô→rotate/scale→deslocamento inverso do pivô→opacity e depois desenha o conteúdo; a "entrada" do gráfico/texto (crescer,
   máquina de escrever, contador) continua em `animationType`/`effect` + `easing`/`animDurationFrames`.
   Caixas locais para seleção/hit test: `chartBox`/`textBox` (`engine/overlays.ts`), `hitTestBox`.
   Criação: `createChart(conteúdo, centro)`, `createText(conteúdo, âncora)`. Arquivos antigos

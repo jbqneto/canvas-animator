@@ -273,6 +273,11 @@ export interface Animated {
   /** Rotate to follow the direction of travel (Flash "Orient to path"). */
   orientToPath: boolean;
   /**
+   * Normalized local pivot for rotation and scale. Omitted keeps the historical origin for the
+   * concrete object type, so older .fmproj files render exactly as before.
+   */
+  anchor?: { x: number; y: number };
+  /**
    * Follow a motion path (Flash "motion guide"): while set, the position comes from the path and
    * `progress` (0 = first point, 1 = last point) is keyframed like any other property.
    */

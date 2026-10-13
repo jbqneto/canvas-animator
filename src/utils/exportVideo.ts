@@ -15,10 +15,11 @@ import {
   StickActor,
   SceneCamera,
 } from '../types';
-import { sampleActor, trailPoints } from '../engine/actor';
+import { anchorPoint, sampleActor, trailPoints, type LocalBox } from '../engine/actor';
 import { applyCamera, isIdentityCamera, parallaxOf, sampleCamera, scaleCamera } from '../engine/camera';
 import { arrowPolygon, fittedRadius } from '../engine/shapes';
-import { localFigure, samplePose } from '../engine/stickActor';
+import { localFigure, poseBox, samplePose } from '../engine/stickActor';
+import { chartBox, textBox } from '../engine/overlays';
 import { polylineUpTo, samplePath } from '../engine/path';
 import { sampleTrack, Vec2 } from '../engine/keyframes';
 import { t } from '../i18n';
@@ -236,14 +237,17 @@ export function renderCompositeFrame(
     add(stroke.groupId, 'drawing', FRONT, () => drawStroke(ctx, stroke));
   });
   // Charts and texts: the same keyframed transform as actors, then their own intro inside it
-  const withTransform = (obj: Animated & { id?: string }, draw: (c: CanvasRenderingContext2D) => void) => {
+  const withTransform = (obj: Animated & { id?: string }, box: LocalBox, draw: (c: CanvasRenderingContext2D) => void) => {
     const state = sampleActor(obj, currentFrame, paths, fps);
     if (!state.visible || state.opacity <= 0) return null;
     const fx = sampleEffects(obj, currentFrame, fps);
     const place = (c: CanvasRenderingContext2D) => {
       c.translate(state.x, state.y);
+      const pivot = anchorPoint(obj, box);
+      c.translate(pivot.x, pivot.y);
       c.rotate((state.rotation * Math.PI) / 180);
       c.scale(state.scale, state.scale);
+      c.translate(-pivot.x, -pivot.y);
     };
     return masked(obj, () => {
       if (hasActiveEffects(fx)) {
@@ -260,17 +264,18 @@ export function renderCompositeFrame(
   // Stick figures: the pose is drawn in the figure's own space, inside its animated transform.
   // Without a layer of their own they follow the drawings layer, as before.
   scene.sticks?.forEach((stick) => {
-    const draw = withTransform(stick, (c) => drawStickFigure(c, localFigure(stick, samplePose(stick, currentFrame, fps))));
+    const pose = samplePose(stick, currentFrame, fps);
+    const draw = withTransform(stick, poseBox(stick, currentFrame), (c) => drawStickFigure(c, localFigure(stick, pose)));
     if (draw) add(stick.id, 'drawing', FRONT, draw, parallaxOf(stick));
   });
   charts.forEach((chart) => {
     if (!chart.visible) return;
-    const draw = withTransform(chart, (c) => drawChart(c, chart, currentFrame));
+    const draw = withTransform(chart, chartBox(chart), (c) => drawChart(c, chart, currentFrame));
     if (draw) add(chart.id, 'chart', FRONT, draw, parallaxOf(chart));
   });
   texts.forEach((txt) => {
     if (!txt.visible) return;
-    const draw = withTransform(txt, (c) => drawText(c, txt, currentFrame, effectRate));
+    const draw = withTransform(txt, textBox(txt), (c) => drawText(c, txt, currentFrame, effectRate));
     if (draw) add(txt.id, 'text', FRONT, draw, parallaxOf(txt));
   });
 
@@ -365,8 +370,11 @@ function drawActorBody(ctx: CanvasRenderingContext2D, actor: ActorOverlay, state
   ctx.save();
   ctx.globalAlpha = state.opacity;
   ctx.translate(state.x, state.y);
+  const pivot = anchorPoint(actor, { x: -actor.width / 2, y: -actor.height / 2, width: actor.width, height: actor.height });
+  ctx.translate(pivot.x, pivot.y);
   ctx.rotate((state.rotation * Math.PI) / 180);
   ctx.scale(state.scale * (actor.flipX ? -1 : 1), state.scale);
+  ctx.translate(-pivot.x, -pivot.y);
   if (actor.kind === 'shape' && actor.shape) {
     const frames = actor.shape.strokeWidth > 0 || actor.shape.type === 'line' ? validDrawFrames(actor.shape.draw) : 0;
     const reveal = frames

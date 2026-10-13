@@ -74,7 +74,7 @@ instalação e autosave. Não configure a ponte para uma interface de rede públ
 | `list_windows` | Nenhum | Janelas conectadas, IDs e estado atualizado a cada 2 s. |
 | `get_status` | `windowId` | Estado atual: frame, FPS, duração, alterações, reprodução, recuperação e exportação. |
 | `get_project` | `windowId` | `{ file, revision }`: JSON `.fmproj` e revisão SHA-256 do conteúdo. |
-| `replace_content` | `windowId`, `content`, `expectedRevision` | Substitui o conteúdo como um passo desfazível, retornando o estado após o commit de React. |
+| `replace_content` | `windowId`, `content`, `expectedRevision` | Substitui o conteúdo como um passo desfazível, retornando o estado após o commit de React. Objetos animados podem ter `anchor: {x, y}` normalizado (0–1), pivô de rotação/escala; ausente preserva o pivô histórico. |
 | `seek` | `windowId`, `frame` | Pausa e move o cursor; frames inteiros de 1 até `totalFrames`. |
 | `set_playing` | `windowId`, `playing` | Inicia/pausa a reprodução. |
 | `render_frame` | `windowId`, `frame` | Imagem PNG nativa do MCP, sem grade ou seleção do editor. |

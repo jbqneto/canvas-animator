@@ -38,6 +38,19 @@ describe('project file', () => {
     expect(parsed.content.frames[1].frameNumber).toBe(1);
   });
 
+  it('preserves normalized pivots from replaceable project content and clamps invalid ranges', () => {
+    const raw = JSON.stringify({
+      format: 'flashmotion-project', version: 1,
+      project: { content: {
+        actors: [{ ...state().content.actors[0], anchor: { x: 0.95, y: 0.7 } }],
+        charts: [{ id: 'c', base: { x: 0, y: 0 }, anchor: { x: 2, y: -1 } }],
+      } },
+    });
+    const parsed = parseProject(raw);
+    expect(parsed.content.actors[0].anchor).toEqual({ x: 0.95, y: 0.7 });
+    expect(parsed.content.charts[0].anchor).toEqual({ x: 1, y: 0 });
+  });
+
   it('never stores session-only video URLs and reports the missing video', () => {
     const text = serializeProject(state(), 'aula.mp4');
     expect(text).not.toContain('blob:abc');

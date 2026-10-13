@@ -59,6 +59,12 @@ const PROPS: { id: ActorProperty; labelKey: MessageKey }[] = [
   { id: 'opacity', labelKey: 'actor.prop.opacity' },
 ];
 
+const ANCHORS = [
+  ['topLeft', 0, 0], ['top', 0.5, 0], ['topRight', 1, 0],
+  ['left', 0, 0.5], ['center', 0.5, 0.5], ['right', 1, 0.5],
+  ['bottomLeft', 0, 1], ['bottom', 0.5, 1], ['bottomRight', 1, 1],
+] as const;
+
 export const motionInputClass =
   'w-full bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 text-xs font-mono text-white focus:border-orange-500 outline-none';
 
@@ -292,6 +298,30 @@ export const MotionInspector = <T extends MotionObject>({
       </div>
 
       <ParallaxField obj={obj} onChange={onChange} />
+
+      <div className="space-y-1.5" data-motion-anchor>
+        <span className="text-[10px] font-semibold text-neutral-300 uppercase tracking-wider block">
+          {t('actor.anchor')}
+        </span>
+        <div className="grid grid-cols-3 gap-1 w-[74px]">
+          {ANCHORS.map(([name, x, y]) => {
+            const selected = !!obj.anchor && obj.anchor.x === x && obj.anchor.y === y;
+            return (
+              <button
+                key={name}
+                type="button"
+                title={t(`actor.anchor.${name}`)}
+                aria-label={t(`actor.anchor.${name}`)}
+                aria-pressed={selected}
+                onClick={() => onChange({ ...obj, anchor: { x, y } }, t('actor.history.anchor'))}
+                className={`h-5 rounded border ${selected ? 'border-orange-400 bg-orange-500/30' : 'border-neutral-700 bg-neutral-900 hover:border-neutral-500'}`}
+              >
+                <span className="block mx-auto h-1.5 w-1.5 rounded-full bg-neutral-200" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <ModifiersSection obj={obj} onChange={onChange} />
 
