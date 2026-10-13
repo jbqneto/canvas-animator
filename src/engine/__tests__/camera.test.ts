@@ -16,6 +16,10 @@ describe('sampleCamera', () => {
     expect(sampleCamera(cam, 101).zoom).toBeCloseTo(1.2);
     expect(sampleCamera(cam, 500).zoom).toBeCloseTo(1.2);
   });
+  it('samples camera transforms at fractional frames', () => {
+    const cam = addCameraMove(undefined, { property: 'panX', from: 0, to: 10, startFrame: 1, endFrame: 3, easing: 'linear' });
+    expect(sampleCamera(cam, 1.5).panX).toBeCloseTo(2.5);
+  });
   it('limits absurd zoom values', () => {
     expect(clampZoom(0)).toBe(0.05);
     expect(clampZoom(-4)).toBe(0.05);

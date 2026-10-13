@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supportsFileSystemAccess } from '../project/fileAccess';
 import { Download, Film, Layers, Loader2, X } from 'lucide-react';
-import type { ExportFormat, ExportPhase } from '../utils/exportVideo';
+import type { ExportFormat, ExportPhase, MotionBlurOptions } from '../utils/exportVideo';
 import { MessageKey, useI18n } from '../i18n';
 
 export interface ExportRequest {
@@ -10,6 +10,7 @@ export interface ExportRequest {
   endFrame: number;
   includeAudio: boolean;
   directToFile?: boolean;
+  motionBlur?: MotionBlurOptions;
 }
 
 interface ExportDialogProps {
@@ -60,6 +61,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [directToFile, setDirectToFile] = useState(false);
   const [startFrame, setStartFrame] = useState(1);
   const [endFrame, setEndFrame] = useState(totalFrames);
+  const [motionBlurEnabled, setMotionBlurEnabled] = useState(false);
+  const [motionBlurSubframes, setMotionBlurSubframes] = useState(4);
+  const [motionBlurShutter, setMotionBlurShutter] = useState(180);
 
   // Keep the range valid when the timeline length changes; a range that ended at the end of the
   // timeline keeps doing so (importing a long narration grows the timeline)
@@ -167,6 +171,27 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </label>
         )}
 
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-neutral-300 cursor-pointer">
+            <input type="checkbox" checked={motionBlurEnabled} disabled={isExporting}
+              onChange={(e) => setMotionBlurEnabled(e.target.checked)} className="accent-sky-500" />
+            <span>{t('export.motionBlur')}</span>
+          </label>
+          {motionBlurEnabled && <div className="flex items-center gap-3 pl-6 text-neutral-400">
+            <label className="flex items-center gap-1">{t('export.motionBlurSubframes')}
+              <input type="number" min={1} max={16} step={1} value={motionBlurSubframes} disabled={isExporting}
+                onChange={(e) => setMotionBlurSubframes(Math.max(1, Math.min(16, Math.round(Number(e.target.value) || 1))))}
+                className="w-12 bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 font-mono text-white" />
+            </label>
+            <label className="flex items-center gap-1">{t('export.motionBlurShutter')}
+              <input type="number" min={0} max={360} step={10} value={motionBlurShutter} disabled={isExporting}
+                onChange={(e) => setMotionBlurShutter(Math.max(0, Math.min(360, Number(e.target.value) || 0)))}
+                className="w-14 bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 font-mono text-white" />°
+            </label>
+          </div>}
+          <p className="pl-6 text-[10px] text-neutral-500">{t('export.motionBlurHint')}</p>
+        </div>
+
         {supportsFileSystemAccess() && (
           <label className="flex items-start gap-2 text-neutral-300 cursor-pointer">
             <input type="checkbox" checked={directToFile} disabled={isExporting}
@@ -193,7 +218,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </div>
         ) : (
           <button
-            onClick={() => onExport({ directToFile: directToFile && supportsFileSystemAccess(), format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format] })}
+            onClick={() => onExport({ directToFile: directToFile && supportsFileSystemAccess(), format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format], motionBlur: motionBlurEnabled ? { subframes: motionBlurSubframes, shutter: motionBlurShutter } : undefined })}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
           >
             <Download size={15} /> {format === 'mp4' ? t('export.buttonMp4') : t('export.buttonAlpha')}

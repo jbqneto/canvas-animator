@@ -49,6 +49,9 @@ describe('add_sfx command', () => {
   });
   it('export_start takes includeAudio', () => {
     expect(commandSchema.parse({ method: 'export_start', includeAudio: false })).toBeTruthy();
+    expect(commandSchema.parse({ method: 'export_start', motionBlur: { subframes: 4, shutter: 180 } })).toBeTruthy();
     expect(() => commandSchema.parse({ method: 'export_start', includeAudio: 'no' })).toThrow();
+    expect(() => commandSchema.parse({ method: 'export_start', motionBlur: { subframes: 17, shutter: 180 } })).toThrow();
+    expect(() => commandSchema.parse({ method: 'export_start', motionBlur: { subframes: 4, shutter: 361 } })).toThrow();
   });
 });

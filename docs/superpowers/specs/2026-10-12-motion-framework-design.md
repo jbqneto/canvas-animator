@@ -71,7 +71,7 @@ Regra central: **o SDK só produz objetos que a UI sabe editar.** Nada de SVG op
    Presets nomeados no inspetor: Morph, Rápido, Lento, Suave, Câmera.
 2. [x] **Preset `blurSwap`** em `motionPresets.ts` com os números da `vis()`.
 3. [x] **Pivô por objeto** (`anchor`) para escala/rotação — resolve o caso do ✓ sem precisar de camadas pequenas.
-4. **Motion blur no export**: `export_start({ motionBlur: { subframes: 4, shutter: 180 } })`; o renderer desenha
+4. [x] **Motion blur no export**: `export_start({ motionBlur: { subframes: 4, shutter: 180 } })`; o renderer desenha
    `subframes` amostras em `frame + k·(shutter/360)/subframes` e acumula (float, `lighter` + divisão). Exige que
    `startFrame`/visibilidade, typewriter e karaokê aceitem frame fracionário (o `sampleTrack` já aceita).
 5. **Algarismos alinhados**: `TextOverlay.numerals: 'lining' | 'oldstyle'` (padrão `lining` para serifadas) via

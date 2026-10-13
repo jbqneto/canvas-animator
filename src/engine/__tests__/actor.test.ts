@@ -50,6 +50,16 @@ describe('actor', () => {
     expect(sampleActor(a, 16).visible).toBe(false);
   });
 
+  it('samples visibility and keyframed transforms at fractional frames', () => {
+    const a = {
+      ...plane(), startFrame: 1, durationFrames: 1,
+      tracks: { position: [{ frame: 1, value: { x: 0, y: 0 }, easing: 'linear' as const }, { frame: 2, value: { x: 10, y: 0 } }] },
+    };
+    expect(sampleActor(a, 1.5).x).toBeCloseTo(5);
+    expect(sampleActor(a, 1.5).visible).toBe(true);
+    expect(sampleActor(a, 2.01).visible).toBe(false);
+  });
+
   it('hit tests in rotated/scaled local space', () => {
     let a = setActorProperty(plane(), 'rotation', 1, 90);
     expect(hitTestActor(a, 1, { x: 0, y: 45 })).toBe(true); // along the rotated long side

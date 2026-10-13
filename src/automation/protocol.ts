@@ -6,6 +6,7 @@ import { SFX_KINDS, type SfxKind } from '../audio/synth';
 export const MAX_BRIDGE_BYTES = 50 * 1024 * 1024;
 const easingSchema = z.enum(EASING_NAMES as [EasingName, ...EasingName[]]);
 const springParamsSchema = z.object({ w: z.number().finite().positive(), z: z.number().finite().min(0) }).strict();
+const motionBlurSchema = z.object({ subframes: z.number().int().min(1).max(16), shutter: z.number().finite().min(0).max(360) }).strict();
 const keysSchema = z
   .array(z.object({ frame: z.number().int().min(1), value: z.number().finite(), easing: easingSchema.optional(), springParams: springParamsSchema.optional() }).strict())
   .max(500);
@@ -40,7 +41,7 @@ export const commandSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('render_frame'), frame: z.number().int().min(1) }).strict(),
   z.object({ method: z.literal('load_project'), file: z.string().min(2).max(45 * 1024 * 1024) }).strict(),
   z.object({ method: z.literal('export_start'), format: z.enum(['mp4', 'webm-alpha']).optional(), includeAudio: z.boolean().optional(),
-    startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional() }).strict(),
+    startFrame: z.number().int().min(1).optional(), endFrame: z.number().int().min(1).optional(), motionBlur: motionBlurSchema.optional() }).strict(),
   z.object({ method: z.literal('export_status') }).strict(),
   z.object({ method: z.literal('export_chunk'), offset: z.number().int().min(0), length: z.number().int().min(1).max(16 * 1024 * 1024) }).strict(),
   z.object({ method: z.literal('set_camera'), camera: cameraSchema.nullable() }).strict(),

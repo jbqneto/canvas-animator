@@ -148,6 +148,11 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   Listeners de janela devem ler `getCurrentSnapshot()`, nunca props capturadas.
 - Tempo: quadros começam em 1. `videoTimeForFrame(frame, fps, duration)`.
 - Export: WebCodecs via mediabunny (lazy import), timestamps explícitos.
+- Motion blur opcional no export (`motionBlur: {subframes, shutter}`): `renderMotionBlurredFrame` chama
+  exclusivamente `renderCompositeFrame` em amostras fracionárias e calcula a média RGBA em espaço premultiplicado;
+  ausente mantém o render antigo. Limites: 1–16 subquadros, obturador 0–360°. O custo cresce aproximadamente com
+  o número de amostras. A medição com o fixture Mirabilia permanece pendente: o navegador local bloqueou
+  `localhost:3000` por uma preferência de segurança salva durante esta sessão.
 - Keyframes (`src/engine/keyframes.ts`): `Track<T> = Keyframe<T>[]` ordenado; easing do key vale para o
   segmento que COMEÇA nele; clamp antes/depois. Além dos easings geométricos, `spring` é uma resposta ao degrau
   fechada e sem estado, com `springParams?: { w, z }` por key (Morph `{15, .84}` quando omitido), normalizada

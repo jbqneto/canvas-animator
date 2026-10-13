@@ -71,6 +71,104 @@ export interface RenderOptions {
   showMasks?: boolean;
 }
 
+export interface MotionBlurOptions {
+  subframes: number;
+  shutter: number;
+}
+
+const clampMotionBlur = (options: MotionBlurOptions): MotionBlurOptions => ({
+  subframes: Math.max(1, Math.min(16, Math.round(Number.isFinite(options.subframes) ? options.subframes : 1))),
+  shutter: Math.max(0, Math.min(360, Number.isFinite(options.shutter) ? options.shutter : 180)),
+});
+
+export function motionBlurSampleFrames(frame: number, rawOptions: MotionBlurOptions): number[] {
+  const options = clampMotionBlur(rawOptions);
+  const step = (options.shutter / 360) / options.subframes;
+  return Array.from({ length: options.subframes }, (_, k) => frame + k * step);
+}
+
+/** Average unpremultiplied ImageData samples through premultiplied color to preserve correct alpha. */
+export function averageRgbaSubframes(samples: Uint8ClampedArray[]): Uint8ClampedArray {
+  if (!samples.length || samples.some((sample) => sample.length !== samples[0].length || sample.length % 4 !== 0)) {
+    throw new Error('INVALID_MOTION_BLUR_SAMPLES');
+  }
+  const result = new Uint8ClampedArray(samples[0].length);
+  const n = samples.length;
+  for (let i = 0; i < result.length; i += 4) {
+    let alpha = 0;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    for (const sample of samples) {
+      const a = sample[i + 3];
+      alpha += a;
+      red += sample[i] * a;
+      green += sample[i + 1] * a;
+      blue += sample[i + 2] * a;
+    }
+    result[i + 3] = alpha / n;
+    if (alpha > 0) {
+      result[i] = red / alpha;
+      result[i + 1] = green / alpha;
+      result[i + 2] = blue / alpha;
+    }
+  }
+  return result;
+}
+
+const motionBlurCanvases = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
+/** Renders and averages sub-frame samples through the single scene renderer. */
+export function renderMotionBlurredFrame(
+  canvas: HTMLCanvasElement,
+  frame: number,
+  scene: SceneContent,
+  rawOptions: MotionBlurOptions,
+  renderOptions: RenderOptions = {}
+): void {
+  const options = clampMotionBlur(rawOptions);
+  let sampleCanvas = motionBlurCanvases.get(canvas);
+  if (!sampleCanvas) {
+    sampleCanvas = document.createElement('canvas');
+    motionBlurCanvases.set(canvas, sampleCanvas);
+  }
+  if (sampleCanvas.width !== canvas.width) sampleCanvas.width = canvas.width;
+  if (sampleCanvas.height !== canvas.height) sampleCanvas.height = canvas.height;
+  const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+  const outputCtx = canvas.getContext('2d');
+  if (!sampleCtx || !outputCtx) throw new Error('MOTION_BLUR_CANVAS_UNAVAILABLE');
+  const pixelCount = canvas.width * canvas.height;
+  const premultiplied = new Uint32Array(pixelCount * 3);
+  const alpha = new Uint16Array(pixelCount);
+  motionBlurSampleFrames(frame, options).forEach((sampleFrame) => {
+    renderCompositeFrame(sampleCtx, canvas.width, canvas.height, sampleFrame, scene, renderOptions);
+    const pixels = sampleCtx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let p = 0; p < pixelCount; p++) {
+      const i = p * 4;
+      const a = pixels[i + 3];
+      alpha[p] += a;
+      const j = p * 3;
+      premultiplied[j] += pixels[i] * a;
+      premultiplied[j + 1] += pixels[i + 1] * a;
+      premultiplied[j + 2] += pixels[i + 2] * a;
+    }
+  });
+  const image = outputCtx.createImageData(canvas.width, canvas.height);
+  const n = options.subframes;
+  for (let p = 0; p < pixelCount; p++) {
+    const i = p * 4;
+    const a = alpha[p];
+    image.data[i + 3] = a / n;
+    if (a > 0) {
+      const j = p * 3;
+      image.data[i] = premultiplied[j] / a;
+      image.data[i + 1] = premultiplied[j + 1] / a;
+      image.data[i + 2] = premultiplied[j + 2] / a;
+    }
+  }
+  outputCtx.putImageData(image, 0, 0);
+}
+
 /**
  * An object belongs to the layer that targets it; otherwise to the first layer of its type.
  * Shared by the renderer (order/visibility) and the stage (lock/visibility on hit-testing).
@@ -102,7 +200,8 @@ export function renderCompositeFrame(
 ) {
   const { charts, texts, images, actors, paths, videoBg, videoElement, layers } = scene;
   const fps = scene.fps ?? EFFECT_FPS;
-  const frameData = scene.frames[currentFrame];
+  // Sub-frame samples reuse the drawings/strokes of their containing timeline frame.
+  const frameData = scene.frames[Math.floor(currentFrame)];
   const effectRate = EFFECT_FPS / (scene.fps ?? EFFECT_FPS);
   ctx.save();
   ctx.clearRect(0, 0, width, height);
@@ -1018,6 +1117,8 @@ export async function exportVideoSequence(
     /** Inclusive frame range; defaults to the whole timeline. */
     startFrame?: number;
     endFrame?: number;
+    /** Temporal samples per output frame; omitted leaves legacy rendering untouched. */
+    motionBlur?: MotionBlurOptions;
     /** Sound for the exported range (already mixed and exactly as long as it). */
     audio?: AudioBuffer | null;
     /** Prepare audio after choosing the destination, while the picker still has user activation. */
@@ -1108,7 +1209,8 @@ export async function exportVideoSequence(
           await seekVideo(video, videoTimeForFrame(f, fps, video.duration), 3000, signal);
         }
 
-        renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
+        if (options.motionBlur) renderMotionBlurredFrame(exportCanvas, f, { ...scene, videoElement: video }, options.motionBlur, { transparent });
+        else renderCompositeFrame(ctx, width, height, f, { ...scene, videoElement: video }, { transparent });
         await withAbort(source.add((f - first) * frameDuration, frameDuration), signal);
 
         if (onProgress) {

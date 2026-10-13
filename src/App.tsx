@@ -1901,6 +1901,7 @@ export default function App() {
         format: request.format,
         startFrame: request.startFrame,
         endFrame: request.endFrame,
+        motionBlur: request.motionBlur,
         prepareAudio: () => request.includeAudio
           ? mixdown(audio, fps, request.startFrame, request.endFrame, 48000, controller.signal)
           : Promise.resolve(null),
@@ -2007,7 +2008,7 @@ export default function App() {
       });
       return composeContactSheet(urls, frames.map((f) => `#${f}`), layout);
     },
-    exportVideo: async ({ format, includeAudio, startFrame, endFrame, onProgress }) => {
+    exportVideo: async ({ format, includeAudio, startFrame, endFrame, motionBlur, onProgress }) => {
       if (exportControllerRef.current) throw new Error('EXPORT_IN_PROGRESS');
       const controller = new AbortController();
       exportControllerRef.current = controller;
@@ -2015,7 +2016,7 @@ export default function App() {
       try {
         const { blob, extension } = await exportVideoSequence(sceneContent(), {
           totalFrames, fps, width: canvasDimensions.width, height: canvasDimensions.height,
-          onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame,
+          onProgress: (p) => { setExportProgress(p); onProgress(p); }, signal: controller.signal, format, startFrame, endFrame, motionBlur,
           prepareAudio: () => includeAudio
             ? mixdown(audio, fps, startFrame ?? 1, endFrame ?? totalFrames, 48000, controller.signal)
             : Promise.resolve(null),
