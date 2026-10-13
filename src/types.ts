@@ -390,6 +390,15 @@ export interface AudioClip {
   /** Gain, 0..2 (1 = original level). */
   volume: number;
   muted: boolean;
+  /** Optional mix role for export ducking; omitted preserves the existing unclassified bus. */
+  kind?: 'narration' | 'music' | 'sfx';
+}
+
+/** Optional export loudness target and true-peak ceiling. */
+export interface AudioMasterOptions {
+  targetLufs: number;
+  truePeakDb: number;
+  duckMusicUnder?: 'narration';
 }
 
 /** A named point in time on the timeline (a word, a beat) that edits snap to. */

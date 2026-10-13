@@ -9,6 +9,7 @@ import { sfxClip, SFX_KINDS, type SfxKind } from '../audio/synth';
 import { DEFAULT_EFFECTS, EFFECT_PROPS } from '../engine/effects';
 import type { EffectProp } from '../types';
 import type { MotionBlurOptions } from '../utils/exportVideo';
+import type { AudioMasterOptions } from '../types';
 
 export interface AutomationStatus {
   name: string;
@@ -33,7 +34,7 @@ export interface AutomationAdapter {
   /** Render the given frames into one labeled PNG grid (data URL). */
   contactSheet(frames: number[], options: { columns: number; cellWidth: number }): Promise<string>;
   /** Render the timeline (or a range) to a video file without the export dialog. */
-  exportVideo(options: { format: 'mp4' | 'webm-alpha'; includeAudio?: boolean; startFrame?: number; endFrame?: number; motionBlur?: MotionBlurOptions; onProgress: (p: number) => void }): Promise<{ blob: Blob; extension: string }>;
+  exportVideo(options: { format: 'mp4' | 'webm-alpha'; includeAudio?: boolean; startFrame?: number; endFrame?: number; motionBlur?: MotionBlurOptions; audioMaster?: AudioMasterOptions; onProgress: (p: number) => void }): Promise<{ blob: Blob; extension: string }>;
 }
 
 export interface ExportJob {
@@ -209,12 +210,12 @@ export function createBrowserApi(adapter: AutomationAdapter) {
       adapter.loadProject(text);
     },
     /** Starts a background export; poll exportStatus, then read the bytes with exportChunk. */
-    startExport: (options: { format?: 'mp4' | 'webm-alpha'; includeAudio?: boolean; startFrame?: number; endFrame?: number; motionBlur?: MotionBlurOptions } = {}) => {
+    startExport: (options: { format?: 'mp4' | 'webm-alpha'; includeAudio?: boolean; startFrame?: number; endFrame?: number; motionBlur?: MotionBlurOptions; audioMaster?: AudioMasterOptions } = {}) => {
       assertReady();
       if (job?.state === 'running') throw new Error('EXPORT_IN_PROGRESS');
       const current: ExportJob = { id: crypto.randomUUID(), state: 'running', progress: 0 };
       job = current; jobBytes = null;
-      adapter.exportVideo({ format: options.format ?? 'mp4', includeAudio: options.includeAudio ?? true, startFrame: options.startFrame, endFrame: options.endFrame, motionBlur: options.motionBlur,
+      adapter.exportVideo({ format: options.format ?? 'mp4', includeAudio: options.includeAudio ?? true, startFrame: options.startFrame, endFrame: options.endFrame, motionBlur: options.motionBlur, audioMaster: options.audioMaster,
         onProgress: (p) => { current.progress = p; } })
         .then(async ({ blob, extension }) => {
           jobBytes = new Uint8Array(await blob.arrayBuffer());

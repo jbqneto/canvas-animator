@@ -125,6 +125,18 @@ export const AudioList: React.FC<AudioListProps> = ({
           <span className="text-[11px] text-neutral-200 truncate flex-1" title={clip.name}>
             {clip.name}
           </span>
+          <select
+            aria-label={t('audio.kind')}
+            title={t('audio.kind')}
+            value={clip.kind ?? ''}
+            onChange={(e) => onUpdate({ ...clip, kind: (e.target.value || undefined) as AudioClip['kind'] }, t('audio.history.kind', { name: clip.name }))}
+            className="max-w-20 bg-neutral-900 border border-neutral-800 rounded px-1 py-0.5 text-[9px] text-neutral-300"
+          >
+            <option value="">{t('audio.kind.unassigned')}</option>
+            <option value="narration">{t('audio.kind.narration')}</option>
+            <option value="music">{t('audio.kind.music')}</option>
+            <option value="sfx">{t('audio.kind.sfx')}</option>
+          </select>
           <button
             onClick={() => onUpdate({ ...clip, muted: !clip.muted }, t(clip.muted ? 'audio.history.unmute' : 'audio.history.mute', { name: clip.name }))}
             title={clip.muted ? t('audio.unmute') : t('audio.mute')}

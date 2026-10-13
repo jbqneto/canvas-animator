@@ -76,8 +76,11 @@ Regra central: **o SDK só produz objetos que a UI sabe editar.** Nada de SVG op
    `startFrame`/visibilidade, typewriter e karaokê aceitem frame fracionário (o `sampleTrack` já aceita).
 5. [x] **Algarismos alinhados**: `TextOverlay.numerals: 'lining' | 'oldstyle' | 'default'` (padrão `lining` para
    Cormorant/Fraunces) via `font-variant-numeric`; lint `oldstyle-digits` e `text-overflow` medido com Canvas.
-6. **Loudness e ducking no export**: `audio: { targetLufs: -16, truePeak: -1.5, duckMusicUnder: 'narration' }` (dois
-   passes; mesmo padrão do canal).
+6. [x] **Loudness e ducking no export**: `audioMaster: { targetLufs: -16, truePeakDb: -1.5, duckMusicUnder: 'narration' }`.
+   Módulo puro `src/audio/loudness.ts` (BS.1770/EBU R128, true-peak 4× e limiter); papéis de clipe
+   selecionáveis no inspetor; controles na UI/MCP. Testes geram os sinais Tech 3341 #1, #2, #4 e #5,
+   além de inter-sample peak, teto do limiter e envelope de ducking. A medição/export manual do fixture e
+   custo real de exportação ainda precisam ser coletados no app.
 
 ### F2 — Componentes e marca
 

@@ -150,6 +150,7 @@ function parseAudio(value: unknown): AudioClip[] {
         duration: Math.min(sourceDuration - offset, Math.max(0, asNumber(c.duration, sourceDuration - offset))),
         volume: Math.min(2, Math.max(0, asNumber(c.volume, 1))),
         muted: c.muted === true,
+        ...(c.kind === 'narration' || c.kind === 'music' || c.kind === 'sfx' ? { kind: c.kind } : {}),
       };
     });
 }

@@ -248,6 +248,12 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   no AudioContext a partir do relógio do playback (performance.now continua mestre), `scrubClips` toca
   ~1 quadro com fade, `mixdown` renderiza o trecho exportado num OfflineAudioContext. Export: faixa de áudio
   opcional (AAC no MP4 quando o navegador codifica; senão Opus); WebM transparente começa sem áudio.
+  Cada clipe pode ter `kind: narration | music | sfx`; ausente mantém a mixagem antiga. A opção explícita
+  `audioMaster` aplica medição BS.1770 (K-weighting, blocos 400 ms, gates -70/-10 LU), ganho integrado e
+  limitador com teto de true peak estimado em 4×. O ducking opcional reduz música identificada em ~10 dB
+  sob narração (ataque 25 ms, release 180 ms). Desligado por padrão, tanto na UI quanto na API/MCP.
+  Medições sintéticas EBU Tech 3341 ficam em `src/audio/__tests__/loudness.test.ts`; validar custo e resultado
+  no fixture real permanece pendente (não foi possível executar a verificação manual do app neste ambiente).
   Importar áudio estende a timeline para caber (nunca encolhe). UI: `components/AudioTracks.tsx`.
 - Modelos (`src/templates/`): um modelo é uma função pura `build(valores, contexto) → { actors, charts,
   texts, paths, endFrame }`; nada na cena sabe que veio de um modelo. `params` descreve o formulário

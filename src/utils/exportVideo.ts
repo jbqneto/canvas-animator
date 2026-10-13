@@ -14,6 +14,7 @@ import {
   MotionPath,
   StickActor,
   SceneCamera,
+  AudioMasterOptions,
 } from '../types';
 import { anchorPoint, sampleActor, trailPoints, type LocalBox } from '../engine/actor';
 import { applyCamera, isIdentityCamera, parallaxOf, sampleCamera, scaleCamera } from '../engine/camera';
@@ -33,6 +34,7 @@ import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
 import { drawProgress, fillAlpha, shapeOutlineLength, validDrawFrames } from '../engine/reveal';
 import { isUsableMaskShape, maskPath, resolveMask, type ResolvedMask } from '../engine/mask';
+import { masterAudio } from '../audio/loudness';
 // The encoder library is only needed when exporting: loaded on demand to keep the editor bundle small
 const loadMediabunny = () => import('mediabunny');
 
@@ -1127,6 +1129,7 @@ export async function exportVideoSequence(
     endFrame?: number;
     /** Temporal samples per output frame; omitted leaves legacy rendering untouched. */
     motionBlur?: MotionBlurOptions;
+    audioMaster?: AudioMasterOptions;
     /** Sound for the exported range (already mixed and exactly as long as it). */
     audio?: AudioBuffer | null;
     /** Prepare audio after choosing the destination, while the picker still has user activation. */
@@ -1201,7 +1204,15 @@ export async function exportVideoSequence(
     try {
       video?.pause();
       output.addVideoTrack(source, { frameRate: fps });
-      const audio = options.prepareAudio ? await withAbort(options.prepareAudio(), signal) : options.audio ?? null;
+      const rawAudio = options.prepareAudio ? await withAbort(options.prepareAudio(), signal) : options.audio ?? null;
+      let audio: AudioBuffer | null = rawAudio;
+      if (rawAudio && options.audioMaster) {
+        const channels = Array.from({ length: rawAudio.numberOfChannels }, (_, i) => rawAudio.getChannelData(i));
+        const mastered = masterAudio(channels, rawAudio.sampleRate, options.audioMaster);
+        const audioContext = new OfflineAudioContext(rawAudio.numberOfChannels, rawAudio.length, rawAudio.sampleRate);
+        audio = audioContext.createBuffer(rawAudio.numberOfChannels, rawAudio.length, rawAudio.sampleRate);
+        mastered.channels.forEach((channel, i) => audio!.copyToChannel(new Float32Array(channel), i));
+      }
       const audioCodec = audio ? await withAbort(pickAudioCodec(picked.format, audio), signal) : null;
       const audioSource = audio && audioCodec ? new AudioBufferSource({ codec: audioCodec, quality: QUALITY_HIGH }) : null;
       audioDropped = !!audio && !audioSource;

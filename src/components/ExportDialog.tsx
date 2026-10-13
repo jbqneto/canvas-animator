@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { supportsFileSystemAccess } from '../project/fileAccess';
 import { Download, Film, Layers, Loader2, X } from 'lucide-react';
 import type { ExportFormat, ExportPhase, MotionBlurOptions } from '../utils/exportVideo';
+import type { AudioMasterOptions } from '../types';
 import { MessageKey, useI18n } from '../i18n';
 
 export interface ExportRequest {
@@ -11,6 +12,7 @@ export interface ExportRequest {
   includeAudio: boolean;
   directToFile?: boolean;
   motionBlur?: MotionBlurOptions;
+  audioMaster?: AudioMasterOptions;
 }
 
 interface ExportDialogProps {
@@ -30,6 +32,8 @@ interface ExportDialogProps {
   hasBackgroundVideo: boolean;
   /** Number of audio clips that would be mixed (muted ones don't count). */
   audibleClips: number;
+  hasMusicClip?: boolean;
+  hasNarrationClip?: boolean;
 }
 
 const FORMATS: { id: ExportFormat; title: MessageKey; description: MessageKey; icon: React.ReactNode }[] = [
@@ -53,6 +57,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   height,
   hasBackgroundVideo,
   audibleClips,
+  hasMusicClip = false,
+  hasNarrationClip = false,
 }) => {
   const { t } = useI18n();
   const [format, setFormat] = useState<ExportFormat>('mp4');
@@ -64,6 +70,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [motionBlurEnabled, setMotionBlurEnabled] = useState(false);
   const [motionBlurSubframes, setMotionBlurSubframes] = useState(4);
   const [motionBlurShutter, setMotionBlurShutter] = useState(180);
+  const [audioMasterEnabled, setAudioMasterEnabled] = useState(false);
+  const [audioTargetLufs, setAudioTargetLufs] = useState(-16);
+  const [audioTruePeak, setAudioTruePeak] = useState(-1.5);
+  const [duckMusic, setDuckMusic] = useState(false);
 
   // Keep the range valid when the timeline length changes; a range that ended at the end of the
   // timeline keeps doing so (importing a long narration grows the timeline)
@@ -128,6 +138,34 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             </p>
           )}
         </div>
+
+        {audibleClips > 0 && <div className="space-y-2">
+          <label className="flex items-center gap-2 text-neutral-300 cursor-pointer">
+            <input type="checkbox" checked={audioMasterEnabled} disabled={isExporting}
+              onChange={(e) => setAudioMasterEnabled(e.target.checked)} className="accent-sky-500" />
+            <span>{t('export.audioMaster')}</span>
+          </label>
+          {audioMasterEnabled && <div className="space-y-2 pl-6">
+            <div className="flex items-center gap-3 text-neutral-400">
+              <label className="flex items-center gap-1">LUFS
+                <input type="number" min={-36} max={0} step={0.5} value={audioTargetLufs} disabled={isExporting}
+                  onChange={(e) => setAudioTargetLufs(Math.max(-36, Math.min(0, Number(e.target.value) || -16)))}
+                  className="w-14 bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 font-mono text-white" />
+              </label>
+              <label className="flex items-center gap-1">dBTP
+                <input type="number" min={-20} max={0} step={0.5} value={audioTruePeak} disabled={isExporting}
+                  onChange={(e) => setAudioTruePeak(Math.max(-20, Math.min(0, Number(e.target.value) || -1.5)))}
+                  className="w-14 bg-neutral-900 border border-neutral-800 rounded px-1.5 py-1 font-mono text-white" />
+              </label>
+            </div>
+            <label className={`flex items-center gap-2 ${hasMusicClip && hasNarrationClip ? 'text-neutral-400 cursor-pointer' : 'text-neutral-600'}`}>
+              <input type="checkbox" checked={duckMusic} disabled={isExporting || !hasMusicClip || !hasNarrationClip}
+                onChange={(e) => setDuckMusic(e.target.checked)} className="accent-sky-500" />
+              <span>{t('export.duckMusic')}</span>
+            </label>
+            <p className="text-[10px] text-neutral-500">{t('export.audioMasterHint')}</p>
+          </div>}
+        </div>}
 
         <div className="flex items-center gap-2 text-neutral-300">
           <span>{t('export.fromFrame')}</span>
@@ -218,7 +256,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </div>
         ) : (
           <button
-            onClick={() => onExport({ directToFile: directToFile && supportsFileSystemAccess(), format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format], motionBlur: motionBlurEnabled ? { subframes: motionBlurSubframes, shutter: motionBlurShutter } : undefined })}
+            onClick={() => onExport({ directToFile: directToFile && supportsFileSystemAccess(), format, startFrame: first, endFrame: last, includeAudio: audibleClips > 0 && includeAudio[format], motionBlur: motionBlurEnabled ? { subframes: motionBlurSubframes, shutter: motionBlurShutter } : undefined, audioMaster: audioMasterEnabled ? { targetLufs: audioTargetLufs, truePeakDb: audioTruePeak, duckMusicUnder: duckMusic ? 'narration' : undefined } : undefined })}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-neutral-950 font-bold"
           >
             <Download size={15} /> {format === 'mp4' ? t('export.buttonMp4') : t('export.buttonAlpha')}
