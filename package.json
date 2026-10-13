@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild mcp/server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/mcp.mjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild mcp/server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/mcp.mjs && esbuild scripts/agent/cli.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/agent.mjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -16,7 +16,8 @@
     "local": "node scripts/local.mjs",
     "mcp": "node dist/mcp.mjs",
     "mcp:config": "node scripts/mcp-config.mjs",
-    "mcp:check": "node scripts/mcp-check.mjs"
+    "mcp:check": "node scripts/mcp-check.mjs",
+    "agent": "node dist/agent.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -39,6 +40,11 @@
   },
   "devDependencies": {
     "@babel/parser": "^7.29.9",
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
     "@types/d3-geo": "^3.1.1",
     "@types/express": "^4.17.21",
     "@types/geojson": "^7946.0.16",
@@ -50,6 +56,7 @@
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.28.0",
     "fake-indexeddb": "^6.2.5",
+    "playwright-core": "^1.64.0",
     "jsdom": "^26.1.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",

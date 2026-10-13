@@ -1,0 +1,74 @@
+{
+  "format": "flashmotion-project",
+  "version": 1,
+  "savedAt": "2026-10-13T00:00:00.000Z",
+  "project": {
+    "name": "Mini Agent Fixture",
+    "fps": 30,
+    "totalFrames": 30,
+    "canvas": { "width": 320, "height": 180, "preset": "custom" },
+    "videoBg": { "type": "color", "color": "#101820", "opacity": 1 },
+    "content": {
+      "texts": [
+        {
+          "id": "title",
+          "text": "Headless",
+          "fontSize": 24,
+          "fontFamily": "Inter",
+          "fontWeight": 700,
+          "color": "#ffffff",
+          "align": "center",
+          "x": 160,
+          "y": 70,
+          "startFrame": 1,
+          "durationFrames": 30,
+          "base": { "x": 160, "y": 70, "scale": 1, "rotation": 0, "opacity": 1 },
+          "tracks": {}
+        },
+        {
+          "id": "counter",
+          "text": "10",
+          "fontSize": 28,
+          "fontFamily": "JetBrains Mono",
+          "fontWeight": 600,
+          "color": "#38bdf8",
+          "align": "center",
+          "x": 160,
+          "y": 120,
+          "isNumberCounter": true,
+          "counterStart": 0,
+          "counterEnd": 10,
+          "counterDecimals": 0,
+          "animDurationFrames": 30,
+          "startFrame": 1,
+          "durationFrames": 30,
+          "base": { "x": 160, "y": 120, "scale": 1, "rotation": 0, "opacity": 1 },
+          "tracks": {}
+        }
+      ],
+      "actors": [
+        {
+          "id": "shape",
+          "name": "Shape",
+          "kind": "shape",
+          "src": "",
+          "width": 44,
+          "height": 24,
+          "startFrame": 1,
+          "durationFrames": 30,
+          "base": { "x": 160, "y": 150, "scale": 1, "rotation": 0, "opacity": 1 },
+          "tracks": {},
+          "shape": { "type": "rect", "fill": "#34d399", "stroke": "#ffffff", "strokeWidth": 0, "radius": 4 }
+        }
+      ],
+      "charts": [],
+      "paths": [],
+      "audio": [],
+      "frames": {},
+      "sticks": [],
+      "markers": [],
+      "layers": [],
+      "groups": []
+    }
+  }
+}
