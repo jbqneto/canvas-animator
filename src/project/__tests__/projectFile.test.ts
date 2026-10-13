@@ -51,6 +51,15 @@ describe('project file', () => {
     expect(parsed.content.charts[0].anchor).toEqual({ x: 1, y: 0 });
   });
 
+  it('round-trips explicit numeral style while old text stays omitted', () => {
+    const base = state();
+    base.content.texts = [createText({ id: 'n', text: '15', fontSize: 48, color: '#fff', effect: 'none', visible: true, startFrame: 1, durationFrames: 60, numerals: 'lining' }, { x: 400, y: 300 })];
+    const parsed = parseProject(serializeProject(base));
+    expect(parsed.content.texts[0].numerals).toBe('lining');
+    const old = JSON.stringify({ format: 'flashmotion-project', version: 1, project: { content: { texts: [{ ...base.content.texts[0], numerals: undefined }] } } });
+    expect(parseProject(old).content.texts[0].numerals).toBeUndefined();
+  });
+
   it('never stores session-only video URLs and reports the missing video', () => {
     const text = serializeProject(state(), 'aula.mp4');
     expect(text).not.toContain('blob:abc');

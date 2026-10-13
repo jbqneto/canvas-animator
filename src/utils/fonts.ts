@@ -3,6 +3,7 @@ export const FONT_FAMILIES = [
   'Plus Jakarta Sans',
   'Inter',
   'Cormorant Garamond',
+  'Fraunces',
   'JetBrains Mono',
   'IBM Plex Mono',
 ] as const;
@@ -28,8 +29,14 @@ export function fontCss(spec: FontSpec, size: number): string {
     : DEFAULT_FONT_FAMILY;
   const raw = Number.isFinite(spec.fontWeight) ? (spec.fontWeight as number) : DEFAULT_WEIGHT;
   const weight = Math.min(900, Math.max(100, Math.round(raw / 100) * 100));
-  const stack = MONO.has(family) ? 'monospace' : family === 'Cormorant Garamond' ? 'serif' : 'sans-serif';
+  const stack = MONO.has(family) ? 'monospace' : ['Cormorant Garamond', 'Fraunces'].includes(family) ? 'serif' : 'sans-serif';
   return `${spec.italic ? 'italic ' : ''}${weight} ${size}px "${family}", ${stack}`;
+}
+
+/** Resolve the safe numeric style used by both the renderer and the scene lint. */
+export function resolvedNumerals(text: Pick<FontSpec, 'fontFamily'> & { numerals?: 'lining' | 'oldstyle' | 'default' }): 'lining' | 'oldstyle' | 'default' {
+  if (text.numerals) return text.numerals;
+  return text.fontFamily === 'Cormorant Garamond' || text.fontFamily === 'Fraunces' ? 'lining' : 'default';
 }
 
 /** Average glyph width in em, per family: used to estimate text boxes without a canvas to measure on. */

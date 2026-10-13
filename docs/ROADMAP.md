@@ -153,6 +153,11 @@ Da rodada 2 da pesquisa (`docs/RESEARCH.md`), em ordem; revisar depois dos teste
   ausente mantém o render antigo. Limites: 1–16 subquadros, obturador 0–360°. O custo cresce aproximadamente com
   o número de amostras. A medição com o fixture Mirabilia permanece pendente: o navegador local bloqueou
   `localhost:3000` por uma preferência de segurança salva durante esta sessão.
+- Texto numérico (`TextOverlay.numerals?: 'lining' | 'oldstyle' | 'default'`): o renderer usa
+  `fontVariantNumeric` quando o contexto Canvas oferece a propriedade; navegadores sem suporte mantêm o
+  estilo padrão da fonte. Cormorant Garamond e Fraunces resolvem para `lining` quando o campo está ausente.
+  O lint mede a largura com `measureText` e aplica margem segura horizontal de 5% por padrão; sem Canvas
+  (Node/testes), usa a estimativa tipográfica por família.
 - Keyframes (`src/engine/keyframes.ts`): `Track<T> = Keyframe<T>[]` ordenado; easing do key vale para o
   segmento que COMEÇA nele; clamp antes/depois. Além dos easings geométricos, `spring` é uma resposta ao degrau
   fechada e sem estado, com `springParams?: { w, z }` por key (Morph `{15, .84}` quando omitido), normalizada

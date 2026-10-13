@@ -813,6 +813,18 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
                       </select>
                     </label>
                     <label className="text-[10px] text-neutral-400">
+                      {t('inspector.text.numerals')}
+                      <select
+                        value={activeText.numerals ?? 'default'}
+                        onChange={(e) => onUpdateText({ ...activeText, numerals: e.target.value as TextOverlay['numerals'] })}
+                        className="mt-1 w-full rounded bg-neutral-800 px-1 py-1 text-xs text-neutral-100"
+                      >
+                        {(['default', 'lining', 'oldstyle'] as const).map((style) => (
+                          <option key={style} value={style}>{t(`inspector.text.numerals.${style}`)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-neutral-400">
                       {t('inspector.text.fontWeight')}
                       <select
                         value={activeText.fontWeight ?? 800}

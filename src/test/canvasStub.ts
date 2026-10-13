@@ -23,6 +23,7 @@ export function createCanvasStub() {
       calls.push({ name: `set:${key}`, args: [value] });
       return true;
     },
+    has(_target, key) { return key in props; },
   }) as unknown as CanvasRenderingContext2D;
   return { ctx, calls, props };
 }

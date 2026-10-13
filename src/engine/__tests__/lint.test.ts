@@ -39,6 +39,18 @@ describe('lintScene', () => {
     expect(rules(input([text({}, { x: 5, y: 500 })]))).toContain('outside-safe-area');
     expect(rules(input([text({}, { x: 400, y: 1075 })]))).toContain('outside-safe-area');
   });
+  it('warns when serif digits are not configured as lining numerals', () => {
+    const oldstyle = text({ text: '15', fontFamily: 'Cormorant Garamond', numerals: 'oldstyle' });
+    const ordinary = text({ text: '15', fontFamily: 'Cormorant Garamond' });
+    expect(rules(input([oldstyle]))).toContain('oldstyle-digits');
+    expect(rules(input([ordinary]))).not.toContain('oldstyle-digits');
+  });
+  it('warns when measured text width exceeds the safe canvas width', () => {
+    const date = text({ text: '12.10.2006', fontSize: 170, fontFamily: 'IBM Plex Mono', align: 'center' }, { x: 540, y: 800 });
+    const measured = lintScene(input([date], { canvas: { width: 1080, height: 1920 } }));
+    expect(measured.some((issue) => issue.rule === 'text-overflow' && issue.objectId === 't1')).toBe(true);
+    expect(rules(input([text({ fontFamily: 'IBM Plex Mono' })]))).not.toContain('text-overflow');
+  });
   it('flags low contrast against the background, ignoring non-hex colors', () => {
     expect(rules(input([text({ color: '#222222' })]))).toContain('low-contrast');
     expect(rules(input([text({ color: 'red' })]))).not.toContain('low-contrast');

@@ -74,8 +74,8 @@ Regra central: **o SDK só produz objetos que a UI sabe editar.** Nada de SVG op
 4. [x] **Motion blur no export**: `export_start({ motionBlur: { subframes: 4, shutter: 180 } })`; o renderer desenha
    `subframes` amostras em `frame + k·(shutter/360)/subframes` e acumula (float, `lighter` + divisão). Exige que
    `startFrame`/visibilidade, typewriter e karaokê aceitem frame fracionário (o `sampleTrack` já aceita).
-5. **Algarismos alinhados**: `TextOverlay.numerals: 'lining' | 'oldstyle'` (padrão `lining` para serifadas) via
-   `font-variant-numeric`; lint `oldstyle-digits` quando Cormorant/Fraunces mostram dígitos isolados.
+5. [x] **Algarismos alinhados**: `TextOverlay.numerals: 'lining' | 'oldstyle' | 'default'` (padrão `lining` para
+   Cormorant/Fraunces) via `font-variant-numeric`; lint `oldstyle-digits` e `text-overflow` medido com Canvas.
 6. **Loudness e ducking no export**: `audio: { targetLufs: -16, truePeak: -1.5, duckMusicUnder: 'narration' }` (dois
    passes; mesmo padrão do canal).
 

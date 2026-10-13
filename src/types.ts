@@ -175,6 +175,8 @@ export interface TextOverlay extends Animated {
   typewriterCursor?: boolean;
   /** Extra space between letters, in canvas pixels (0 = none). */
   letterSpacing?: number;
+  /** Numeric glyph style; absent defaults to lining figures for Cormorant Garamond and Fraunces. */
+  numerals?: 'lining' | 'oldstyle' | 'default';
   /** Made by the captions dialog: exported to .srt with the other captions. */
   role?: 'caption';
   /**

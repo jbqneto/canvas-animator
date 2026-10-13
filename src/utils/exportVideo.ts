@@ -27,7 +27,7 @@ import { calculateEasing, parseLocaleNumber, formatNumberBR } from './motionUtil
 import { getCachedImage, isImageReady, preloadImages } from './imageCache';
 import { layerHolds } from '../engine/layers';
 import { throwIfAborted, withAbort } from './abort';
-import { fontCss, loadSceneFonts } from './fonts';
+import { fontCss, loadSceneFonts, resolvedNumerals } from './fonts';
 import { karaokeState } from '../engine/captions';
 import { hasActiveEffects, sampleEffects } from '../engine/effects';
 import { drawWithEffects, type LayerFactory } from './effectsRender';
@@ -880,6 +880,13 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   const elapsed = rawElapsed * effectRate;
   // Already translated to the text anchor by the caller; effects work relative to it
   ctx.save();
+  const numericContext = ctx as CanvasRenderingContext2D & { fontVariantNumeric: string };
+  const supportsNumeralVariant = 'fontVariantNumeric' in ctx;
+  const previousNumeralVariant = supportsNumeralVariant ? numericContext.fontVariantNumeric : undefined;
+  if (supportsNumeralVariant) {
+    const numerals = resolvedNumerals(txt);
+    numericContext.fontVariantNumeric = numerals === 'default' ? 'normal' : `${numerals}-nums`;
+  }
   const parentAlpha = ctx.globalAlpha;
 
   let displayedText = txt.text;
@@ -989,6 +996,7 @@ function drawText(ctx: CanvasRenderingContext2D, txt: TextOverlay, currentFrame:
   }
 
   ctx.restore();
+  if (supportsNumeralVariant) numericContext.fontVariantNumeric = previousNumeralVariant ?? 'normal';
 }
 
 function roundRect(
